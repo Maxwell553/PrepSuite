@@ -57,12 +57,64 @@ export const fideService = {
             const fedMatch = html.match(/class="profile-info-country\s*"[^>]*>[\s\n]*((?:<img[^>]*>)?[\s\n]*([^<]*))/i);
             const bYearMatch = html.match(/class="profile-info-byear\s*"[^>]*>[\s\n]*(\d{4})/i);
 
+            // 4. TITLE EXTRACTION
+            // FIDE titles are typically displayed as GM, IM, FM, CM, WGM, WIM, WFM, WCM, NM, WNM
+            // They can appear in various places in the HTML:
+            // - In profile-info-title class: <div class="profile-info-title">GM</div>
+            // - In title span: <span class="title">GM</span>
+            // - In the name area: Name (GM) or Name, GM
+            // - In the title tag: <title>Name GM FIDE Profile</title>
+            
+            let title = '';
+            
+            // Strategy A: Look for title in profile-info-title class (most common)
+            const profileTitleMatch = html.match(/class="profile-info-title\s*"[^>]*>[\s\n]*([A-Z]{2,4})/i);
+            if (profileTitleMatch && profileTitleMatch[1]) {
+                title = profileTitleMatch[1].trim().toUpperCase();
+            } else {
+                // Strategy B: Look for title span/div with class="title"
+                const titleSpanMatch = html.match(/<span[^>]*class=["']title["'][^>]*>[\s\n]*([A-Z]{2,4})[\s\n]*<\/span>/i);
+                if (titleSpanMatch && titleSpanMatch[1]) {
+                    title = titleSpanMatch[1].trim().toUpperCase();
+                } else {
+                    // Strategy C: Look for title div
+                    const titleDivMatch = html.match(/<div[^>]*class=["']title["'][^>]*>[\s\n]*([A-Z]{2,4})[\s\n]*<\/div>/i);
+                    if (titleDivMatch && titleDivMatch[1]) {
+                        title = titleDivMatch[1].trim().toUpperCase();
+                    } else {
+                        // Strategy D: Look for common title patterns near the name
+                        // Pattern: Name (GM) or Name, GM or Name GM
+                        const titleInNameMatch = html.match(/(?:\(|,|\s)(GM|IM|FM|CM|WGM|WIM|WFM|WCM|NM|WNM)(?:\)|,|\s|$)/i);
+                        if (titleInNameMatch && titleInNameMatch[1]) {
+                            title = titleInNameMatch[1].trim().toUpperCase();
+                        } else {
+                            // Strategy E: Look in the title tag itself
+                            const titleTagMatch = html.match(/<title>[^<]*\s(GM|IM|FM|CM|WGM|WIM|WFM|WCM|NM|WNM)/i);
+                            if (titleTagMatch && titleTagMatch[1]) {
+                                title = titleTagMatch[1].trim().toUpperCase();
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Validate that extracted title is a valid FIDE title
+            const validTitles = ['GM', 'IM', 'FM', 'CM', 'WGM', 'WIM', 'WFM', 'WCM', 'NM', 'WNM'];
+            if (title && !validTitles.includes(title)) {
+                console.warn(`[FIDE] Extracted invalid title: ${title}, setting to empty`);
+                title = '';
+            }
+            
+            if (title) {
+                console.log(`[FIDE] Extracted title: ${title} for player ${rawName.trim()}`);
+            }
+
             return {
                 name: rawName.trim(),
                 federation: fedMatch ? fedMatch[2].trim() : '',
                 birthYear: bYearMatch ? bYearMatch[1].trim() : '',
                 rating: rating,
-                title: ''
+                title: title
             };
         } catch (error) {
             console.warn('FIDE Scrape Failed:', error);

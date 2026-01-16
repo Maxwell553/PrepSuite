@@ -36,6 +36,3 @@ In Supabase Dashboard, go to **Authentication > URL Configuration** and ensure:
 ## Why These Methods?
 - **Google**: Fastest login for most users, instantly links to their professional identity.
 - **Email**: Minimalist and secure. No passwords to leak; users just click a link in their inbox.
-
-> [!IMPORTANT]
-> Since Vite is currently running on port **3002**, ensure all URLs in your dashboard match this port exactly.

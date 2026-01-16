@@ -9,6 +9,14 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
+      hmr: {
+        // Stabilize HMR to prevent constant page reloads
+        overlay: true,
+      },
+      watch: {
+        // Ignore terminal files and other non-source files
+        ignored: ['**/terminals/**', '**/node_modules/**', '**/.git/**']
+      },
       proxy: {
         '/fide-proxy': {
           target: 'https://ratings.fide.com',
@@ -37,8 +45,10 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
     ],
     define: {
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+      // Note: API keys should ideally be on backend, but keeping for backward compatibility
+      // The env.ts module now properly validates and handles missing keys
+      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY),
+      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY)
     },
     resolve: {
       alias: {

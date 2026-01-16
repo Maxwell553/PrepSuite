@@ -1,16 +1,17 @@
 /// <reference types="vite/client" />
 import { createClient } from '@supabase/supabase-js';
+import { getEnvConfig, isSupabaseConfigured } from './env';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const config = getEnvConfig();
 
-if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('Missing Supabase Environment Variables. Persistence will be disabled.');
+if (!isSupabaseConfigured()) {
+    console.warn('⚠️ Missing Supabase Environment Variables. Persistence will be disabled.');
+    console.warn('Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env.local file');
 }
 
 export const supabase = createClient(
-    supabaseUrl || 'https://placeholder.supabase.co',
-    supabaseAnonKey || 'placeholder'
+    config.supabaseUrl,
+    config.supabaseAnonKey
 );
 
 export const authActions = {

@@ -12,7 +12,6 @@ export interface PlayerMetadata {
   platforms: {
     chessCom?: string;
     lichess?: string;
-    chessBase?: boolean;
   };
 }
 
@@ -23,7 +22,17 @@ export interface OpeningStat {
   winRate: number; // 0-1
   drawRate: number; // 0-1
   lossRate: number; // 0-1
+  wins: number;
+  draws: number;
+  losses: number;
+  totalGames: number;
   trend: 'increasing' | 'stable' | 'decreasing';
+}
+
+export interface MoveSequence {
+  moves: string[]; // Array of moves in PGN format (e.g., ["e4", "c5", "Nf3", "d6"])
+  frequency: number; // How many times this sequence appears
+  games: number; // Number of games with this sequence
 }
 
 export interface ScoutingReport {
@@ -32,6 +41,7 @@ export interface ScoutingReport {
   whiteOpenings: OpeningStat[];
   blackDefenses: OpeningStat[];
   strategicSummary: string;
+  blackStrategicSummary: string;
   tacticalProfile: string;
   endgameReliability: string;
   timeControlInsights: string;
@@ -42,6 +52,10 @@ export interface ScoutingReport {
   preparationSummary: string;
   suggestedLines: string[];
   repertoireReliability: number; // 0-100
+  mostPlayedLines: {
+    white: MoveSequence[];
+    black: MoveSequence[];
+  };
   lastUpdated: string;
 }
 

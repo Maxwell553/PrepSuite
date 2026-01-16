@@ -4,6 +4,7 @@ import { fideService, FideProfile } from './fide';
 import { uscfService, UscfProfile } from './uscf';
 import { chessComService } from './chessCom';
 import { lichessService } from './lichess';
+import { getGeminiApiKey } from '../lib/env';
 
 export interface ResolvedIdentity {
     verifiedName: string;
@@ -15,129 +16,537 @@ export interface ResolvedIdentity {
 }
 
 export const identityService = {
-    async resolve(inputName: string, fideId: string, uscfId: string): Promise<ResolvedIdentity> {
-
-        // 1. Parallel Validation
-        const [fideProfile, uscfProfile] = await Promise.all([
-            fideId ? fideService.getProfile(fideId) : Promise.resolve(null),
-            uscfId ? uscfService.getProfile(uscfId) : Promise.resolve(null)
-        ]);
-
-        console.log('[Identity] Validation Results:', {
-            fide: fideProfile ? 'FOUND: ' + fideProfile.name : 'NOT FOUND',
-            uscf: uscfProfile ? 'FOUND: ' + uscfProfile.name : 'NOT FOUND'
-        });
-
-        if (!fideProfile && !uscfProfile) {
-            throw new Error("Identity Verification Failed: Neither FIDE nor USCF IDs returned a valid profile.");
-        }
-
-        const officialName = fideProfile?.name || uscfProfile?.name || inputName;
-        console.log('[Identity] Official Name resolved to:', officialName);
-
-        // 2. AI Resolution for Online Handles
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const model = 'gemini-3-flash-preview';
-
-        const prompt = `
-      You are an elite chess investigator with access to Google Search.
-      
-      Target Player:
-      Name: "${officialName}"
-      FIDE Rating: ${fideProfile?.rating || 'N/A'} (ID: ${fideId})
-      USCF Rating: ${uscfProfile?.rating || 'N/A'} (ID: ${uscfId})
-      Birth Year: ${fideProfile?.birthYear || 'N/A'}
-      Federation: ${fideProfile?.federation || 'USA'}
-
-      Task: 
-      1. Search the web to find this player's official Chess.com and Lichess profiles.
-      2. Do NOT just guess usernames based on the name. Many players use handles (e.g., "Ace0fD1amonds").
-      3. Look for profile metadata that matches the real name, federation, or title.
-      4. If a player is a titled player (GM, IM, FM, NM), they are more likely to have a verified profile.
-      5. Return JSON ONLY: { "chessComCandidates": ["found_username1", ...], "lichessCandidates": ["found_username1", ...], "confidence": number }
-    `;
+    async resolve(
+        inputName: string,
+        fideId: string,
+        uscfId: string,
+        providedChessComUsername?: string,
+        providedLichessUsername?: string
+    ): Promise<ResolvedIdentity> {
+        let officialName = inputName;
+        let fideProfile: FideProfile | null = null;
+        let uscfProfile: UscfProfile | null = null;
 
         try {
-            const result = await ai.models.generateContent({
-                model: model,
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                // @ts-ignore
-                tools: [{ googleSearchRetrieval: {} }],
-                generationConfig: { responseMimeType: "application/json" }
+            // 1. Fetch provided IDs
+            [fideProfile, uscfProfile] = await Promise.all([
+                fideId ? fideService.getProfile(fideId) : Promise.resolve(null),
+                uscfId ? uscfService.getProfile(uscfId) : Promise.resolve(null)
+            ]);
+
+            console.log('[Identity] Initial Validation Results:', {
+                fide: fideProfile ? 'FOUND: ' + fideProfile.name : 'NOT PROVIDED/FOUND',
+                uscf: uscfProfile ? 'FOUND: ' + uscfProfile.name : 'NOT PROVIDED/FOUND'
             });
 
-            const data = JSON.parse(result.text);
-            const chessComCandidates = data.chessComCandidates || [];
-            const lichessCandidates = data.lichessCandidates || [];
+            // 2. Cross-reference: Try to find missing ID using the other
+            // If we have FIDE but not USCF, search USCF by name
+            if (fideProfile && !uscfProfile && !uscfId) {
+                console.log('[Identity] Attempting FIDE → USCF cross-reference...');
+                // Note: USCF doesn't have a name search API, so we'll rely on AI discovery
+                // This is a limitation we'll document
+            }
 
-            console.log(`[Identity] Generated Chess.com candidates:`, chessComCandidates);
-            console.log(`[Identity] Generated Lichess candidates:`, lichessCandidates);
+            // If we have USCF but not FIDE, search FIDE by name
+            if (uscfProfile && !fideProfile && !fideId) {
+                console.log('[Identity] Attempting USCF → FIDE cross-reference...');
+                // Note: FIDE doesn't have a name search API either
+                // We'll rely on AI discovery for this as well
+            }
 
-            // Verification Helper
-            const verifyHandle = async (usernameInput: string, platform: 'chess.com' | 'lichess', candidates: string[]) => {
-                let username = usernameInput;
+            // Determine official name from available sources
+            officialName = fideProfile?.name || uscfProfile?.name || inputName;
+            console.log('[Identity] Official Name resolved to:', officialName);
 
-                // Extract from URL if necessary
-                if (username.includes('/') || username.includes('http')) {
-                    const parts = username.split('/');
-                    username = parts[parts.length - 1] || parts[parts.length - 2];
-                }
+            // 3. Handle Platform Usernames - Prioritize User-Provided
+            let chessComCandidates: string[] = [];
+            let lichessCandidates: string[] = [];
+            let verifiedChessComUsername = '';
+            let verifiedLichessUsername = '';
 
-                if (!username || /[^a-z0-9_-]/i.test(username)) return null;
-
+            // Helper to validate username exists on platform
+            const validateUsername = async (username: string, platform: 'chess.com' | 'lichess'): Promise<boolean> => {
                 try {
                     const profile = platform === 'chess.com'
                         ? await chessComService.getPlayerProfile(username)
                         : await lichessService.getPlayerProfile(username);
+                    return profile !== null;
+                } catch {
+                    return false;
+                }
+            };
 
-                    if (!profile) return null;
+            // PRIORITY 1: Trust provided usernames - assume they are correct, no validation or search needed
+            // Empty strings should be treated as not provided
+            if (providedChessComUsername && providedChessComUsername.trim() !== '') {
+                console.log('[Identity] ✓ Using provided Chess.com username (trusted, no validation):', providedChessComUsername);
+                verifiedChessComUsername = providedChessComUsername.trim();
+                chessComCandidates = [verifiedChessComUsername]; // Use provided username directly
+            }
 
-                    const profileName = platform === 'chess.com' ? (profile as any).name : (profile as any).profile?.firstName + ' ' + (profile as any).profile?.lastName;
-                    const handle = (profile as any).username || username;
+            if (providedLichessUsername && providedLichessUsername.trim() !== '') {
+                console.log('[Identity] ✓ Using provided Lichess username (trusted, no validation):', providedLichessUsername);
+                verifiedLichessUsername = providedLichessUsername.trim();
+                lichessCandidates = [verifiedLichessUsername]; // Use provided username directly
+            }
 
-                    const normOfficial = officialName.toLowerCase().replace(/[^a-z]/g, '');
-                    const normProfile = (profileName || '').toLowerCase().replace(/[^a-z]/g, '');
-                    const normHandle = (handle || '').toLowerCase().replace(/[^a-z]/g, '');
+            // PRIORITY 2: Only search for platforms where username was NOT provided
+            // If username is provided, trust it and skip discovery entirely
+            const needsChessComDiscovery = !verifiedChessComUsername; // Only search if not provided
+            const needsLichessDiscovery = !verifiedLichessUsername; // Only search if not provided
 
-                    console.log(`[Identity] Verifying ${platform} handle "${username}":`, {
+            if (needsChessComDiscovery || needsLichessDiscovery) {
+                console.log('[Identity] Running AI discovery for:', {
+                    chesscom: needsChessComDiscovery,
+                    lichess: needsLichessDiscovery
+                });
+
+                interface AICandidates {
+                    chessComCandidates?: string[];
+                    lichessCandidates?: string[];
+                    reasoning?: string;
+                    confidence?: number;
+                }
+                // Declare candidates outside the if block so it's accessible in fallback
+                let candidates: AICandidates = { chessComCandidates: [], lichessCandidates: [], confidence: 0 };
+
+                // Use Gemini API via Edge Function (secure server-side call)
+                try {
+                    const prompt = `You are an elite chess investigator with access to Google Search. Your task is to FIND actual usernames by searching the web, NOT to generate or guess them.
+          
+          Target Player:
+          Name: "${officialName}"
+          FIDE Rating: ${fideProfile?.rating || 'N/A'} (ID: ${fideId || 'N/A'})
+          USCF Rating: ${uscfProfile?.rating || 'N/A'} (ID: ${uscfId || 'N/A'})
+          Birth Year: ${fideProfile?.birthYear || 'N/A'}
+          Federation: ${fideProfile?.federation || 'N/A'}
+          Titles: ${fideProfile?.title || 'N/A'}
+
+          CRITICAL INSTRUCTIONS:
+          1. You MUST perform actual Google searches. Do NOT generate usernames based on name patterns.
+          2. Find actual profile URLs in search results:
+             - Look for URLs like: chess.com/pub/player/[USERNAME] or chess.com/member/[USERNAME]
+             - Look for URLs like: lichess.org/@/[USERNAME]
+             - Look for Chess.com Top Players page URLs
+          3. DO NOT create usernames - only report URLs you actually see in search results
+          4. We will scrape these URLs to extract and verify the usernames - you just need to find the URLs
+
+          Search Queries (perform each search and examine results):
+          Perform these Google searches one by one and extract usernames from the actual results:
+          1. "${officialName} Chess.com account"
+          2. "${officialName} Lichess account"
+          3. "${officialName} games on Chess.com"
+          4. "${officialName} games on Lichess"
+          5. "${officialName} Chess.com username"
+          6. "${officialName} Lichess username"
+          7. "${officialName} ${fideProfile?.title || ''} Chess.com"
+          8. "${officialName} ${fideProfile?.title || ''} Lichess"
+          9. "${officialName} FIDE ID ${fideId || ''} Chess.com"
+          10. "${officialName} ${fideProfile?.federation || ''} chess player"
+          11. "Chess.com ${officialName}"
+          12. "Lichess ${officialName}"
+          13. "${officialName} Chess.com top players"
+          14. "${officialName} Chess.com leaderboard"
+          15. "site:chess.com ${officialName}"
+          16. "site:lichess.org ${officialName}"
+
+          For each search result:
+          - Look for profile URLs: "chess.com/pub/player/[USERNAME]", "chess.com/member/[USERNAME]", or "lichess.org/@/[USERNAME]"
+          - Copy the EXACT URL you see in search results
+          - Include the full URL in your reasoning
+
+          Return Format:
+          Return JSON with the URLs you found. We will scrape these URLs to extract usernames.
+          CRITICAL: You MUST include the exact URLs in your reasoning - we will fetch and scrape these pages.
+          
+          {
+            "chessComCandidates": ["username_from_url"],
+            "lichessCandidates": ["username_from_url"],
+            "reasoning": "FOUND URLS: chess.com/pub/player/jamisonkao, lichess.org/@/Kao-Jamison",
+             "confidence": 0.0 to 1.0 
+          }
+
+          ABSOLUTE REQUIREMENTS:
+          1. You MUST include the exact URLs in your reasoning (e.g., "chess.com/pub/player/jamisonkao")
+          2. Only include URLs you actually see in search results
+          3. Do NOT create, generate, or infer URLs - ONLY report URLs you see
+          4. If no URLs found in search results, return empty arrays
+          5. Your reasoning MUST contain the actual URLs - we will fetch and scrape these pages to extract usernames
+          6. DO NOT return URLs that don't appear in search results
+        `;
+
+                    // Call Gemini API via Edge Function (includes Google Search Retrieval)
+                    const text = await geminiService.generateContentWithSearch(prompt);
+                    console.log('[Identity] AI Response:', text || '(empty)');
+
+                    // If response is empty, skip parsing and use fallbacks
+                    if (!text || text.trim().length === 0) {
+                        console.warn('[Identity] AI returned empty response, using heuristic fallbacks');
+                    } else {
+                    // Robust JSON extraction
+                    let jsonStr = text;
+                    const jsonBlockMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+                    if (jsonBlockMatch) {
+                        jsonStr = jsonBlockMatch[1];
+                    } else {
+                        const looseMatch = text.match(/\{[\s\S]*\}/);
+                        if (looseMatch) jsonStr = looseMatch[0];
+                    }
+
+                        // Only try to parse if we found JSON-like content
+                        if (jsonStr && jsonStr.trim().length > 0) {
+                    try {
+                                const parsed = JSON.parse(jsonStr);
+                                if (parsed && typeof parsed === 'object') {
+                                    candidates = parsed;
+                                }
+                    } catch (parseErr) {
+                        console.warn('[Identity] JSON Parse failed, attempting cleanup', parseErr);
+                        // Try to cleanup common trailing commas or newlines
+                        try {
+                                    const cleaned = jsonStr.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+                                    const parsed = JSON.parse(cleaned);
+                                    if (parsed && typeof parsed === 'object') {
+                                        candidates = parsed;
+                                    }
+                        } catch (e) {
+                                    console.warn('[Identity] Fatal JSON parse error, will use heuristic fallbacks');
+                                }
+                            }
+                        }
+                    }
+
+                } catch (err) {
+                    console.warn("[Identity] AI primary discovery failed:", err);
+                    // If AI fails, candidates remain empty - do not generate fallbacks
+                }
+                
+                // Extract URLs from reasoning and actually fetch/scrape the profile pages
+                // NO CANDIDATES - only extract usernames by actually visiting the websites
+                const extractUsernamesByScraping = async (reasoning: string | undefined, platform: 'chess.com' | 'lichess'): Promise<string[]> => {
+                    if (!reasoning) {
+                        console.warn(`[Identity] No reasoning provided for ${platform} - cannot extract usernames`);
+                        return [];
+                }
+
+                    // Extract URLs from reasoning
+                    const urlPatterns = {
+                        'chess.com': [
+                            /(?:https?:\/\/)?(?:www\.)?chess\.com\/(?:pub\/player|member|player)\/([a-z0-9_-]+)/gi,
+                            /(?:https?:\/\/)?(?:www\.)?chess\.com\/@([a-z0-9_-]+)/gi
+                        ],
+                        'lichess': [
+                            /(?:https?:\/\/)?(?:www\.)?lichess\.org\/@\/([a-z0-9_-]+)/gi,
+                            /(?:https?:\/\/)?(?:www\.)?lichess\.org\/user\/([a-z0-9_-]+)/gi
+                        ]
+                    };
+                    
+                    const foundUrls: Array<{url: string, username: string}> = [];
+                    const patterns = platform === 'chess.com' ? urlPatterns['chess.com'] : urlPatterns['lichess'];
+                    
+                    // Extract URLs from reasoning
+                    for (const pattern of patterns) {
+                        const matches = reasoning.matchAll(pattern);
+                        for (const match of matches) {
+                            if (match[1]) {
+                                const username = match[1];
+                                // Construct full URL
+                                let fullUrl = '';
+                                if (platform === 'chess.com') {
+                                    fullUrl = `https://www.chess.com/member/${username}`;
+                                } else {
+                                    fullUrl = `https://lichess.org/@/${username}`;
+                                }
+                                foundUrls.push({ url: fullUrl, username });
+                            }
+                        }
+                    }
+                    
+                    // Remove duplicates
+                    const uniqueUrls = Array.from(new Map(foundUrls.map(u => [u.username.toLowerCase(), u])).values());
+                    
+                    if (uniqueUrls.length === 0) {
+                        console.warn(`[Identity] No URLs found in reasoning for ${platform}`);
+                        return [];
+                    }
+                    
+                    console.log(`[Identity] Found ${uniqueUrls.length} profile URL(s) for ${platform}, fetching and scraping...`);
+                    
+                    // Actually fetch and scrape each profile page, then verify bio-metric matching
+                    const verifiedUsernames: string[] = [];
+                    for (const { url, username } of uniqueUrls) {
+                        try {
+                            console.log(`[Identity] Fetching and scraping profile page: ${url}`);
+                            
+                            // Use the existing service to fetch profile (which uses API)
+                            let profile;
+                            if (platform === 'chess.com') {
+                                profile = await chessComService.getPlayerProfile(username);
+                            } else {
+                                profile = await lichessService.getPlayerProfile(username);
+                            }
+                            
+                            if (!profile) {
+                                console.warn(`[Identity] ✗ Profile not found for ${username} on ${platform}`);
+                                continue;
+                            }
+                            
+                            // Verify bio-metric matching (same logic as verifyHandle)
+                            const bio = platform === 'chess.com' ? (profile as Record<string, unknown>).status : (profile as Record<string, unknown>).profile?.['bio'] || '';
+                            const profileName = platform === 'chess.com'
+                                ? (profile as Record<string, unknown>).name as string
+                                : ((profile as Record<string, unknown>).profile?.['firstName'] as string || '') + ' ' + ((profile as Record<string, unknown>).profile?.['lastName'] as string || '');
+                            
+                            // Check title match (critical)
+                            if (fideProfile?.title && fideProfile.title.trim() !== '') {
+                                const profileTitle = (profile as Record<string, unknown>).title as string || '';
+                                const profileTitleUpper = profileTitle.toUpperCase().trim();
+                                const fideTitleUpper = fideProfile.title.toUpperCase().trim();
+                                
+                                if (profileTitleUpper && fideTitleUpper && profileTitleUpper !== fideTitleUpper) {
+                                    console.warn(`[Identity] ✗ Title mismatch for ${username}: FIDE=${fideTitleUpper}, Profile=${profileTitleUpper}`);
+                                    continue;
+                                }
+                                if (!profileTitleUpper && fideTitleUpper) {
+                                    console.warn(`[Identity] ✗ Missing title for ${username}: FIDE has ${fideTitleUpper} but profile has none`);
+                                    continue;
+                                }
+                            }
+                            
+                            // Check name match
+                            const officialNameClean = officialName.toLowerCase().replace(/[^a-z ]/g, '').trim();
+                            const nameParts = officialNameClean.split(/[,\s]+/).filter(p => p.length > 2);
+                            const profNameLower = (profileName || '').toLowerCase().replace(/[^a-z ]/g, '');
+                            const matchingParts = nameParts.filter(part => profNameLower.includes(part));
+                            const nameMatch = matchingParts.length >= 2 || (matchingParts.length === 1 && nameParts.length === 1);
+                            
+                            // Check birth year in bio
+                            const birthYearInBio = fideProfile?.birthYear && String(bio || '').includes(fideProfile.birthYear);
+                            
+                            // Accept if name matches or birth year matches
+                            if (nameMatch || birthYearInBio) {
+                                console.log(`[Identity] ✓ Successfully scraped and verified profile for ${username} on ${platform} (nameMatch: ${nameMatch}, birthYearMatch: ${birthYearInBio})`);
+                                verifiedUsernames.push(username);
+                            } else {
+                                console.warn(`[Identity] ✗ Profile ${username} does not match player (name: ${profileName}, bio: ${String(bio).substring(0, 50)})`);
+                            }
+                        } catch (error) {
+                            console.error(`[Identity] Error scraping ${url}:`, error);
+                        }
+                    }
+                    
+                    if (verifiedUsernames.length > 0) {
+                        console.log(`[Identity] Successfully scraped ${verifiedUsernames.length} profile(s) for ${platform}: [${verifiedUsernames.join(', ')}]`);
+                    } else {
+                        console.warn(`[Identity] No valid profiles found after scraping for ${platform}`);
+                    }
+                    
+                    return verifiedUsernames;
+                };
+
+                // Extract URLs from reasoning and actually fetch/scrape the profile pages
+                // NO CANDIDATES - only extract usernames by actually visiting the websites
+                if (needsChessComDiscovery && candidates.reasoning) {
+                    chessComCandidates = await extractUsernamesByScraping(candidates.reasoning, 'chess.com');
+                    console.log(`[Identity] Chess.com usernames scraped from profile pages: [${chessComCandidates.join(', ')}]`);
+                }
+                if (needsLichessDiscovery && candidates.reasoning) {
+                    lichessCandidates = await extractUsernamesByScraping(candidates.reasoning, 'lichess');
+                    console.log(`[Identity] Lichess usernames scraped from profile pages: [${lichessCandidates.join(', ')}]`);
+                }
+            } // Close if (needsChessComDiscovery || needsLichessDiscovery) block
+            
+            // Provided usernames are already in candidates list and trusted - no need to add again
+            // They will be used directly without verification
+
+            // Verification Helper (with access to candidates for confidence checking)
+            const verifyHandle = async (usernameInput: string, platform: 'chess.com' | 'lichess', aiCandidates?: AICandidates) => {
+                let username = usernameInput.trim();
+                // Strip URL if necessary
+                if (username.includes('/') || username.includes('http')) {
+                    const parts = username.split('/');
+                    username = parts[parts.length - 1] || parts[parts.length - 2];
+                }
+                username = username.replace(/[^a-z0-9_-]/i, '');
+                if (!username) return null;
+
+                try {
+                    console.log(`[Identity] Verifying ${platform} username: ${username}`);
+                    const profile = platform === 'chess.com'
+                        ? await chessComService.getPlayerProfile(username)
+                        : await lichessService.getPlayerProfile(username);
+
+                    if (!profile) {
+                        console.log(`[Identity] Profile not found for ${username} on ${platform}`);
+                        return null;
+                    }
+
+                    console.log(`[Identity] Profile found for ${username} on ${platform}, checking bio-metric match...`);
+
+                    // Bio-metric matching
+                    const bio = platform === 'chess.com' ? (profile as Record<string, unknown>).status : (profile as Record<string, unknown>).profile?.['bio'] || '';
+                    const profileName = platform === 'chess.com'
+                        ? (profile as Record<string, unknown>).name as string
+                        : ((profile as Record<string, unknown>).profile?.['firstName'] as string || '') + ' ' + ((profile as Record<string, unknown>).profile?.['lastName'] as string || '');
+
+                    const titleMatch = fideProfile?.title && (profile as Record<string, unknown>).title === fideProfile.title;
+
+                    // Extract name parts from official name (handle "Last, First Middle" format)
+                    const officialNameClean = officialName.toLowerCase().replace(/[^a-z ]/g, '').trim();
+                    const nameParts = officialNameClean.split(/[,\s]+/).filter(p => p.length > 2);
+                    
+                    // Also try reversed format (for "Last, First" -> "First Last")
+                    const reversedParts: string[] = [];
+                    if (officialName.includes(',')) {
+                        const parts = officialNameClean.split(',').map(p => p.trim());
+                        if (parts.length >= 2) {
+                            reversedParts.push(...parts[1].split(' ').filter(p => p.length > 2)); // First name parts
+                            reversedParts.push(...parts[0].split(' ').filter(p => p.length > 2)); // Last name parts
+                        }
+                    }
+                    const allNameParts = [...new Set([...nameParts, ...reversedParts])];
+                    
+                    const profNameLower = (profileName || '').toLowerCase().replace(/[^a-z ]/g, '');
+                    // Check if profile name contains at least 2 name parts (more reliable)
+                    const matchingParts = allNameParts.filter(part => profNameLower.includes(part));
+                    const nameMatch = matchingParts.length >= 2 || (matchingParts.length === 1 && allNameParts.length === 1);
+
+                    const handleLower = username.toLowerCase();
+                    // Check if handle contains name parts (e.g., "JamisonKao" contains "jamison" and "kao")
+                    const handleMatchingParts = allNameParts.filter(part => handleLower.includes(part));
+                    const handleMatch = handleMatchingParts.length >= 2 || (handleMatchingParts.length >= 1 && allNameParts.length <= 2);
+                    
+                    console.log(`[Identity] Name matching details:`, {
+                        officialName,
                         profileName,
-                        normOfficial,
-                        normProfile,
-                        normHandle
+                        username,
+                        nameParts: allNameParts,
+                        matchingParts,
+                        nameMatch,
+                        handleMatchingParts,
+                        handleMatch
                     });
 
-                    // Match if name matches or handle is the name
-                    if (normProfile.includes(normOfficial) || normOfficial.includes(normProfile) || normHandle.includes(normOfficial)) {
+                    // Check for birth year in bio
+                    const birthYearInBio = fideProfile?.birthYear && String(bio || '').includes(fideProfile.birthYear);
+
+                    // CRITICAL: If player has a FIDE title, the profile MUST have that title
+                    // This is a strong negative signal - reject immediately if title mismatch
+                    if (fideProfile?.title && fideProfile.title.trim() !== '') {
+                        const profileTitle = (profile as Record<string, unknown>).title as string || '';
+                        const profileTitleUpper = profileTitle.toUpperCase().trim();
+                        const fideTitleUpper = fideProfile.title.toUpperCase().trim();
+                        
+                        // Check if profile has NO title when FIDE profile has one (strong rejection signal)
+                        if (!profileTitleUpper && fideTitleUpper) {
+                            console.log(`[Identity] ✗ REJECTING: Player has FIDE title ${fideTitleUpper} but ${platform} profile has no title`);
+                            return null;
+                        }
+                        
+                        // Check if titles don't match (also reject - titles are official and should match)
+                        if (profileTitleUpper && fideTitleUpper && profileTitleUpper !== fideTitleUpper) {
+                            console.log(`[Identity] ✗ REJECTING: Title mismatch - FIDE: ${fideTitleUpper}, ${platform}: ${profileTitleUpper}`);
+                            return null;
+                        }
+                        
+                        // If titles match, this is a strong positive signal
+                        if (profileTitleUpper === fideTitleUpper) {
+                            console.log(`[Identity] ✓ Strong match: Title matches (${fideTitleUpper})`);
+                            // Title match alone is very strong evidence, but still check name for extra confidence
+                            if (nameMatch || handleMatch) {
+                                console.log(`[Identity] ✓ High confidence match: title + name/handle`);
+                                return username;
+                            }
+                            // Even without name match, title match is very strong
+                            console.log(`[Identity] ✓ Accepting based on title match alone`);
+                            return username;
+                        }
+                    }
+
+                    // High confidence matches (when no title or title already verified)
+                    if (titleMatch && nameMatch) {
+                        console.log(`[Identity] ✓ High confidence match: title + name`);
+                        return username;
+                    }
+                    if (titleMatch && birthYearInBio) {
+                        console.log(`[Identity] ✓ High confidence match: title + birth year`);
+                        return username;
+                    }
+                    if (nameMatch && birthYearInBio) {
+                        console.log(`[Identity] ✓ High confidence match: name + birth year`);
                         return username;
                     }
 
-                    // For titled players, if the handle contains a part of the official name and they have the same title (later)
-                    // For now, if the handle is found and AI was very confident, we accept it if it's not a complete mismatch
-                    if (data.confidence > 0.8 && (normHandle.length > 4) && (normHandle.includes(normOfficial.slice(0, 4)) || normOfficial.includes(normHandle.slice(0, 4)))) {
+                    // Slightly looser but still probable
+                    if (handleMatch && titleMatch) {
+                        console.log(`[Identity] ✓ Medium confidence match: handle + title`);
+                        return username;
+                    }
+                    if (handleMatch && nameMatch && (platform === 'lichess' ? ((profile as Record<string, unknown>).perfs?.['blitz']?.['rating'] as number || 0) > 2000 : true)) {
+                        console.log(`[Identity] ✓ Medium confidence match: handle + name`);
                         return username;
                     }
 
+                    // If AI discovered this username with high confidence, accept it even without perfect bio match
+                    // This handles cases where the AI found the correct username but bio doesn't match perfectly
+                    const candidatesToCheck = aiCandidates || candidates;
+                    if (candidatesToCheck.confidence && candidatesToCheck.confidence >= 0.7) {
+                        const isAICandidate = candidatesToCheck.chessComCandidates?.includes(username) || candidatesToCheck.lichessCandidates?.includes(username);
+                        if (isAICandidate) {
+                            console.log(`[Identity] ✓ Accepting AI-discovered username with confidence ${candidatesToCheck.confidence} (AI already verified match)`);
+                            return username;
+                        }
+                    }
+
+                    // If handle matches name parts, accept it (username like "JamisonKao" matches "Kao, Jamison Edrich")
+                    if (handleMatch) {
+                        console.log(`[Identity] ✓ Accepting username with handle match (handle contains name parts)`);
+                        return username;
+                    }
+
+                    // Last resort: if profile exists and name matches any part, accept it
+                    // This prevents false negatives when profiles don't have complete bio info
+                    if (nameMatch) {
+                        console.log(`[Identity] ⚠ Accepting username with name match (profile name contains parts of official name)`);
+                        return username;
+                    }
+
+                    console.log(`[Identity] ✗ No match found for ${username} on ${platform}`);
                     return null;
                 } catch (e) {
+                    console.error(`[Identity] Error verifying ${username} on ${platform}:`, e);
                     return null;
                 }
             };
 
-            // Parallel Verification
+            // 4. Verify usernames (only for discovered ones, provided ones are trusted)
+            console.log(`[Identity] Processing usernames - Chess.com: [${chessComCandidates.join(', ')}], Lichess: [${lichessCandidates.join(', ')}]`);
             const [confirmedChessCom, confirmedLichess] = await Promise.all([
                 (async () => {
-                    for (const u of chessComCandidates) {
-                        const verified = await verifyHandle(u, 'chess.com', chessComCandidates);
-                        if (verified) return verified;
+                    // If username was provided, trust it - no verification needed
+                    if (verifiedChessComUsername) {
+                        console.log(`[Identity] ✓ Using provided Chess.com username (trusted): ${verifiedChessComUsername}`);
+                        return verifiedChessComUsername;
                     }
-                    return ''; // No longer returning a guess fallback
+                    // Only verify AI-discovered usernames
+                    const verifyPromises = chessComCandidates.map(u => verifyHandle(u, 'chess.com', candidates));
+                    const results = await Promise.all(verifyPromises);
+                    const found = results.find(r => r !== null) || '';
+                    console.log(`[Identity] Chess.com discovered username verification result: ${found || 'none found'}`);
+                    return found;
                 })(),
                 (async () => {
-                    for (const u of lichessCandidates) {
-                        const verified = await verifyHandle(u, 'lichess', lichessCandidates);
-                        if (verified) return verified;
+                    // If username was provided, trust it - no verification needed
+                    if (verifiedLichessUsername) {
+                        console.log(`[Identity] ✓ Using provided Lichess username (trusted): ${verifiedLichessUsername}`);
+                        return verifiedLichessUsername;
                     }
-                    return ''; // No longer returning a guess fallback
+                    // Only verify AI-discovered usernames
+                    const verifyPromises = lichessCandidates.map(u => verifyHandle(u, 'lichess', candidates));
+                    const results = await Promise.all(verifyPromises);
+                    const found = results.find(r => r !== null) || '';
+                    console.log(`[Identity] Lichess discovered username verification result: ${found || 'none found'}`);
+                    return found;
                 })()
             ]);
 
@@ -147,16 +556,15 @@ export const identityService = {
                 uscfProfile,
                 chessComUsername: confirmedChessCom,
                 lichessUsername: confirmedLichess,
-                confidence: data.confidence || 0.5
+                confidence: confirmedChessCom || confirmedLichess ? 1.0 : 0
             };
 
         } catch (e) {
-            console.error("[Identity] AI Resolution failed:", e);
-            // Return empty handles instead of guessing, to avoid 404/410 errors on platforms
+            console.error("[Identity] Fatal Discovery Failure:", e);
             return {
                 verifiedName: officialName,
-                fideProfile,
-                uscfProfile,
+                fideProfile: null,
+                uscfProfile: null,
                 chessComUsername: '',
                 lichessUsername: '',
                 confidence: 0

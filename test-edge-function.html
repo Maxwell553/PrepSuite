@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Edge Function</title>
+</head>
+<body>
+    <h1>Test Supabase Edge Function</h1>
+    <button onclick="testFunction()">Test gemini-identity</button>
+    <pre id="output"></pre>
+
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+        
+        // Get these from your .env.local file
+        const SUPABASE_URL = prompt('Enter your Supabase URL:');
+        const SUPABASE_ANON_KEY = prompt('Enter your Supabase Anon Key:');
+        
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        window.testFunction = async function() {
+            const output = document.getElementById('output');
+            output.textContent = 'Testing...\n';
+            
+            try {
+                console.log('Calling gemini-identity...');
+                const { data, error, status, statusText } = await supabase.functions.invoke('gemini-identity', {
+                    body: { prompt: 'Test prompt' }
+                });
+                
+                output.textContent = `Status: ${status} ${statusText}\n`;
+                output.textContent += `Error: ${JSON.stringify(error, null, 2)}\n`;
+                output.textContent += `Data: ${JSON.stringify(data, null, 2)}\n`;
+            } catch (err) {
+                output.textContent = `Exception: ${err.message}\n${err.stack}`;
+            }
+        };
+    </script>
+</body>
+</html>
