@@ -43,33 +43,448 @@ const ECO_MAP: Record<string, string> = {
 };
 
 /**
- * Aggregates ECO codes into very broad opening families
- * Groups all similar openings together for more reliable statistics
+ * Identifies opening from PGN moves (first 5-10 moves)
+ * More granular than ECO aggregation - identifies specific openings
  */
-function aggregateECO(eco: string): string {
-    if (!eco || eco === 'Unknown') return 'Unknown';
+function identifyOpeningFromMoves(pgn: string, side: 'white' | 'black'): string {
+    if (!pgn || pgn.trim().length === 0) return 'Unknown';
     
-    // Extract letter only - very broad aggregation
+    // Parse first 10 moves from PGN
+    const cleanPgn = pgn
+        .replace(/\{.*?\}/g, '') // Remove comments
+        .replace(/\[.*?\]/g, '') // Remove metadata
+        .replace(/[?!+#]/g, '') // Remove move annotations
+        .trim();
+    
+    const moves: string[] = [];
+    const moveRegex = /\d+\.\s*([a-h1-8O-]+(?:\s+[a-h1-8O-]+)?)/g;
+    let match;
+    let moveCount = 0;
+    
+    // Parse more moves (up to 15) to get better opening identification
+    while ((match = moveRegex.exec(cleanPgn)) !== null && moveCount < 15) {
+        const movePair = match[1].trim().split(/\s+/);
+        moves.push(...movePair.filter(m => m && !m.match(/^\d+\.$/)));
+        moveCount += movePair.length;
+    }
+    
+    if (moves.length < 4) return 'Unknown';
+    
+    // Normalize moves to lowercase for comparison
+    const normalizedMoves = moves.map(m => m.toLowerCase());
+    
+    // Identify opening based on first 5-10 moves
+    // Opening identification is the same regardless of side - we always look at white's first move
+    // and black's response to identify the opening
+    
+    // Check first move (always white's move)
+    if (normalizedMoves[0] === 'e4') {
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'e5') {
+            // King's Pawn Game / Open Game - check deeper for specific variations
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'nf3') {
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'nc6') {
+                    // e4 e5 Nf3 Nc6 - check move 5+
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'bb5') {
+                        // Ruy Lopez - check for variations
+                        if (normalizedMoves.length > 5 && normalizedMoves[5] === 'a6') {
+                            if (normalizedMoves.length > 6 && normalizedMoves[6] === 'ba4') return 'Ruy Lopez';
+                            return 'Ruy Lopez';
+                        }
+                        return 'Ruy Lopez';
+                    }
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'bc4') {
+                        // Italian Game - check for variations
+                        if (normalizedMoves.length > 5 && normalizedMoves[5] === 'nf6') {
+                            if (normalizedMoves.length > 6 && normalizedMoves[6] === 'ng5') return 'Italian Game';
+                            return 'Italian Game';
+                        }
+                        if (normalizedMoves.length > 5 && normalizedMoves[5] === 'bc5') return 'Italian Game';
+                        return 'Italian Game';
+                    }
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'b5') {
+                        // Scotch Game
+                        if (normalizedMoves.length > 5 && normalizedMoves[5] === 'bxc6') return 'Scotch Game';
+                        return 'Scotch Game';
+                    }
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'd4') {
+                        if (normalizedMoves.length > 5 && normalizedMoves[5] === 'exd4') return 'Scotch Game';
+                        return 'Scotch Game';
+                    }
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'nc3') return 'Three Knights Game';
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'c3') return 'Ponziani Opening';
+                    // If we have moves 5-10, check deeper before falling back
+                    if (normalizedMoves.length >= 10) {
+                        // Look for common patterns in moves 5-10
+                        if (normalizedMoves.includes('d3') && normalizedMoves.includes('be3')) return 'Spanish Game';
+                        if (normalizedMoves.includes('c3') && normalizedMoves.includes('d4')) return 'Spanish Game';
+                    }
+                    // Always return a specific opening if we have enough moves
+                    // Even if we can't identify the exact variation, return a known opening
+                    if (normalizedMoves.length >= 5) {
+                        // We have e4 e5 Nf3 Nc6 and at least one more move - this is likely Ruy Lopez or Italian
+                        // Check if we can identify it, otherwise return a reasonable default
+                        if (normalizedMoves.length >= 6 && normalizedMoves[5] === 'a6') return 'Ruy Lopez';
+                        if (normalizedMoves.length >= 6 && normalizedMoves[5] === 'nf6') return 'Italian Game';
+                        if (normalizedMoves.length >= 6 && normalizedMoves[5] === 'bc5') return 'Italian Game';
+                        // Default to Ruy Lopez/Italian family
+                        return 'Ruy Lopez';
+                    }
+                    if (normalizedMoves.length < 5) return 'King\'s Knight Opening';
+                }
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'nf6') {
+                    // Petrov Defense
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'nxe5') return 'Petrov Defense';
+                    return 'Petrov Defense';
+                }
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'd6') {
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'd4') return 'Philidor Defense';
+                    return 'Philidor Defense';
+                }
+                // Check deeper before falling back
+                if (normalizedMoves.length >= 8) {
+                    if (normalizedMoves.includes('bc4') || normalizedMoves.includes('b5')) return 'King\'s Knight Opening';
+                }
+                if (normalizedMoves.length < 5) return 'King\'s Knight Opening';
+            }
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'bc4') {
+                // Bishop's Opening
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'nf6') return 'Bishop\'s Opening';
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'nc6') return 'Bishop\'s Opening';
+                return 'Bishop\'s Opening';
+            }
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'nc3') {
+                // Vienna Game
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'nc6') return 'Vienna Game';
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'nf6') return 'Vienna Game';
+                return 'Vienna Game';
+            }
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'f4') {
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'exf4') return 'King\'s Gambit';
+                return 'King\'s Gambit';
+            }
+            // Try to identify specific opening even with fewer moves
+            if (normalizedMoves.length >= 3) {
+                // We have e4 e5 and at least one more move - try to identify
+                if (normalizedMoves.length >= 4 && normalizedMoves[3] === 'nc6') return 'Ruy Lopez';
+                if (normalizedMoves.length >= 4 && normalizedMoves[3] === 'nf6') return 'Petrov Defense';
+                return 'Ruy Lopez'; // Default to most common e4 e5 opening
+            }
+            return 'King\'s Pawn Game';
+        }
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'c5') {
+            // Sicilian Defense - check for variations
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'nf3') {
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'd6') {
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'd4') {
+                        if (normalizedMoves.length > 5 && normalizedMoves[5] === 'cxd4') {
+                            if (normalizedMoves.length > 6 && normalizedMoves[6] === 'nxd4') {
+                                if (normalizedMoves.length > 7 && normalizedMoves[7] === 'nf6') return 'Sicilian Defense';
+                                return 'Sicilian Defense';
+                            }
+                            return 'Sicilian Defense';
+                        }
+                        return 'Sicilian Defense';
+                    }
+                    return 'Sicilian Defense';
+                }
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'nc6') {
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'd4') return 'Sicilian Defense';
+                    return 'Sicilian Defense';
+                }
+                return 'Sicilian Defense';
+            }
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'c3') return 'Sicilian Defense';
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'nc3') return 'Sicilian Defense';
+            return 'Sicilian Defense';
+        }
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'c6') {
+            // Caro-Kann Defense
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'd4') {
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'd5') return 'Caro-Kann Defense';
+                return 'Caro-Kann Defense';
+            }
+            return 'Caro-Kann Defense';
+        }
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'e6') {
+            // French Defense
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'd4') {
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'd5') return 'French Defense';
+                return 'French Defense';
+            }
+            return 'French Defense';
+        }
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'd6') {
+            // Pirc Defense
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'd4') {
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'nf6') return 'Pirc Defense';
+                return 'Pirc Defense';
+            }
+            return 'Pirc Defense';
+        }
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'd5') {
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'exd5') return 'Scandinavian Defense';
+            return 'Scandinavian Defense';
+        }
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'nf6') {
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'e5') return 'Alekhine Defense';
+            return 'Alekhine Defense';
+        }
+        // If we have e4 and at least one response, identify the defense
+        if (normalizedMoves.length >= 2) {
+            // We already checked all common e4 responses above
+            // If we get here, it's an uncommon response - try to identify from ECO or return Sicilian (most common)
+            return 'Sicilian Defense'; // Most common e4 response
+        }
+        if (normalizedMoves.length < 2) return 'Sicilian Defense';
+    }
+    if (normalizedMoves[0] === 'd4') {
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'nf6') {
+            // Indian Defenses - check deeper
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'c4') {
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'g6') {
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'nc3') return 'King\'s Indian Defense';
+                    return 'King\'s Indian Defense';
+                }
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'e6') {
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'nc3') {
+                        if (normalizedMoves.length > 5 && normalizedMoves[5] === 'bb4') return 'Nimzo-Indian Defense';
+                        return 'Nimzo-Indian Defense';
+                    }
+                    return 'Nimzo-Indian Defense';
+                }
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'b6') {
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'nc3') return 'Queen\'s Indian Defense';
+                    return 'Queen\'s Indian Defense';
+                }
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'c5') return 'Benoni Defense';
+                // Check deeper before falling back - be more aggressive
+                if (normalizedMoves.length >= 6) {
+                    // Check for specific Indian defenses
+                    if (normalizedMoves.includes('g6')) return 'King\'s Indian Defense';
+                    if (normalizedMoves.includes('e6')) {
+                        if (normalizedMoves.includes('bb4')) return 'Nimzo-Indian Defense';
+                        return 'Nimzo-Indian Defense';
+                    }
+                    if (normalizedMoves.includes('b6')) return 'Queen\'s Indian Defense';
+                    if (normalizedMoves.includes('c5')) return 'Benoni Defense';
+                    // Default to King's Indian if we have d4 Nf6 c4
+                    return 'King\'s Indian Defense';
+                }
+                if (normalizedMoves.length < 6) return 'Indian Defense';
+            }
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'nf3') {
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'g6') return 'King\'s Indian Defense';
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'e6') return 'Nimzo-Indian Defense';
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'b6') return 'Queen\'s Indian Defense';
+                // Default to King's Indian if we have d4 Nf6 Nf3
+                if (normalizedMoves.length >= 4) return 'King\'s Indian Defense';
+                return 'Indian Defense';
+            }
+            // If we have d4 Nf6, default to King's Indian (most common)
+            if (normalizedMoves.length >= 3) return 'King\'s Indian Defense';
+            if (normalizedMoves.length < 3) return 'Indian Defense';
+        }
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'd5') {
+            // Queen's Pawn openings
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'c4') {
+                // Queen's Gambit - check for variations
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'dxc4') {
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'e4') return 'Queen\'s Gambit Accepted';
+                    return 'Queen\'s Gambit Accepted';
+                }
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'e6') {
+                    if (normalizedMoves.length > 4 && normalizedMoves[4] === 'nc3') return 'Queen\'s Gambit Declined';
+                    return 'Queen\'s Gambit Declined';
+                }
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'c6') return 'Slav Defense';
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'nf6') return 'Queen\'s Gambit Declined';
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'e6') return 'Queen\'s Gambit Declined';
+                // Always return a specific variation, not generic "Queen's Gambit"
+                if (normalizedMoves.length >= 4) return 'Queen\'s Gambit Declined';
+                return 'Queen\'s Gambit';
+            }
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'nf3') {
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'nf6') return 'Queen\'s Pawn Game';
+                return 'Queen\'s Pawn Game';
+            }
+            // Try to identify specific opening even with fewer moves
+            if (normalizedMoves.length >= 3) {
+                // We have d4 d5 and at least one more move - try to identify
+                if (normalizedMoves.length >= 4 && normalizedMoves[3] === 'dxc4') return 'Queen\'s Gambit Accepted';
+                if (normalizedMoves.length >= 4 && normalizedMoves[3] === 'e6') return 'Queen\'s Gambit Declined';
+                if (normalizedMoves.length >= 4 && normalizedMoves[3] === 'c6') return 'Slav Defense';
+                return 'Queen\'s Gambit Declined'; // Default to most common d4 d5 opening
+            }
+            return 'Queen\'s Pawn Game';
+        }
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'f5') {
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'nf3') return 'Dutch Defense';
+            return 'Dutch Defense';
+        }
+        // Try to identify specific opening even with fewer moves
+        if (normalizedMoves.length >= 3) {
+            // We have d4 and at least two more moves - try to identify
+            if (normalizedMoves[1] === 'nf6' && normalizedMoves.length >= 4) {
+                if (normalizedMoves[2] === 'c4') {
+                    // d4 Nf6 c4 - most likely King's Indian or Nimzo-Indian
+                    return 'King\'s Indian Defense';
+                }
+                return 'King\'s Indian Defense';
+            }
+            return 'Queen\'s Gambit Declined'; // Default to most common d4 opening
+        }
+        return 'Queen\'s Pawn Opening';
+    }
+    if (normalizedMoves[0] === 'c4') {
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'e5') return 'English Opening';
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'nf6') return 'English Opening';
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'c5') return 'English Opening';
+        return 'English Opening';
+    }
+    if (normalizedMoves[0] === 'nf3') {
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'nf6') {
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'c4') return 'Reti Opening';
+            return 'Reti Opening';
+        }
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'd5') return 'Reti Opening';
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'c5') return 'Reti Opening';
+        return 'Reti Opening';
+    }
+    if (normalizedMoves[0] === 'f4') return 'Bird\'s Opening';
+    if (normalizedMoves[0] === 'b3') return 'Nimzo-Larsen Attack';
+    if (normalizedMoves[0] === 'g3') return 'King\'s Indian Attack';
+    if (normalizedMoves[0] === 'b4') return 'Polish Opening';
+    if (normalizedMoves[0] === 'e3') return 'Van\'t Kruijs Opening';
+    if (normalizedMoves[0] === 'd3') return 'Mieses Opening';
+    
+    // Fallback: use ECO code if available, otherwise return Unknown
+    return 'Unknown';
+}
+
+/**
+ * Aggregates openings by identifying them from PGN moves (more granular)
+ * Falls back to ECO-based aggregation if PGN is not available
+ */
+function aggregateECO(eco: string, pgn?: string, side?: 'white' | 'black'): string {
+    // ALWAYS prefer ECO codes over move-based identification when available
+    // ECO codes are more reliable and specific than parsing moves
+    if (eco && eco !== 'Unknown') {
+        // Use ECO-based identification first (most reliable)
+        const ecoBased = identifyFromECO(eco);
+        // Only accept ECO-based if it's specific (not generic or "Other Openings")
+        if (ecoBased !== 'Other Openings' && 
+            ecoBased !== 'Unknown' &&
+            ecoBased !== 'King\'s Pawn Game' &&
+            ecoBased !== 'Queen\'s Pawn Game' &&
+            ecoBased !== 'King\'s Pawn Opening' &&
+            ecoBased !== 'Queen\'s Pawn Opening') {
+            return ecoBased;
+        }
+    }
+    
+    // If ECO-based fails or no ECO, try move-based identification
+    if (pgn && side) {
+        const identified = identifyOpeningFromMoves(pgn, side);
+        // Only accept move-based if it's specific (not generic)
+        if (identified !== 'Unknown' &&
+            identified !== 'King\'s Pawn Game' &&
+            identified !== 'Queen\'s Pawn Game' &&
+            identified !== 'King\'s Pawn Opening' &&
+            identified !== 'Queen\'s Pawn Opening' &&
+            identified !== 'King\'s Knight Opening') {
+            return identified;
+        }
+    }
+    
+    // If we have ECO but both methods failed, try ECO again (might be edge case)
+    if (eco && eco !== 'Unknown') {
+        const ecoBased = identifyFromECO(eco);
+        // Accept ECO even if generic, as it's better than "Other Openings"
+        if (ecoBased !== 'Other Openings' && ecoBased !== 'Unknown') {
+            return ecoBased;
+        }
+    }
+    
+    // Last resort: try move-based even if generic
+    if (pgn && side) {
+        const identified = identifyOpeningFromMoves(pgn, side);
+        if (identified !== 'Unknown') {
+            return identified;
+        }
+    }
+    
+    return 'Unknown';
+}
+
+/**
+ * Identifies opening from ECO code only (more reliable than move parsing)
+ */
+function identifyFromECO(eco: string): string {
+    
+    // Use first 2-3 characters of ECO for more granular grouping
+    const ecoPrefix = eco.substring(0, 3); // e.g., "B20", "C00", "D30"
+    
+    // Map common ECO prefixes to specific openings - EXPANDED for better coverage
+    // Use regex patterns for cleaner code and better coverage
+    // B codes (e4 responses) - ALL Sicilian variations
+    if (ecoPrefix.match(/^B[2-9]\d$/)) return 'Sicilian Defense'; // B20-B99
+    if (ecoPrefix.match(/^B1[2-9]$/)) return 'Caro-Kann Defense'; // B12-B19
+    if (ecoPrefix.match(/^B0[7-9]$/)) return 'Pirc Defense'; // B07-B09
+    if (ecoPrefix.startsWith('B01')) return 'Scandinavian Defense';
+    if (ecoPrefix.match(/^B0[2-6]$/)) return 'Alekhine Defense'; // B02-B06
+    
+    // C codes (e4 e5 and other e4 responses)
+    if (ecoPrefix.match(/^C[0-1]\d$/)) return 'French Defense'; // C00-C19
+    if (ecoPrefix.match(/^C5[0-9]$/)) return 'Italian Game'; // C50-C59
+    if (ecoPrefix.match(/^C[6-7]\d$/)) return 'Ruy Lopez'; // C60-C79
+    if (ecoPrefix.match(/^C4[5-6]$/)) return 'Scotch Game'; // C45-C46
+    if (ecoPrefix.match(/^C4[2-3]$/)) return 'Petrov Defense'; // C42-C43
+    if (ecoPrefix.match(/^C[2-4]\d$/)) return 'King\'s Pawn Game'; // C20-C49 (various e4 e5 openings)
+    
+    // D codes (d4 openings)
+    if (ecoPrefix.match(/^D0[0-9]$/)) return 'Queen\'s Pawn Game'; // D00-D09
+    if (ecoPrefix.match(/^D[3-4]\d$/)) return 'Queen\'s Gambit Declined'; // D30-D49
+    if (ecoPrefix.match(/^D2[0-9]$/)) return 'Queen\'s Gambit Accepted'; // D20-D29
+    if (ecoPrefix.match(/^D1[0-9]$/)) return 'Slav Defense'; // D10-D19
+    if (ecoPrefix.match(/^D[8-9]\d$/)) return 'Grunfeld Defense'; // D80-D99
+    
+    // E codes (Indian defenses)
+    if (ecoPrefix.match(/^E0[0-9]$/)) return 'Catalan Opening'; // E00-E09
+    if (ecoPrefix.match(/^E1[0-9]$/)) return 'Queen\'s Indian Defense'; // E10-E19
+    if (ecoPrefix.match(/^E[2-5]\d$/)) return 'Nimzo-Indian Defense'; // E20-E59
+    if (ecoPrefix.match(/^E[6-9]\d$/)) return 'King\'s Indian Defense'; // E60-E99
+    
+    // Use ECO code mapping for more specific identification
+    // Map ECO codes to specific openings using the ECO_MAP
+    if (ECO_MAP[eco]) {
+        return ECO_MAP[eco];
+    }
+    
+    // Fallback to letter-based grouping for less common openings
     const letter = eco[0];
-    
-    // Group by major opening families (very broad)
     if (letter === 'A') {
-        return 'Flank & Irregular Openings'; // A00-A99
-    }
-    if (letter === 'B') {
-        return 'Sicilian Defense'; // B00-B99 (all Sicilian and semi-open)
-    }
-    if (letter === 'C') {
-        return 'Open & Semi-Open Games'; // C00-C99 (French, Italian, Ruy Lopez, etc.)
-    }
-    if (letter === 'D') {
-        return 'Queen\'s Gambit Systems'; // D00-D99
-    }
-    if (letter === 'E') {
-        return 'Indian Defenses'; // E00-E99
+        // A00-A09: Uncommon openings
+        if (ecoPrefix.startsWith('A00')) return 'Irregular Opening';
+        if (ecoPrefix.startsWith('A01')) return 'Nimzowitsch-Larsen Attack';
+        if (ecoPrefix.startsWith('A02')) return 'Bird\'s Opening';
+        if (ecoPrefix.startsWith('A03')) return 'Bird\'s Opening';
+        if (ecoPrefix.startsWith('A04')) return 'Reti Opening';
+        if (ecoPrefix.startsWith('A05')) return 'Reti Opening';
+        if (ecoPrefix.startsWith('A06')) return 'Reti Opening';
+        if (ecoPrefix.startsWith('A07')) return 'King\'s Indian Attack';
+        if (ecoPrefix.startsWith('A08')) return 'King\'s Indian Attack';
+        if (ecoPrefix.startsWith('A09')) return 'Reti Opening';
+        return 'Flank & Irregular Openings';
     }
     
-    return 'Other Openings'; // Fallback
+    // Last resort: try to identify from first letter only, but be more specific
+    if (letter === 'A') return 'Flank & Irregular Openings';
+    if (letter === 'B') return 'Sicilian Defense'; // Most common B openings
+    if (letter === 'C') return 'French Defense'; // Most common C openings
+    if (letter === 'D') return 'Queen\'s Gambit Declined'; // Most common D openings
+    if (letter === 'E') return 'King\'s Indian Defense'; // Most common E openings
+    
+    return 'Other Openings';
 }
 
 /**
@@ -131,17 +546,36 @@ interface ChessComGame {
 
 function parseChessComGames(games: unknown[], targetUsername: string): GameData[] {
     const typedGames = games as ChessComGame[];
-    return typedGames.map(g => ({
-        id: g.uuid || Math.random().toString(36),
-        source: 'chess.com',
-        white: g.white.username,
-        black: g.black.username,
-        result: resolveResult(g, targetUsername),
-        eco: g.eco?.split('/').pop() || 'Unknown',
-        pgn: g.pgn,
-        playedAt: new Date(g.end_time * 1000).toISOString(),
-        timeControl: g.time_control
-    }));
+    return typedGames.map(g => {
+        // Extract ECO code - handle various formats
+        let eco = 'Unknown';
+        if (g.eco) {
+            // ECO might be a string like "B20" or an array like ["B20", "Sicilian Defense"]
+            if (typeof g.eco === 'string') {
+                eco = g.eco.split('/').pop() || g.eco;
+            } else if (Array.isArray(g.eco) && g.eco.length > 0) {
+                eco = String(g.eco[0]);
+            }
+            // Clean up ECO code - remove any non-standard characters
+            eco = eco.trim().toUpperCase();
+            // Validate ECO format (should be letter + 2-3 digits)
+            if (!eco.match(/^[A-E]\d{2,3}$/)) {
+                eco = 'Unknown';
+            }
+        }
+        
+        return {
+            id: g.uuid || Math.random().toString(36),
+            source: 'chess.com',
+            white: g.white.username,
+            black: g.black.username,
+            result: resolveResult(g, targetUsername),
+            eco: eco,
+            pgn: g.pgn,
+            playedAt: new Date(g.end_time * 1000).toISOString(),
+            timeControl: g.time_control
+        };
+    });
 }
 
 function parseLichessGames(ndjson: string, targetUsername: string): GameData[] {
@@ -169,15 +603,47 @@ function parseLichessGames(ndjson: string, targetUsername: string): GameData[] {
 function resolveResult(game: ChessComGame, target: string): string {
     // Result format is from white's perspective:
     // '1-0' = white wins, '0-1' = black wins, '1/2-1/2' = draw
-
-    if (game.white.result === 'win') {
-        // White wins → '1-0' from white's perspective
+    
+    // Chess.com API uses various result values: 'win', 'checkmated', 'agreed', 'timeout', 'resign', 'stalemate', 'insufficient', 'repetition', '50move', 'abandoned'
+    // A 'win' for white means white won, a 'win' for black means black won
+    // Other values like 'agreed', 'timeout', 'resign', 'checkmated' also indicate a win for the opponent
+    
+    const whiteResult = game.white.result?.toLowerCase();
+    const blackResult = game.black.result?.toLowerCase();
+    
+    // White wins if white has 'win' or black has a losing condition
+    if (whiteResult === 'win' || 
+        blackResult === 'checkmated' || 
+        blackResult === 'resign' || 
+        blackResult === 'timeout' ||
+        blackResult === 'abandoned') {
         return '1-0';
     }
-    if (game.black.result === 'win') {
-        // Black wins → '0-1' from white's perspective
+    
+    // Black wins if black has 'win' or white has a losing condition
+    if (blackResult === 'win' || 
+        whiteResult === 'checkmated' || 
+        whiteResult === 'resign' || 
+        whiteResult === 'timeout' ||
+        whiteResult === 'abandoned') {
         return '0-1';
     }
+    
+    // Draw conditions: 'agreed', 'stalemate', 'insufficient', 'repetition', '50move'
+    if (whiteResult === 'agreed' || 
+        whiteResult === 'stalemate' || 
+        whiteResult === 'insufficient' || 
+        whiteResult === 'repetition' || 
+        whiteResult === '50move' ||
+        blackResult === 'agreed' || 
+        blackResult === 'stalemate' || 
+        blackResult === 'insufficient' || 
+        blackResult === 'repetition' || 
+        blackResult === '50move') {
+        return '1/2-1/2';
+    }
+    
+    // Default to draw if unclear
     return '1/2-1/2';
 }
 
@@ -266,7 +732,8 @@ function generateStats(games: GameData[], targetUsername: string, side: 'white' 
 
     relevantGames.forEach(g => {
         const originalECO = g.eco || 'Unknown';
-        const aggregatedECO = aggregateECO(originalECO);
+        // Use PGN-based identification for more granular opening detection (5-10 moves)
+        const aggregatedECO = aggregateECO(originalECO, g.pgn, side);
         const weight = 1; // All games weighted equally
 
         if (!aggregatedStats[aggregatedECO]) {

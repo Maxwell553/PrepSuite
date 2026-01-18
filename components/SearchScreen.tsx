@@ -103,6 +103,24 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onReportGenerated, user }) 
       setScanningStatus('Fetching Online Game History...');
       console.log(`[Search] Fetching games for Chess.com: ${chessComUser || 'none'}, Lichess: ${lichessUser || 'none'}`);
       
+      // Check if we found a Top Players database slug (from chess.com/players/{slug} URLs)
+      // These might be different from regular usernames
+      // The identity service may have found a Top Players slug even if chessComUser is set
+      // We'll try to use it as a fallback if regular account doesn't work
+      let chessComTopPlayersSlug: string | null = null;
+      if (identity.chessComUsername) {
+        const discovered = identity.chessComUsername;
+        // If we don't have a regular username, or if we want to check for Top Players slug
+        // Try to fetch profile - if it fails, it might be a Top Players slug
+        if (!chessComUser) {
+          const testProfile = await chessComService.getPlayerProfile(discovered).catch(() => null);
+          if (!testProfile) {
+            console.log(`[Search] Discovered identifier "${discovered}" not found as regular account, will try as Top Players slug`);
+            chessComTopPlayersSlug = discovered;
+          }
+        }
+      }
+
       const [chessComProfile, chessComStats, chessComRawGames, lichessProfile, lichessRawGames] = await Promise.all([
         chessComUser ? chessComService.getPlayerProfile(chessComUser).catch(err => {
           console.warn(`[Search] Failed to fetch Chess.com profile for ${chessComUser}:`, err);
@@ -114,8 +132,13 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onReportGenerated, user }) 
         }) : Promise.resolve({}),
         chessComUser ? chessComService.getRecentGames(chessComUser, true).catch(err => {
           console.warn(`[Search] Failed to fetch Chess.com games for ${chessComUser}:`, err);
+          // If regular account failed, try Top Players slug as fallback
+          if (chessComTopPlayersSlug) {
+            console.log(`[Search] Attempting to fetch games using Top Players slug: ${chessComTopPlayersSlug}`);
+            return chessComService.getGamesFromTopPlayersSlug(chessComTopPlayersSlug).catch(() => []);
+          }
           return [];
-        }) : Promise.resolve([]), // Deep Search enabled (up to 1000 games)
+        }) : (chessComTopPlayersSlug ? chessComService.getGamesFromTopPlayersSlug(chessComTopPlayersSlug).catch(() => []) : Promise.resolve([])), // Try Top Players slug if no regular username
         lichessUser ? lichessService.getPlayerProfile(lichessUser).catch(err => {
           console.warn(`[Search] Failed to fetch Lichess profile for ${lichessUser}:`, err);
           return null; // Return null instead of throwing
@@ -134,8 +157,10 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onReportGenerated, user }) 
 
       // 4. Analyze and Aggregate Games
       // Process games from whichever platforms we found the player on
-      const chessComGames = chessComUser && chessComRawGames && Array.isArray(chessComRawGames) && chessComRawGames.length > 0
-        ? await gameAnalysisService.parseChessComGames(chessComRawGames, chessComUser)
+      // Parse Chess.com games - use Top Players slug as username if no regular account
+      const chessComGamesUsername = chessComUser || chessComTopPlayersSlug || '';
+      const chessComGames = chessComRawGames && Array.isArray(chessComRawGames) && chessComRawGames.length > 0
+        ? await gameAnalysisService.parseChessComGames(chessComRawGames, chessComGamesUsername)
         : [];
       
       const lichessGames = lichessUser && lichessRawGames && typeof lichessRawGames === 'string' && lichessRawGames.trim().length > 0

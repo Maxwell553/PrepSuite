@@ -30,7 +30,8 @@ export interface OpeningStat {
 }
 
 export interface MoveSequence {
-  moves: string[]; // Array of moves in PGN format (e.g., ["e4", "c5", "Nf3", "d6"])
+  moves: string[]; // Array of moves (for compatibility)
+  notation?: string; // Formatted chess notation (e.g., "1. e4 e5 2. Nc3 Nc6 3. b3")
   frequency: number; // How many times this sequence appears
   games: number; // Number of games with this sequence
 }

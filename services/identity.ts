@@ -5,6 +5,7 @@ import { uscfService, UscfProfile } from './uscf';
 import { chessComService } from './chessCom';
 import { lichessService } from './lichess';
 import { getGeminiApiKey } from '../lib/env';
+import { geminiService } from './geminiService';
 
 export interface ResolvedIdentity {
     verifiedName: string;
@@ -95,20 +96,20 @@ export const identityService = {
             const needsChessComDiscovery = !verifiedChessComUsername; // Only search if not provided
             const needsLichessDiscovery = !verifiedLichessUsername; // Only search if not provided
 
+            interface AICandidates {
+                chessComCandidates?: string[];
+                lichessCandidates?: string[];
+                reasoning?: string;
+                confidence?: number;
+            }
+            // Declare candidates outside the if block so it's accessible everywhere
+            let candidates: AICandidates = { chessComCandidates: [], lichessCandidates: [], confidence: 0 };
+
             if (needsChessComDiscovery || needsLichessDiscovery) {
                 console.log('[Identity] Running AI discovery for:', {
                     chesscom: needsChessComDiscovery,
                     lichess: needsLichessDiscovery
                 });
-
-                interface AICandidates {
-                    chessComCandidates?: string[];
-                    lichessCandidates?: string[];
-                    reasoning?: string;
-                    confidence?: number;
-                }
-                // Declare candidates outside the if block so it's accessible in fallback
-                let candidates: AICandidates = { chessComCandidates: [], lichessCandidates: [], confidence: 0 };
 
                 // Use Gemini API via Edge Function (secure server-side call)
                 try {
@@ -133,20 +134,20 @@ export const identityService = {
 
           Search Queries (perform each search and examine results):
           Perform these Google searches one by one and extract usernames from the actual results:
-          1. "${officialName} Chess.com account"
-          2. "${officialName} Lichess account"
-          3. "${officialName} games on Chess.com"
-          4. "${officialName} games on Lichess"
-          5. "${officialName} Chess.com username"
-          6. "${officialName} Lichess username"
-          7. "${officialName} ${fideProfile?.title || ''} Chess.com"
-          8. "${officialName} ${fideProfile?.title || ''} Lichess"
-          9. "${officialName} FIDE ID ${fideId || ''} Chess.com"
-          10. "${officialName} ${fideProfile?.federation || ''} chess player"
-          11. "Chess.com ${officialName}"
-          12. "Lichess ${officialName}"
-          13. "${officialName} Chess.com top players"
-          14. "${officialName} Chess.com leaderboard"
+          1. "lichess of ${officialName}"
+          2. "chess.com of ${officialName}"
+          3. "${officialName} Chess.com account"
+          4. "${officialName} Lichess account"
+          5. "${officialName} games on Chess.com"
+          6. "${officialName} games on Lichess"
+          7. "${officialName} Chess.com username"
+          8. "${officialName} Lichess username"
+          9. "${officialName} ${fideProfile?.title || ''} Chess.com"
+          10. "${officialName} ${fideProfile?.title || ''} Lichess"
+          11. "${officialName} FIDE ID ${fideId || ''} Chess.com"
+          12. "${officialName} ${fideProfile?.federation || ''} chess player"
+          13. "Chess.com ${officialName}"
+          14. "Lichess ${officialName}"
           15. "site:chess.com ${officialName}"
           16. "site:lichess.org ${officialName}"
 
@@ -198,7 +199,32 @@ export const identityService = {
                     try {
                                 const parsed = JSON.parse(jsonStr);
                                 if (parsed && typeof parsed === 'object') {
+                                    // Extract usernames from URLs if Gemini returned URLs instead of usernames
+                                    if (parsed.chessComCandidates && Array.isArray(parsed.chessComCandidates)) {
+                                        parsed.chessComCandidates = parsed.chessComCandidates.map((item: string) => {
+                                            // If it's a URL, extract the username (handles member, pub/player, player, players paths)
+                                            const urlMatch = item.match(/chess\.com\/(?:pub\/player|member|player|players)\/([a-z0-9_-]+)/i);
+                                            if (urlMatch) return urlMatch[1];
+                                            // If it's already a username (no http), return as-is
+                                            if (!item.includes('http') && !item.includes('/')) return item;
+                                            // Try to extract from partial URL
+                                            const parts = item.split('/');
+                                            const lastPart = parts[parts.length - 1];
+                                            if (lastPart && !lastPart.includes('http') && lastPart.length > 0) return lastPart;
+                                            return null;
+                                        }).filter((u: string | null): u is string => u !== null && u.length > 0);
+                                    }
+                                    if (parsed.lichessCandidates && Array.isArray(parsed.lichessCandidates)) {
+                                        parsed.lichessCandidates = parsed.lichessCandidates.map((item: string) => {
+                                            // If it's a URL, extract the username
+                                            const urlMatch = item.match(/lichess\.org\/@\/([a-z0-9_-]+)/i);
+                                            if (urlMatch) return urlMatch[1];
+                                            // If it's already a username, return as-is
+                                            return item.replace(/^https?:\/\/(?:www\.)?lichess\.org\/@\//i, '');
+                                        }).filter((u: string) => u && u.length > 0);
+                                    }
                                     candidates = parsed;
+                                    console.log('[Identity] Parsed candidates:', JSON.stringify(candidates, null, 2));
                                 }
                     } catch (parseErr) {
                         console.warn('[Identity] JSON Parse failed, attempting cleanup', parseErr);
@@ -207,7 +233,30 @@ export const identityService = {
                                     const cleaned = jsonStr.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
                                     const parsed = JSON.parse(cleaned);
                                     if (parsed && typeof parsed === 'object') {
+                                        // Extract usernames from URLs if Gemini returned URLs instead of usernames
+                                        if (parsed.chessComCandidates && Array.isArray(parsed.chessComCandidates)) {
+                                            parsed.chessComCandidates = parsed.chessComCandidates.map((item: string) => {
+                                                // If it's a URL, extract the username (handles member, pub/player, player, players paths)
+                                                const urlMatch = item.match(/chess\.com\/(?:pub\/player|member|player|players)\/([a-z0-9_-]+)/i);
+                                                if (urlMatch) return urlMatch[1];
+                                                // If it's already a username (no http), return as-is
+                                                if (!item.includes('http') && !item.includes('/')) return item;
+                                                // Try to extract from partial URL
+                                                const parts = item.split('/');
+                                                const lastPart = parts[parts.length - 1];
+                                                if (lastPart && !lastPart.includes('http') && lastPart.length > 0) return lastPart;
+                                                return null;
+                                            }).filter((u: string | null): u is string => u !== null && u.length > 0);
+                                        }
+                                        if (parsed.lichessCandidates && Array.isArray(parsed.lichessCandidates)) {
+                                            parsed.lichessCandidates = parsed.lichessCandidates.map((item: string) => {
+                                                const urlMatch = item.match(/lichess\.org\/@\/([a-z0-9_-]+)/i);
+                                                if (urlMatch) return urlMatch[1];
+                                                return item.replace(/^https?:\/\/(?:www\.)?lichess\.org\/@\//i, '');
+                                            }).filter((u: string) => u && u.length > 0);
+                                        }
                                         candidates = parsed;
+                                        console.log('[Identity] Parsed candidates (after cleanup):', JSON.stringify(candidates, null, 2));
                                     }
                         } catch (e) {
                                     console.warn('[Identity] Fatal JSON parse error, will use heuristic fallbacks');
@@ -230,10 +279,12 @@ export const identityService = {
                 }
 
                     // Extract URLs from reasoning
+                    // Include Top Players database URLs: chess.com/players/{slug}
                     const urlPatterns = {
                         'chess.com': [
                             /(?:https?:\/\/)?(?:www\.)?chess\.com\/(?:pub\/player|member|player)\/([a-z0-9_-]+)/gi,
-                            /(?:https?:\/\/)?(?:www\.)?chess\.com\/@([a-z0-9_-]+)/gi
+                            /(?:https?:\/\/)?(?:www\.)?chess\.com\/@([a-z0-9_-]+)/gi,
+                            /(?:https?:\/\/)?(?:www\.)?chess\.com\/players\/([a-z0-9_-]+)/gi // Top Players database
                         ],
                         'lichess': [
                             /(?:https?:\/\/)?(?:www\.)?lichess\.org\/@\/([a-z0-9_-]+)/gi,
@@ -241,23 +292,31 @@ export const identityService = {
                         ]
                     };
                     
-                    const foundUrls: Array<{url: string, username: string}> = [];
+                    const foundUrls: Array<{url: string, username: string, isTopPlayersSlug?: boolean}> = [];
                     const patterns = platform === 'chess.com' ? urlPatterns['chess.com'] : urlPatterns['lichess'];
                     
                     // Extract URLs from reasoning
-                    for (const pattern of patterns) {
+                    for (let i = 0; i < patterns.length; i++) {
+                        const pattern = patterns[i];
                         const matches = reasoning.matchAll(pattern);
                         for (const match of matches) {
                             if (match[1]) {
                                 const username = match[1];
+                                // Check if this is a Top Players database URL (third pattern for chess.com)
+                                const isTopPlayersSlug = platform === 'chess.com' && i === 2;
+                                
                                 // Construct full URL
                                 let fullUrl = '';
                                 if (platform === 'chess.com') {
-                                    fullUrl = `https://www.chess.com/member/${username}`;
+                                    if (isTopPlayersSlug) {
+                                        fullUrl = `https://www.chess.com/players/${username}`;
+                                    } else {
+                                        fullUrl = `https://www.chess.com/member/${username}`;
+                                    }
                                 } else {
                                     fullUrl = `https://lichess.org/@/${username}`;
                                 }
-                                foundUrls.push({ url: fullUrl, username });
+                                foundUrls.push({ url: fullUrl, username, isTopPlayersSlug });
                             }
                         }
                     }
@@ -274,14 +333,23 @@ export const identityService = {
                     
                     // Actually fetch and scrape each profile page, then verify bio-metric matching
                     const verifiedUsernames: string[] = [];
-                    for (const { url, username } of uniqueUrls) {
+                    for (const { url, username, isTopPlayersSlug } of uniqueUrls) {
                         try {
-                            console.log(`[Identity] Fetching and scraping profile page: ${url}`);
+                            console.log(`[Identity] Fetching and scraping profile page: ${url}${isTopPlayersSlug ? ' (Top Players database)' : ''}`);
                             
                             // Use the existing service to fetch profile (which uses API)
                             let profile;
                             if (platform === 'chess.com') {
                                 profile = await chessComService.getPlayerProfile(username);
+                                
+                                // If profile not found and this is a Top Players slug, still accept it
+                                // Top Players database entries may not have regular accounts but games might be accessible
+                                if (!profile && isTopPlayersSlug) {
+                                    console.log(`[Identity] Top Players slug "${username}" found but no regular account. Will attempt to fetch games using this identifier.`);
+                                    // Accept Top Players slugs even without profile - games might be accessible via API
+                                    verifiedUsernames.push(username);
+                                    continue;
+                                }
                             } else {
                                 profile = await lichessService.getPlayerProfile(username);
                             }
@@ -344,15 +412,93 @@ export const identityService = {
                     return verifiedUsernames;
                 };
 
-                // Extract URLs from reasoning and actually fetch/scrape the profile pages
-                // NO CANDIDATES - only extract usernames by actually visiting the websites
-                if (needsChessComDiscovery && candidates.reasoning) {
-                    chessComCandidates = await extractUsernamesByScraping(candidates.reasoning, 'chess.com');
-                    console.log(`[Identity] Chess.com usernames scraped from profile pages: [${chessComCandidates.join(', ')}]`);
+                // Extract usernames from both candidates array (which may contain URLs) and reasoning field
+                if (needsChessComDiscovery) {
+                    // Extract usernames from candidates array (may contain URLs like "https://www.chess.com/member/Ace0fD1amonds")
+                    if (candidates.chessComCandidates && Array.isArray(candidates.chessComCandidates)) {
+                        const extractedFromCandidates = candidates.chessComCandidates
+                            .map((item: string) => {
+                                // Extract username from URL if it's a URL
+                                const urlMatch = item.match(/chess\.com\/(?:pub\/player|member|player|players)\/([a-z0-9_-]+)/i);
+                                if (urlMatch) {
+                                    return urlMatch[1];
+                                }
+                                // If it's already a username (no http, no /), return as-is
+                                if (!item.includes('http') && !item.includes('/')) {
+                                    return item;
+                                }
+                                // Try to extract from partial URL
+                                const parts = item.split('/');
+                                const lastPart = parts[parts.length - 1];
+                                if (lastPart && !lastPart.includes('http') && lastPart.length > 0) {
+                                    return lastPart;
+                                }
+                                return null;
+                            })
+                            .filter((u: string | null): u is string => u !== null && u.length > 0);
+                        
+                        if (extractedFromCandidates.length > 0) {
+                            chessComCandidates = [...chessComCandidates, ...extractedFromCandidates];
+                            console.log(`[Identity] Chess.com usernames extracted from candidates array: [${extractedFromCandidates.join(', ')}]`);
+                        }
+                    }
+                    
+                    // Also extract from reasoning field (contains URLs in text)
+                    if (candidates.reasoning) {
+                        const extractedFromReasoning = await extractUsernamesByScraping(candidates.reasoning, 'chess.com');
+                        if (extractedFromReasoning.length > 0) {
+                            chessComCandidates = [...chessComCandidates, ...extractedFromReasoning];
+                            console.log(`[Identity] Chess.com usernames extracted from reasoning: [${extractedFromReasoning.join(', ')}]`);
+                        }
+                    }
+                    
+                    // Remove duplicates and empty strings
+                    chessComCandidates = Array.from(new Set(chessComCandidates.filter(u => u && u.length > 0)));
+                    console.log(`[Identity] Final Chess.com candidates: [${chessComCandidates.join(', ')}]`);
                 }
-                if (needsLichessDiscovery && candidates.reasoning) {
-                    lichessCandidates = await extractUsernamesByScraping(candidates.reasoning, 'lichess');
-                    console.log(`[Identity] Lichess usernames scraped from profile pages: [${lichessCandidates.join(', ')}]`);
+                
+                if (needsLichessDiscovery) {
+                    // Extract usernames from candidates array (may contain URLs)
+                    if (candidates.lichessCandidates && Array.isArray(candidates.lichessCandidates)) {
+                        const extractedFromCandidates = candidates.lichessCandidates
+                            .map((item: string) => {
+                                // Extract username from URL if it's a URL
+                                const urlMatch = item.match(/lichess\.org\/@\/([a-z0-9_-]+)/i);
+                                if (urlMatch) {
+                                    return urlMatch[1];
+                                }
+                                // If it's already a username (no http, no /), return as-is
+                                if (!item.includes('http') && !item.includes('/')) {
+                                    return item;
+                                }
+                                // Try to extract from partial URL
+                                const parts = item.split('/');
+                                const lastPart = parts[parts.length - 1];
+                                if (lastPart && !lastPart.includes('http') && lastPart.length > 0) {
+                                    return lastPart;
+                                }
+                                return null;
+                            })
+                            .filter((u: string | null): u is string => u !== null && u.length > 0);
+                        
+                        if (extractedFromCandidates.length > 0) {
+                            lichessCandidates = [...lichessCandidates, ...extractedFromCandidates];
+                            console.log(`[Identity] Lichess usernames extracted from candidates array: [${extractedFromCandidates.join(', ')}]`);
+                        }
+                    }
+                    
+                    // Also extract from reasoning field (contains URLs in text)
+                    if (candidates.reasoning) {
+                        const extractedFromReasoning = await extractUsernamesByScraping(candidates.reasoning, 'lichess');
+                        if (extractedFromReasoning.length > 0) {
+                            lichessCandidates = [...lichessCandidates, ...extractedFromReasoning];
+                            console.log(`[Identity] Lichess usernames extracted from reasoning: [${extractedFromReasoning.join(', ')}]`);
+                        }
+                    }
+                    
+                    // Remove duplicates and empty strings
+                    lichessCandidates = Array.from(new Set(lichessCandidates.filter(u => u && u.length > 0)));
+                    console.log(`[Identity] Final Lichess candidates: [${lichessCandidates.join(', ')}]`);
                 }
             } // Close if (needsChessComDiscovery || needsLichessDiscovery) block
             
@@ -489,7 +635,8 @@ export const identityService = {
 
                     // If AI discovered this username with high confidence, accept it even without perfect bio match
                     // This handles cases where the AI found the correct username but bio doesn't match perfectly
-                    const candidatesToCheck = aiCandidates || candidates;
+                    // Use aiCandidates if provided, otherwise fall back to empty object to avoid reference errors
+                    const candidatesToCheck = aiCandidates || { chessComCandidates: [], lichessCandidates: [], confidence: 0 };
                     if (candidatesToCheck.confidence && candidatesToCheck.confidence >= 0.7) {
                         const isAICandidate = candidatesToCheck.chessComCandidates?.includes(username) || candidatesToCheck.lichessCandidates?.includes(username);
                         if (isAICandidate) {

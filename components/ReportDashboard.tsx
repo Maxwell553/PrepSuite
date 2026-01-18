@@ -351,7 +351,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, onSave, isSav
                       </span>
                     </div>
                     <div className="font-mono text-sm text-slate-300 dark:text-slate-300 text-gray-700">
-                      {sequence.moves.join(', ')}
+                      {(sequence as any).notation || sequence.moves.join(' ')}
                     </div>
                   </div>
                 ))
@@ -378,7 +378,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, onSave, isSav
                       </span>
                     </div>
                     <div className="font-mono text-sm text-slate-300 dark:text-slate-300 text-gray-700">
-                      {sequence.moves.join(', ')}
+                      {(sequence as any).notation || sequence.moves.join(' ')}
                     </div>
                   </div>
                 ))

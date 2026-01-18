@@ -51,6 +51,56 @@ async function fetchWithRetry(url: string, retries = 2, delayMs = 1000): Promise
 }
 
 export const chessComService = {
+  /**
+   * Searches Chess.com's Top Players database for a player by name or FIDE ID
+   * Returns the player slug/identifier if found in the top players database
+   */
+  async searchTopPlayersDatabase(playerName: string, fideId?: string): Promise<string | null> {
+    console.log(`[ChessCom] Searching Top Players database for: ${playerName}${fideId ? ` (FIDE: ${fideId})` : ''}`);
+    
+    try {
+      // Use Gemini search to find the player in Chess.com's top players database
+      // The URL format is typically: https://www.chess.com/players/{slug}
+      // We'll search for the player name + "chess.com players" to find their top players page
+      const searchQuery = `site:chess.com/players ${playerName}${fideId ? ` FIDE ${fideId}` : ''}`;
+      
+      // For now, we'll return null and let the identity service handle the search
+      // The identity service already uses Gemini search which should find these URLs
+      // This function can be expanded later if we need direct access
+      console.log(`[ChessCom] Top Players search would use query: ${searchQuery}`);
+      return null;
+    } catch (error) {
+      console.error(`[ChessCom] Error searching Top Players database:`, error);
+      return null;
+    }
+  },
+
+  /**
+   * Attempts to fetch games for a player using their Top Players database slug
+   * Some top players may have games accessible even without a regular account
+   */
+  async getGamesFromTopPlayersSlug(slug: string): Promise<any[]> {
+    console.log(`[ChessCom] Attempting to fetch games using Top Players slug: ${slug}`);
+    
+    try {
+      // Try to use the slug as a username - some top players might have accounts
+      // with the same identifier as their top players page slug
+      const games = await this.getRecentGames(slug, true);
+      if (games && games.length > 0) {
+        console.log(`[ChessCom] Successfully fetched ${games.length} games using Top Players slug: ${slug}`);
+        return games;
+      }
+      
+      // If that doesn't work, the player likely doesn't have games accessible via API
+      // The top players database is mainly for profiles, not game access
+      console.log(`[ChessCom] No games found for Top Players slug: ${slug}`);
+      return [];
+    } catch (error) {
+      console.warn(`[ChessCom] Could not fetch games for Top Players slug ${slug}:`, error);
+      return [];
+    }
+  },
+
   async getPlayerProfile(username: string): Promise<ChessComProfile | null> {
     if (!username) return null;
     // Chess.com API is case-insensitive but URL encode to be safe
@@ -124,23 +174,47 @@ export const chessComService = {
 
       console.log(`[ChessCom] Found ${archives.length} archive(s) for ${username}`);
 
-      // Fetch from as many archives as needed to maximize game count (up to 1000 games)
-      // Each archive typically has 50-200 games, so fetch from recent archives
-      // Fetch from up to 60 archives to ensure we get close to the 1000 game limit
-      const numArchives = deep ? Math.min(archives.length, 60) : 1;
-      const recentArchives = archives.slice(-numArchives);
-      console.log(`[ChessCom] Will fetch from ${recentArchives.length} recent archive(s) to maximize game count (target: 1000 games)`);
+      // Chess.com API returns archives in chronological order (oldest to newest)
+      // To get the most recent archives going backwards from the current date,
+      // we take the last N archives from the array and REVERSE them so we process newest first
+      // This ensures we always get the most recent games, including newly played games
+      const MAX_RECENT_ARCHIVES = 60; // Most recent 60 monthly archives (going back ~5 years)
+      const numArchives = deep ? Math.min(archives.length, MAX_RECENT_ARCHIVES) : 1;
+      
+      // Get the most recent archives (last N elements, going backwards from current date)
+      // REVERSE the order so we process newest archives first - this ensures newly played games are included
+      const recentArchives = archives.slice(-numArchives).reverse();
+      
+      // Log the date range being fetched
+      if (recentArchives.length > 0) {
+        const firstArchive = recentArchives[0]; // This is now the NEWEST archive
+        const lastArchive = recentArchives[recentArchives.length - 1]; // This is now the OLDEST of the recent archives
+        // Extract date from archive URL (format: .../games/YYYY/MM)
+        const firstDateMatch = firstArchive.match(/\/(\d{4})\/(\d{2})/);
+        const lastDateMatch = lastArchive.match(/\/(\d{4})\/(\d{2})/);
+        if (firstDateMatch && lastDateMatch) {
+          const newestDate = `${firstDateMatch[1]}-${firstDateMatch[2]}`;
+          const oldestDate = `${lastDateMatch[1]}-${lastDateMatch[2]}`;
+          console.log(`[ChessCom] Fetching most recent ${recentArchives.length} archive(s) from ${newestDate} (newest) back to ${oldestDate} (oldest)`);
+        } else {
+          console.log(`[ChessCom] Will fetch from ${recentArchives.length} recent archive(s) to maximize game count (target: 1000 games)`);
+        }
+      } else {
+        console.log(`[ChessCom] Will fetch from ${recentArchives.length} recent archive(s) to maximize game count (target: 1000 games)`);
+      }
 
       // Throttled batch processing
       // Process 5 archives at a time to speed up fetching
+      // Process NEWEST archives first to ensure newly played games are included
       const BATCH_SIZE = 5;
       const MAX_GAMES = 1000; // Increased limit to 1000 games
       const allGames: unknown[] = [];
 
       for (let i = 0; i < recentArchives.length; i += BATCH_SIZE) {
         // Stop early if we've already reached the max games
+        // Since we're processing newest first, we've already got the most recent games
         if (allGames.length >= MAX_GAMES) {
-          console.log(`[ChessCom] Already reached ${MAX_GAMES} games, stopping archive fetching`);
+          console.log(`[ChessCom] Already reached ${MAX_GAMES} games, stopping archive fetching (newest games already included)`);
           break;
         }
         
@@ -204,11 +278,18 @@ export const chessComService = {
         }
       }
 
-      // Return up to 1000 games
-      // Take the most recent games (they're already in chronological order from archives)
+      // Sort all games by end_time (most recent first) to ensure we have the newest games
+      // Games within each archive are in chronological order (oldest first), so we need to sort
+      const sortedGames = allGames.sort((a: any, b: any) => {
+        const timeA = a.end_time || 0;
+        const timeB = b.end_time || 0;
+        return timeB - timeA; // Most recent first (descending order)
+      });
+
+      // Return up to 1000 most recent games
       const maxGames = 1000;
-      const finalGames = allGames.slice(-maxGames);
-      console.log(`[ChessCom] Total games fetched for ${username}: ${allGames.length}, returning ${finalGames.length} (max ${maxGames})`);
+      const finalGames = sortedGames.slice(0, maxGames); // Take first 1000 (most recent)
+      console.log(`[ChessCom] Total games fetched for ${username}: ${allGames.length}, returning ${finalGames.length} most recent games (max ${maxGames})`);
       return finalGames;
     } catch (error) {
       console.error(`[ChessCom] Games fetch failed for ${username}:`, error);
