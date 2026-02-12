@@ -6,8 +6,8 @@
 interface EnvConfig {
   supabaseUrl: string;
   supabaseAnonKey: string;
-  geminiApiKey: string;
   isProduction: boolean;
+  sentryDsn?: string;
 }
 
 class EnvValidationError extends Error {
@@ -24,7 +24,6 @@ class EnvValidationError extends Error {
 export function getEnvConfig(): EnvConfig {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || (process.env as any).GEMINI_API_KEY;
   const isProduction = import.meta.env.PROD;
 
   const missing: string[] = [];
@@ -35,10 +34,6 @@ export function getEnvConfig(): EnvConfig {
 
   if (!supabaseAnonKey || supabaseAnonKey === '') {
     missing.push('VITE_SUPABASE_ANON_KEY');
-  }
-
-  if (!geminiApiKey || geminiApiKey === '') {
-    missing.push('VITE_GEMINI_API_KEY or GEMINI_API_KEY');
   }
 
   if (missing.length > 0) {
@@ -54,25 +49,25 @@ export function getEnvConfig(): EnvConfig {
     }
   }
 
+  const sentryDsn = import.meta.env.VITE_SENTRY_DSN;
+
   return {
     supabaseUrl: supabaseUrl || 'https://placeholder.supabase.co',
     supabaseAnonKey: supabaseAnonKey || 'placeholder',
-    geminiApiKey: geminiApiKey || '',
-    isProduction
+    isProduction,
+    sentryDsn: sentryDsn || undefined,
   };
 }
 
 /**
- * Gets the Gemini API key with validation
+ * DEPRECATED: Gemini API key is now server-side only (via Supabase Edge Functions)
+ * This function is kept for backward compatibility but should not be used.
+ * All Gemini API calls should go through geminiService which uses edge functions.
  */
 export function getGeminiApiKey(): string {
-  const config = getEnvConfig();
-  if (!config.geminiApiKey || config.geminiApiKey === '') {
-    throw new EnvValidationError(
-      'Gemini API key is required. Please set VITE_GEMINI_API_KEY in your .env.local file.'
-    );
-  }
-  return config.geminiApiKey;
+  throw new EnvValidationError(
+    'Gemini API key is server-side only. Use geminiService instead, which calls Supabase Edge Functions.'
+  );
 }
 
 /**

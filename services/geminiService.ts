@@ -7,11 +7,11 @@ import { getEnvConfig } from '../lib/env';
  */
 export const geminiService = {
   /**
-   * Calls Gemini API for identity resolution (username discovery)
+   * Calls Gemini API WITHOUT Google Search (for FIDE/USCF ID lookup using Gemini's knowledge)
    */
-  async generateContentWithSearch(prompt: string): Promise<string> {
+  async generateContentWithoutSearch(prompt: string): Promise<string> {
     const config = getEnvConfig();
-    console.log('[Gemini] Calling gemini-identity function...');
+    console.log('[Gemini] Calling gemini-identity function (no Google Search)...');
     
     try {
       // Get session if available, but also pass anon key for unauthenticated requests
@@ -29,8 +29,12 @@ export const geminiService = {
         console.log('[Gemini] No session found, using anon key');
       }
       
+      // Disable Google Search for FIDE/USCF ID searches (use Gemini's knowledge only)
       const { data, error } = await supabase.functions.invoke('gemini-identity', {
-        body: { prompt },
+        body: { 
+          prompt,
+          useGoogleSearch: false // Disabled for FIDE/USCF searches - use Gemini's knowledge only
+        },
         headers
       });
 
@@ -42,25 +46,32 @@ export const geminiService = {
         console.error('[Gemini] ========== ERROR DETAILS ==========');
         console.error('[Gemini] Error object:', error);
         console.error('[Gemini] Error type:', error.constructor?.name);
+        console.error('[Gemini] Error name:', (error as any)?.name);
         console.error('[Gemini] Error message:', error.message);
         console.error('[Gemini] Error keys:', Object.keys(error));
+        console.error('[Gemini] Full error JSON:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
         
         const errorAny = error as any;
         console.error('[Gemini] error.status:', errorAny.status);
         console.error('[Gemini] error.statusCode:', errorAny.statusCode);
         console.error('[Gemini] error.context:', errorAny.context);
         console.error('[Gemini] error.response:', errorAny.response);
+        console.error('[Gemini] error.value:', errorAny.value);
+        console.error('[Gemini] error.message:', errorAny.message);
         
         let errorStatus = errorAny.status || errorAny.statusCode || 500;
         let errorMessage = error.message || 'Unknown error';
+        let errorData: any = null;
         
         // Try to extract error from response context
         if (errorAny.context) {
-          const errorData = errorAny.context.data || errorAny.context.body || errorAny.context;
+          errorData = errorAny.context.data || errorAny.context.body || errorAny.context;
           if (errorData && typeof errorData === 'object') {
             console.error('[Gemini] Error response:', JSON.stringify(errorData, null, 2));
             if (errorData.error) errorMessage = errorData.error;
             else if (errorData.message) errorMessage = errorData.message;
+            // Extract status code from error data if available
+            if (errorData.code && !errorStatus) errorStatus = errorData.code;
           }
           
           // Try to read response body if it's a Response object
@@ -69,26 +80,89 @@ export const geminiService = {
               const responseText = await errorAny.context.text();
               console.error('[Gemini] Response body:', responseText);
               const parsed = JSON.parse(responseText);
+              errorData = parsed;
               if (parsed.error) errorMessage = parsed.error;
               else if (parsed.message) errorMessage = parsed.message;
+              // Extract status code from parsed response (prioritize this)
+              if (parsed.code) errorStatus = parsed.code;
             } catch (e) {
-              // Ignore parsing errors
+              console.error('[Gemini] Failed to parse response body:', e);
             }
           }
         }
         
-        console.error('[Gemini] ======================================');
+        // Also check error.value (Supabase FunctionsHttpError structure)
+        if (errorAny.value) {
+          console.error('[Gemini] error.value:', errorAny.value);
+          if (typeof errorAny.value === 'string') {
+            try {
+              const parsed = JSON.parse(errorAny.value);
+              errorData = parsed;
+              if (parsed.error) errorMessage = parsed.error;
+              else if (parsed.message) errorMessage = parsed.message;
+              // Extract status code from parsed value
+              if (parsed.code && !errorStatus) errorStatus = parsed.code;
+            } catch (e) {
+              // Not JSON, use as-is
+              errorMessage = errorAny.value;
+            }
+          } else if (typeof errorAny.value === 'object') {
+            errorData = errorAny.value;
+            if (errorAny.value.error) errorMessage = errorAny.value.error;
+            else if (errorAny.value.message) errorMessage = errorAny.value.message;
+            // Extract status code from error value
+            if (errorAny.value.code && !errorStatus) errorStatus = errorAny.value.code;
+          }
+        }
         
-        // Handle 401 specifically
+        // Final attempt: parse error message to extract code if it contains JSON
+        // This handles cases where the error details are embedded in the message string
+        if (errorMessage.includes('{')) {
+          try {
+            const jsonMatch = errorMessage.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              // Always update errorStatus if we find a code in the parsed JSON
+              if (parsed.code) {
+                errorStatus = parsed.code;
+                console.log('[Gemini] Extracted error code from message:', parsed.code);
+              }
+              if (parsed.error && !errorMessage.includes(parsed.error)) {
+                errorMessage = parsed.error;
+              }
+              // Merge with existing errorData
+              errorData = { ...errorData, ...parsed };
+            }
+          } catch (e) {
+            // Ignore parse errors
+            console.warn('[Gemini] Failed to parse JSON from error message:', e);
+          }
+        }
+        
+        console.error('[Gemini] ======================================');
+        console.error('[Gemini] Final errorStatus:', errorStatus);
+        console.error('[Gemini] Final errorMessage:', errorMessage);
+        
+        // Handle 401 specifically (often "Invalid JWT" = expired token)
         if (errorStatus === 401) {
-          throw new Error(`Authentication failed (401). Please check your Supabase configuration. Error: ${errorMessage}`);
+          const authMsg = errorMessage?.toLowerCase().includes('jwt') || errorMessage?.toLowerCase().includes('invalid')
+            ? 'Your session may have expired. Please log out and log in again.'
+            : `Authentication failed (401). ${errorMessage}`;
+          throw new Error(authMsg);
+        }
+        
+        // Handle FunctionsFetchError (network/connection issues)
+        if (errorAny.name === 'FunctionsFetchError' || errorMessage.includes('Failed to send a request')) {
+          throw new Error(`Failed to reach Edge Function. The function may not be deployed or there's a network issue. Error: ${errorMessage}`);
         }
         
         if (!errorStatus || errorStatus === 0) {
-          throw new Error(`Failed to reach Edge Function. Error: ${errorMessage}`);
+          throw new Error(`Failed to reach Edge Function. Error: ${errorMessage}. Check if the function is deployed: supabase functions deploy gemini-identity`);
         }
         
-        throw new Error(`Gemini API error (${errorStatus}): ${errorMessage}`);
+        // Include error data in message if available
+        const errorDetails = errorData ? ` Details: ${JSON.stringify(errorData)}` : '';
+        throw new Error(`Gemini API error (${errorStatus}): ${errorMessage}${errorDetails}`);
       }
 
       // Check if the response itself indicates an error
@@ -129,6 +203,300 @@ export const geminiService = {
   },
 
   /**
+   * Calls Gemini API WITH Google Search (for username discovery on chess.com/lichess)
+   */
+  async generateContentWithSearch(prompt: string): Promise<string> {
+    const config = getEnvConfig();
+    console.log('[Gemini] Calling gemini-identity function...');
+    
+    try {
+      // Get session if available, but also pass anon key for unauthenticated requests
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // Build headers - use session token if available, otherwise use anon key
+      const headers: Record<string, string> = {
+        'apikey': config.supabaseAnonKey
+      };
+      
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+        console.log('[Gemini] Using authenticated session');
+      } else {
+        console.log('[Gemini] No session found, using anon key');
+      }
+      
+      // Enable Google Search for identity resolution (needed for finding player IDs/usernames)
+      // Using optimized prompts to ensure fast searches
+      const { data, error } = await supabase.functions.invoke('gemini-identity', {
+        body: { 
+          prompt,
+          useGoogleSearch: true // Enabled for identity resolution
+        },
+        headers
+      });
+
+      console.log('[Gemini] Function response data:', data);
+      console.log('[Gemini] Function response error:', error);
+
+      if (error) {
+        // Enhanced error extraction (same as report function)
+        console.error('[Gemini] ========== ERROR DETAILS ==========');
+        console.error('[Gemini] Error object:', error);
+        console.error('[Gemini] Error type:', error.constructor?.name);
+        console.error('[Gemini] Error name:', (error as any)?.name);
+        console.error('[Gemini] Error message:', error.message);
+        console.error('[Gemini] Error keys:', Object.keys(error));
+        console.error('[Gemini] Full error JSON:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+        
+        const errorAny = error as any;
+        console.error('[Gemini] error.status:', errorAny.status);
+        console.error('[Gemini] error.statusCode:', errorAny.statusCode);
+        console.error('[Gemini] error.context:', errorAny.context);
+        console.error('[Gemini] error.response:', errorAny.response);
+        console.error('[Gemini] error.value:', errorAny.value);
+        console.error('[Gemini] error.message:', errorAny.message);
+        
+        let errorStatus = errorAny.status || errorAny.statusCode || 500;
+        let errorMessage = error.message || 'Unknown error';
+        let errorData: any = null;
+        
+        // Try to extract error from response context
+        if (errorAny.context) {
+          errorData = errorAny.context.data || errorAny.context.body || errorAny.context;
+          if (errorData && typeof errorData === 'object') {
+            console.error('[Gemini] Error response:', JSON.stringify(errorData, null, 2));
+            if (errorData.error) errorMessage = errorData.error;
+            else if (errorData.message) errorMessage = errorData.message;
+            // Extract status code from error data if available
+            if (errorData.code && !errorStatus) errorStatus = errorData.code;
+          }
+          
+          // Try to read response body if it's a Response object
+          if (errorAny.context instanceof Response) {
+            try {
+              const responseText = await errorAny.context.text();
+              console.error('[Gemini] Response body:', responseText);
+              const parsed = JSON.parse(responseText);
+              errorData = parsed;
+              if (parsed.error) errorMessage = parsed.error;
+              else if (parsed.message) errorMessage = parsed.message;
+              // Extract status code from parsed response (prioritize this)
+              if (parsed.code) errorStatus = parsed.code;
+            } catch (e) {
+              console.error('[Gemini] Failed to parse response body:', e);
+            }
+          }
+        }
+        
+        // Also check error.value (Supabase FunctionsHttpError structure)
+        if (errorAny.value) {
+          console.error('[Gemini] error.value:', errorAny.value);
+          if (typeof errorAny.value === 'string') {
+            try {
+              const parsed = JSON.parse(errorAny.value);
+              errorData = parsed;
+              if (parsed.error) errorMessage = parsed.error;
+              else if (parsed.message) errorMessage = parsed.message;
+              // Extract status code from parsed value
+              if (parsed.code && !errorStatus) errorStatus = parsed.code;
+            } catch (e) {
+              // Not JSON, use as-is
+              errorMessage = errorAny.value;
+            }
+          } else if (typeof errorAny.value === 'object') {
+            errorData = errorAny.value;
+            if (errorAny.value.error) errorMessage = errorAny.value.error;
+            else if (errorAny.value.message) errorMessage = errorAny.value.message;
+            // Extract status code from error value
+            if (errorAny.value.code && !errorStatus) errorStatus = errorAny.value.code;
+          }
+        }
+        
+        // Final attempt: parse error message to extract code if it contains JSON
+        // This handles cases where the error details are embedded in the message string
+        if (errorMessage.includes('{')) {
+          try {
+            const jsonMatch = errorMessage.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              // Always update errorStatus if we find a code in the parsed JSON
+              if (parsed.code) {
+                errorStatus = parsed.code;
+                console.log('[Gemini] Extracted error code from message:', parsed.code);
+              }
+              if (parsed.error && !errorMessage.includes(parsed.error)) {
+                errorMessage = parsed.error;
+              }
+              // Merge with existing errorData
+              errorData = { ...errorData, ...parsed };
+            }
+          } catch (e) {
+            // Ignore parse errors
+            console.warn('[Gemini] Failed to parse JSON from error message:', e);
+          }
+        }
+        
+        console.error('[Gemini] ======================================');
+        console.error('[Gemini] Final errorStatus:', errorStatus);
+        console.error('[Gemini] Final errorMessage:', errorMessage);
+        
+        // Handle timeout (504) and bad gateway (502) errors with retry
+        // 502 can occur when the edge function times out at infrastructure level
+        // Also check error message for timeout indicators
+        const isTimeoutError = errorStatus === 504 || 
+                               errorMessage.includes('timeout') || 
+                               errorMessage.includes('504') ||
+                               (errorData && errorData.code === 504);
+        const isBadGateway = errorStatus === 502 || 
+                             errorMessage.includes('502') ||
+                             (errorData && errorData.code === 502);
+        
+        if (isTimeoutError || isBadGateway) {
+          console.log(`[Gemini] ${isTimeoutError ? 'Timeout' : 'Bad Gateway'} detected (status: ${errorStatus}), will retry without Google Search...`);
+          
+          // Retry with exponential backoff (up to 2 retries)
+          for (let retryAttempt = 0; retryAttempt < 2; retryAttempt++) {
+            try {
+              const backoffMs = 2000 * Math.pow(2, retryAttempt); // 2s, 4s
+              const jitter = Math.random() * 1000; // 0-1s jitter
+              console.log(`[Gemini] Retry attempt ${retryAttempt + 1}/2 after ${Math.round((backoffMs + jitter) / 1000)}s...`);
+              await new Promise(resolve => setTimeout(resolve, backoffMs + jitter));
+              
+              const { data: retryData, error: retryError } = await supabase.functions.invoke('gemini-identity', {
+                body: { 
+                  prompt,
+                  useGoogleSearch: false // Always retry without Google Search to avoid timeouts
+                },
+                headers
+              });
+              
+              if (retryError) {
+                console.error(`[Gemini] Retry attempt ${retryAttempt + 1} failed:`, retryError);
+                if (retryAttempt === 1) {
+                  // Last retry failed
+                  throw new Error(`${isTimeoutError ? 'Timeout' : 'Bad Gateway'} occurred (${errorStatus}). All retries exhausted. This may be a temporary issue - please try again in a moment.`);
+                }
+                continue; // Try next retry
+              }
+              
+              if (retryData && retryData.text) {
+                console.log(`[Gemini] Retry attempt ${retryAttempt + 1} succeeded`);
+                return retryData.text;
+              } else {
+                console.warn(`[Gemini] Retry attempt ${retryAttempt + 1} returned empty data`);
+                if (retryAttempt === 1) {
+                  // Return empty string on last retry so caller can handle gracefully
+                  return '';
+                }
+                continue; // Try next retry
+              }
+            } catch (retryErr: any) {
+              console.error(`[Gemini] Retry attempt ${retryAttempt + 1} exception:`, retryErr);
+              if (retryAttempt === 1) {
+                // Last retry failed
+                throw new Error(`${isTimeoutError ? 'Timeout' : 'Bad Gateway'} occurred (${errorStatus}). All retries exhausted. Error: ${retryErr.message || 'Unknown error'}`);
+              }
+              continue; // Try next retry
+            }
+          }
+        }
+        
+        // Handle 401 specifically (often "Invalid JWT" = expired token)
+        if (errorStatus === 401) {
+          const authMsg = errorMessage?.toLowerCase().includes('jwt') || errorMessage?.toLowerCase().includes('invalid')
+            ? 'Your session may have expired. Please log out and log in again.'
+            : `Authentication failed (401). ${errorMessage}`;
+          throw new Error(authMsg);
+        }
+        
+        // Handle FunctionsFetchError (network/connection issues)
+        if (errorAny.name === 'FunctionsFetchError' || errorMessage.includes('Failed to send a request')) {
+          throw new Error(`Failed to reach Edge Function. The function may not be deployed or there's a network issue. Error: ${errorMessage}`);
+        }
+        
+        if (!errorStatus || errorStatus === 0) {
+          throw new Error(`Failed to reach Edge Function. Error: ${errorMessage}. Check if the function is deployed: supabase functions deploy gemini-identity`);
+        }
+        
+        // Include error data in message if available
+        const errorDetails = errorData ? ` Details: ${JSON.stringify(errorData)}` : '';
+        throw new Error(`Gemini API error (${errorStatus}): ${errorMessage}${errorDetails}`);
+      }
+
+      // Check if the response itself indicates an error
+      if (data && data.error) {
+        console.error('[Gemini] Edge Function returned error:', data.error);
+        throw new Error(`Edge Function error: ${data.error}`);
+      }
+
+      if (!data || !data.text) {
+        console.error('[Gemini] Empty or invalid response:', data);
+        throw new Error('Empty response from Gemini API');
+      }
+
+      return data.text;
+    } catch (err: any) {
+      console.error('[Gemini] ========== EXCEPTION CAUGHT ==========');
+      console.error('[Gemini] Exception type:', err?.constructor?.name);
+      console.error('[Gemini] Exception message:', err?.message);
+      console.error('[Gemini] Exception stack:', err?.stack);
+      console.error('[Gemini] Full exception:', err);
+      
+      if (err && typeof err === 'object') {
+        const errAny = err as any;
+        console.error('[Gemini] err.status:', errAny.status);
+        console.error('[Gemini] err.context:', errAny.context);
+        if (errAny.context) {
+          const errorData = errAny.context.data || errAny.context.body || errAny.context;
+          console.error('[Gemini] Error data from context:', JSON.stringify(errorData, null, 2));
+        }
+      }
+      console.error('[Gemini] ======================================');
+      
+      if (err.message) {
+        throw err;
+      }
+      throw new Error(`Failed to call Gemini API: ${err.toString()}`);
+    }
+  },
+
+  /**
+   * Calls Gemini API for long-form chat (repertoire Q&A). Plain text only, no JSON, high token limit.
+   */
+  async generateChatResponse(prompt: string): Promise<string> {
+    const config = getEnvConfig();
+    console.log('[Gemini] Calling gemini-chat function...');
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = { 'apikey': config.supabaseAnonKey };
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
+    const { data, error } = await supabase.functions.invoke('gemini-chat', {
+      body: { prompt },
+      headers,
+    });
+
+    if (error) {
+      const errAny = error as any;
+      const status = errAny?.status ?? errAny?.statusCode ?? 500;
+      const message = errAny?.message ?? error.message ?? 'Unknown error';
+      throw new Error(`Gemini chat error (${status}): ${message}`);
+    }
+
+    if (data?.error) {
+      throw new Error(typeof data.error === 'string' ? data.error : data.error?.message ?? 'Chat error');
+    }
+
+    if (!data?.text) {
+      throw new Error('Empty response from Gemini chat');
+    }
+
+    return data.text;
+  },
+
+  /**
    * Calls Gemini API for report generation with JSON schema
    */
   async generateContentWithSchema(
@@ -139,8 +507,8 @@ export const geminiService = {
     console.log('[Gemini] Calling gemini-report function...');
     
     // Retry logic for handling intermittent failures
-    // Reduced retries and increased backoff to avoid rate limits
-    const maxRetries = 1; // Reduced from 2 to minimize rate limit issues
+    // Increased retries for 503 errors (model overloaded)
+    const maxRetries = 2; // Allow 2 retries for 503 errors (model overloaded)
     let lastError: Error | null = null;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -153,8 +521,7 @@ export const geminiService = {
           await new Promise(resolve => setTimeout(resolve, backoffMs + jitter));
         }
         
-        // Get session to ensure it's available and manually pass Authorization header
-        // This ensures the token is sent even if automatic injection fails
+        // Get session and refresh if needed (tokens expire after ~1 hour; 401 Invalid JWT often means expired)
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError || !session) {
@@ -162,14 +529,19 @@ export const geminiService = {
           throw new Error('Authentication required. Please log in and try again.');
         }
 
-        console.log('[Gemini] Session available, access token length:', session.access_token?.length || 0);
+        // Refresh session to get a fresh token (avoids 401 Invalid JWT from expired tokens)
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+        const tokenToUse = refreshedSession?.access_token ?? session.access_token;
+        if (refreshError) {
+          console.warn('[Gemini] Session refresh failed (using existing token):', refreshError.message);
+        }
+
+        console.log('[Gemini] Session available, access token length:', tokenToUse?.length || 0);
         
-        // Manually pass Authorization header - Supabase client should do this automatically,
-        // but explicit passing ensures it's sent correctly
         const result = await supabase.functions.invoke('gemini-report', {
           body: { prompt, responseSchema },
           headers: {
-            'Authorization': `Bearer ${session.access_token}`,
+            'Authorization': `Bearer ${tokenToUse}`,
             'apikey': config.supabaseAnonKey
           }
         });
@@ -290,9 +662,13 @@ export const geminiService = {
         console.error('[Gemini] Full error JSON:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
         console.error('[Gemini] ======================================');
         
-          // Check if this is a retryable error (500, incomplete JSON, etc.)
+          // Check if this is a retryable error (500, 503, incomplete JSON, etc.)
+          // 503 = Service Unavailable / Model Overloaded - retry with backoff
           // Do NOT retry on 429 (rate limit) - wait longer or fail gracefully
           const isRetryable = (errorStatus === 500 || 
+                             errorStatus === 503 ||
+                             errorMessage.includes('overloaded') ||
+                             errorMessage.includes('unavailable') ||
                              errorMessage.includes('incomplete') || 
                              errorMessage.includes('truncated') ||
                              errorMessage.includes('valid JSON')) &&
@@ -302,6 +678,22 @@ export const geminiService = {
           if (errorStatus === 429) {
             console.error('[Gemini] Rate limit hit (429). Please wait before retrying.');
             throw new Error('Rate limit exceeded. Please wait a few moments and try again. If this persists, check your Google AI Studio quota.');
+          }
+          
+          // If 503 (overloaded), use longer backoff
+          if (errorStatus === 503 || errorMessage.includes('overloaded')) {
+            console.warn(`[Gemini] Model overloaded (503) detected, will retry with longer backoff...`);
+            if (attempt < maxRetries) {
+              // Longer backoff for 503: 5s, 10s, 20s
+              const backoffMs = 5000 * Math.pow(2, attempt);
+              const jitter = Math.random() * 2000; // 0-2s jitter
+              console.log(`[Gemini] Waiting ${Math.round((backoffMs + jitter) / 1000)}s before retry...`);
+              await new Promise(resolve => setTimeout(resolve, backoffMs + jitter));
+              lastError = new Error(errorMessage);
+              continue; // Retry the request
+            } else {
+              throw new Error(`Model is overloaded (503). Please try again in a few moments. This is usually temporary.`);
+            }
           }
           
           // If retryable and we have retries left, continue to retry

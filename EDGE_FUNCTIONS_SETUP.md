@@ -37,7 +37,7 @@ supabase secrets set GEMINI_API_KEY=your-gemini-api-key-here
 
 ### 4. Deploy the Edge Functions
 
-Deploy both functions:
+Deploy all functions:
 
 ```bash
 # Deploy identity resolution function
@@ -45,6 +45,9 @@ supabase functions deploy gemini-identity
 
 # Deploy report generation function
 supabase functions deploy gemini-report
+
+# Deploy user deletion function
+supabase functions deploy delete-user
 ```
 
 ### 5. Verify Deployment
@@ -71,11 +74,27 @@ supabase functions list
 - **Output**: `{ data: ScoutingReport }`
 - **Features**: Uses JSON schema for structured responses
 
+### `delete-user`
+- **Purpose**: Handles user account deletion and data cleanup
+- **Endpoint**: `/functions/v1/delete-user`
+- **Input**: None (uses Authorization header for authentication)
+- **Output**: `{ success: boolean, message: string }`
+- **Features**: 
+  - Requires authenticated user (JWT token)
+  - Deletes all user's scouting reports
+  - Permanently deletes user account from auth.users
+  - Uses Supabase Admin API for account deletion
+
 ## Environment Variables
 
 The Edge Functions use Supabase secrets for sensitive data:
 
 - `GEMINI_API_KEY`: Your Google Gemini API key (set via `supabase secrets set`)
+
+**Note**: The `delete-user` function uses Supabase's automatically available environment variables:
+- `SUPABASE_URL`: Automatically provided by Supabase
+- `SUPABASE_SERVICE_ROLE_KEY`: Automatically provided by Supabase (for admin operations)
+- `SUPABASE_ANON_KEY`: Automatically provided by Supabase
 
 ## Testing Locally
 

@@ -37,8 +37,20 @@ class ErrorBoundary extends Component<Props, State> {
       errorInfo
     });
 
-    // In production, you would send this to an error tracking service
-    // Example: Sentry.captureException(error, { contexts: { react: errorInfo } });
+    // Send to Sentry error tracking
+    if (typeof window !== 'undefined') {
+      import('@sentry/react').then((Sentry) => {
+        Sentry.captureException(error, {
+          contexts: {
+            react: {
+              componentStack: errorInfo.componentStack,
+            },
+          },
+        });
+      }).catch(() => {
+        // Sentry not available, continue silently
+      });
+    }
   }
 
   handleReset = () => {

@@ -292,7 +292,7 @@ export class StockfishAnalyzer {
      * Analyzes a single game for critical mistakes and patterns
      * Optimized to analyze key positions only (not every move)
      */
-    async analyzeGame(game: GameData, targetUsername: string): Promise<GameAnalysis> {
+    async analyzeGame(game: GameData, targetUsername: string, depth: number = 10): Promise<GameAnalysis> {
         if (!game.pgn || game.pgn.trim().length === 0) {
             return {
                 gameId: game.id,
@@ -341,15 +341,15 @@ export class StockfishAnalyzer {
                     const moveSequence = movesToPosition.join(' ');
                     
                     // Evaluate position directly using Stockfish's position command
-                    // Reduced depth from 10 to 6 for faster analysis and smaller response size
-                    const evalResult = await this.evaluatePositionFromMoves(moveSequence, 6);
+                    // Use configurable depth for analysis
+                    const evalResult = await this.evaluatePositionFromMoves(moveSequence, depth);
                     const currentEval = isTargetWhite ? evalResult.evaluation : -evalResult.evaluation;
                     evaluations.push(currentEval);
 
                     // Check if this was the target player's move and if it was a mistake
                     if (moveIndex > 0) {
                         const prevMoves = moves.slice(0, moveIndex - 1).join(' ');
-                        const prevEval = await this.evaluatePositionFromMoves(prevMoves, 6);
+                        const prevEval = await this.evaluatePositionFromMoves(prevMoves, depth);
                         const evalSwing = Math.abs(evalResult.evaluation - prevEval.evaluation);
                         const isTargetMove = ((moveIndex - 1) % 2 === 0) === isTargetWhite;
                         
@@ -449,7 +449,8 @@ export class StockfishAnalyzer {
         games: GameData[], 
         targetUsername: string, 
         maxGames?: number,
-        progressCallback?: (current: number, total: number) => void
+        progressCallback?: (current: number, total: number) => void,
+        depth: number = 10
     ): Promise<GameAnalysis[]> {
         // If maxGames is specified and less than total, use it; otherwise analyze ALL games
         const gamesToAnalyze = maxGames && maxGames < games.length 
@@ -473,7 +474,7 @@ export class StockfishAnalyzer {
             }
             
             try {
-                const analysis = await this.analyzeGame(gamesToAnalyze[i], targetUsername);
+                const analysis = await this.analyzeGame(gamesToAnalyze[i], targetUsername, depth);
                 results.push(analysis);
             } catch (gameError) {
                 console.warn(`[Stockfish] Failed to analyze game ${i + 1}:`, gameError);

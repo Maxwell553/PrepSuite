@@ -1,10 +1,8 @@
-
-import { GoogleGenAI } from "@google/genai";
+import { capitalizeName } from '../lib/validation';
 import { fideService, FideProfile } from './fide';
 import { uscfService, UscfProfile } from './uscf';
 import { chessComService } from './chessCom';
 import { lichessService } from './lichess';
-import { getGeminiApiKey } from '../lib/env';
 import { geminiService } from './geminiService';
 
 export interface ResolvedIdentity {
@@ -29,11 +27,102 @@ export const identityService = {
         let uscfProfile: UscfProfile | null = null;
 
         try {
-            // 1. Fetch provided IDs
-            [fideProfile, uscfProfile] = await Promise.all([
-                fideId ? fideService.getProfile(fideId) : Promise.resolve(null),
-                uscfId ? uscfService.getProfile(uscfId) : Promise.resolve(null)
+            // 0. Search for FIDE/USCF IDs if not provided
+            let finalFideId = fideId;
+            let finalUscfId = uscfId;
+            
+            if (!fideId && !uscfId && inputName.trim()) {
+                console.log('[Identity] Searching for FIDE/USCF IDs via optimized Google Search...');
+                try {
+                    // Optimized prompt: Explicit instructions for targeted search with site-specific queries
+                    const searchPrompt = `You have to find the USCF and FIDE IDs of this player: "${inputName}". Search the web using ONLY these site-specific queries:
+- site:ratings.fide.com "${inputName}"
+- site:ratings.uschess.org "${inputName}"
+
+Find the FIDE/USCF IDs and use the age and rating of the player to cross reference and verify it's the correct player. Return ONLY raw JSON with no markdown or code blocks: {"fideId":number or null,"uscfId":number or null}`;
+
+                    const response = await geminiService.generateContentWithSearch(searchPrompt);
+                    
+                    // Extract JSON: strip markdown code blocks (```json ... ```)
+                    let jsonStr = response
+                        .replace(/^```(?:json)?\s*/i, '')
+                        .replace(/\s*```\s*$/i, '')
+                        .trim();
+                    const startIdx = jsonStr.indexOf('{');
+                    if (startIdx >= 0) jsonStr = jsonStr.slice(startIdx);
+                    // Repair truncated JSON: close incomplete strings/arrays/objects
+                    if (!/}\s*$/.test(jsonStr)) {
+                        if (/"uscf"?\s*$/.test(jsonStr)) {
+                            jsonStr = jsonStr.replace(/"uscf"?\s*$/, '"uscfId":null}');
+                        } else {
+                            // Close truncated string in array: "Laurel-A -> "Laurel-A"], then }
+                            let inString = false;
+                            let openBraces = 0, openBrackets = 0;
+                            for (let i = 0; i < jsonStr.length; i++) {
+                                const c = jsonStr[i];
+                                if (c === '"' && jsonStr[i - 1] !== '\\') inString = !inString;
+                                if (!inString) {
+                                    if (c === '{') openBraces++;
+                                    if (c === '}') openBraces--;
+                                    if (c === '[') openBrackets++;
+                                    if (c === ']') openBrackets--;
+                                }
+                            }
+                            if (inString) jsonStr += '"';
+                            jsonStr += ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
+                        }
+                    }
+
+                    try {
+                        const parsed = JSON.parse(jsonStr);
+                        if (parsed.fideId) {
+                            // Convert to string in case it's a number
+                            finalFideId = String(parsed.fideId);
+                            console.log('[Identity] Found FIDE ID via search:', finalFideId);
+                        }
+                        if (parsed.uscfId) {
+                            // Convert to string in case it's a number
+                            finalUscfId = String(parsed.uscfId);
+                            console.log('[Identity] Found USCF ID via search:', finalUscfId);
+                        }
+                    } catch (parseErr) {
+                        console.warn('[Identity] Failed to parse FIDE/USCF search results:', parseErr);
+                    }
+                } catch (err) {
+                    console.warn('[Identity] Error searching for FIDE/USCF IDs:', err);
+                }
+            }
+
+            // 1. Fetch provided IDs (or discovered IDs)
+            let [fideProfileFetched, uscfProfileFetched] = await Promise.all([
+                finalFideId ? fideService.getProfile(finalFideId) : Promise.resolve(null),
+                finalUscfId ? uscfService.getProfile(finalUscfId) : Promise.resolve(null)
             ]);
+
+            // Validate that profile names match the search - reject if not similar (avoids wrong player from AI search)
+            const namesMatch = (searchName: string, profileName: string): boolean => {
+                if (!searchName?.trim() || !profileName?.trim()) return false;
+                const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+                const searchParts = normalize(searchName).split(' ').filter(p => p.length > 0);
+                const profileParts = normalize(profileName).replace(/,/g, ' ').split(' ').filter(p => p.length > 0);
+                if (searchParts.length === 0 || profileParts.length === 0) return false;
+                const matchingParts = searchParts.filter(sp => profileParts.some(pp => pp.includes(sp) || sp.includes(pp)));
+                return matchingParts.length >= Math.min(2, searchParts.length) || (searchParts.length === 1 && profileParts.some(pp => pp.includes(searchParts[0]) || searchParts[0].includes(pp)));
+            };
+
+            if (fideProfileFetched && !namesMatch(inputName, fideProfileFetched.name)) {
+                console.warn(`[Identity] FIDE profile "${fideProfileFetched.name}" does not match search "${inputName}" - rejecting`);
+                fideProfileFetched = null;
+                finalFideId = '';
+            }
+            if (uscfProfileFetched && !namesMatch(inputName, uscfProfileFetched.name)) {
+                console.warn(`[Identity] USCF profile "${uscfProfileFetched.name}" does not match search "${inputName}" - rejecting`);
+                uscfProfileFetched = null;
+                finalUscfId = '';
+            }
+
+            fideProfile = fideProfileFetched;
+            uscfProfile = uscfProfileFetched;
 
             console.log('[Identity] Initial Validation Results:', {
                 fide: fideProfile ? 'FOUND: ' + fideProfile.name : 'NOT PROVIDED/FOUND',
@@ -55,8 +144,21 @@ export const identityService = {
                 // We'll rely on AI discovery for this as well
             }
 
-            // Determine official name from available sources
-            officialName = fideProfile?.name || uscfProfile?.name || inputName;
+            // Default to user-entered name; only override with FIDE/USCF name if valid (not a site title/bogus)
+            const bogusNames = [
+                'Chess Players Arbiters Trainers Database',
+                'FIDE Profile',
+                'US Chess',
+                'Player Search',
+                'Ratings'
+            ];
+            const isBogusName = (s: string) => bogusNames.some(b => s.includes(b)) || s.length > 60;
+            officialName = inputName.trim();
+            if (fideProfile?.name?.trim() && !isBogusName(fideProfile.name.trim())) {
+                officialName = fideProfile.name.trim();
+            } else if (uscfProfile?.name?.trim() && !isBogusName(uscfProfile.name.trim())) {
+                officialName = uscfProfile.name.trim();
+            }
             console.log('[Identity] Official Name resolved to:', officialName);
 
             // 3. Handle Platform Usernames - Prioritize User-Provided
@@ -113,85 +215,47 @@ export const identityService = {
 
                 // Use Gemini API via Edge Function (secure server-side call)
                 try {
-                    const prompt = `You are an elite chess investigator with access to Google Search. Your task is to FIND actual usernames by searching the web, NOT to generate or guess them.
-          
-          Target Player:
-          Name: "${officialName}"
-          FIDE Rating: ${fideProfile?.rating || 'N/A'} (ID: ${fideId || 'N/A'})
-          USCF Rating: ${uscfProfile?.rating || 'N/A'} (ID: ${uscfId || 'N/A'})
-          Birth Year: ${fideProfile?.birthYear || 'N/A'}
-          Federation: ${fideProfile?.federation || 'N/A'}
-          Titles: ${fideProfile?.title || 'N/A'}
+                    // Must use Google Search - do NOT guess usernames from the player name
+                    const prompt = `Search for this chess player's Chess.com and Lichess accounts: "${officialName}"${fideProfile ? ` (FIDE ID: ${fideProfile.id})` : ''}${uscfProfile ? ` (USCF ID: ${uscfProfile.id})` : ''}.
 
-          CRITICAL INSTRUCTIONS:
-          1. You MUST perform actual Google searches. Do NOT generate usernames based on name patterns.
-          2. Find actual profile URLs in search results:
-             - Look for URLs like: chess.com/pub/player/[USERNAME] or chess.com/member/[USERNAME]
-             - Look for URLs like: lichess.org/@/[USERNAME]
-             - Look for Chess.com Top Players page URLs
-          3. DO NOT create usernames - only report URLs you actually see in search results
-          4. We will scrape these URLs to extract and verify the usernames - you just need to find the URLs
+CHESS.COM: Use Google Search with site:chess.com/members. Simulate searching chess.com/members by the player name - input the name into the search, find the player in question, then select the most fitting match (correct name, rating, country). Extract the username from the profile URL (chess.com/member/USERNAME or chess.com/player/USERNAME). Also search site:chess.com for additional profile URLs.
 
-          Search Queries (perform each search and examine results):
-          Perform these Google searches one by one and extract usernames from the actual results:
-          1. "lichess of ${officialName}"
-          2. "chess.com of ${officialName}"
-          3. "${officialName} Chess.com account"
-          4. "${officialName} Lichess account"
-          5. "${officialName} games on Chess.com"
-          6. "${officialName} games on Lichess"
-          7. "${officialName} Chess.com username"
-          8. "${officialName} Lichess username"
-          9. "${officialName} ${fideProfile?.title || ''} Chess.com"
-          10. "${officialName} ${fideProfile?.title || ''} Lichess"
-          11. "${officialName} FIDE ID ${fideId || ''} Chess.com"
-          12. "${officialName} ${fideProfile?.federation || ''} chess player"
-          13. "Chess.com ${officialName}"
-          14. "Lichess ${officialName}"
-          15. "site:chess.com ${officialName}"
-          16. "site:lichess.org ${officialName}"
+LICHESS: Use Google Search with site:lichess.org to find the player's profile. Extract the username from lichess.org/@/USERNAME URLs.
 
-          For each search result:
-          - Look for profile URLs: "chess.com/pub/player/[USERNAME]", "chess.com/member/[USERNAME]", or "lichess.org/@/[USERNAME]"
-          - Copy the EXACT URL you see in search results
-          - Include the full URL in your reasoning
+Do NOT guess or infer usernames from the name - only return usernames you found in actual search results.
+When multiple Chess.com candidates exist, pick the single best match (correct name, rating, country).
+Return JSON: {"chessComCandidates":["username or []"],"lichessCandidates":["username or []"]}. Use empty array [] if no account found for that platform.`;
 
-          Return Format:
-          Return JSON with the URLs you found. We will scrape these URLs to extract usernames.
-          CRITICAL: You MUST include the exact URLs in your reasoning - we will fetch and scrape these pages.
-          
-          {
-            "chessComCandidates": ["username_from_url"],
-            "lichessCandidates": ["username_from_url"],
-            "reasoning": "FOUND URLS: chess.com/pub/player/jamisonkao, lichess.org/@/Kao-Jamison",
-             "confidence": 0.0 to 1.0 
-          }
-
-          ABSOLUTE REQUIREMENTS:
-          1. You MUST include the exact URLs in your reasoning (e.g., "chess.com/pub/player/jamisonkao")
-          2. Only include URLs you actually see in search results
-          3. Do NOT create, generate, or infer URLs - ONLY report URLs you see
-          4. If no URLs found in search results, return empty arrays
-          5. Your reasoning MUST contain the actual URLs - we will fetch and scrape these pages to extract usernames
-          6. DO NOT return URLs that don't appear in search results
-        `;
-
-                    // Call Gemini API via Edge Function (includes Google Search Retrieval)
-                    const text = await geminiService.generateContentWithSearch(prompt);
-                    console.log('[Identity] AI Response:', text || '(empty)');
+                    // Call Gemini API via Edge Function WITH Google Search for username discovery
+                    // If this times out, the automatic retry will try without Google Search
+                    let text: string;
+                    try {
+                      text = await geminiService.generateContentWithSearch(prompt);
+                      console.log('[Identity] AI Response:', text || '(empty)');
+                    } catch (searchError: any) {
+                      console.warn('[Identity] Google Search failed or timed out:', searchError.message);
+                      // If search fails/times out, return empty to use fallback heuristics
+                      text = '';
+                    }
 
                     // If response is empty, skip parsing and use fallbacks
                     if (!text || text.trim().length === 0) {
                         console.warn('[Identity] AI returned empty response, using heuristic fallbacks');
                     } else {
-                    // Robust JSON extraction
-                    let jsonStr = text;
-                    const jsonBlockMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-                    if (jsonBlockMatch) {
-                        jsonStr = jsonBlockMatch[1];
-                    } else {
-                        const looseMatch = text.match(/\{[\s\S]*\}/);
-                        if (looseMatch) jsonStr = looseMatch[0];
+                    // Robust JSON extraction: strip markdown, handle truncated
+                    let jsonStr = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+                    const startIdx = jsonStr.indexOf('{');
+                    if (startIdx >= 0) jsonStr = jsonStr.slice(startIdx);
+                    if (!/}\s*$/.test(jsonStr) && jsonStr.length > 0) {
+                        let inStr = false;
+                        let ob = 0, oa = 0;
+                        for (let i = 0; i < jsonStr.length; i++) {
+                            const c = jsonStr[i];
+                            if (c === '"' && jsonStr[i - 1] !== '\\') inStr = !inStr;
+                            if (!inStr) { if (c === '{') ob++; if (c === '}') ob--; if (c === '[') oa++; if (c === ']') oa--; }
+                        }
+                        if (inStr) jsonStr += '"';
+                        jsonStr += ']'.repeat(Math.max(0, oa)) + '}'.repeat(Math.max(0, ob));
                     }
 
                         // Only try to parse if we found JSON-like content
@@ -698,7 +762,7 @@ export const identityService = {
             ]);
 
             return {
-                verifiedName: officialName,
+                verifiedName: capitalizeName(officialName),
                 fideProfile,
                 uscfProfile,
                 chessComUsername: confirmedChessCom,
@@ -709,7 +773,7 @@ export const identityService = {
         } catch (e) {
             console.error("[Identity] Fatal Discovery Failure:", e);
             return {
-                verifiedName: officialName,
+                verifiedName: capitalizeName(officialName),
                 fideProfile: null,
                 uscfProfile: null,
                 chessComUsername: '',

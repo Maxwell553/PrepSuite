@@ -13,10 +13,13 @@ export interface GameData {
     playedAt: string;
     timeControl: string;
     weight?: number;
+    /** From ECO library when available */
+    openingName?: string;
 }
 
 const ECO_MAP: Record<string, string> = {
     'B01': 'Scandinavian Defense',
+    'B06': 'Modern Defense',
     'B07': 'Pirc Defense',
     'B12': 'Caro-Kann Defense',
     'B20': 'Sicilian Defense',
@@ -36,6 +39,10 @@ const ECO_MAP: Record<string, string> = {
     'D02': 'Queens Pawn Game',
     'D30': 'Queens Gambit Declined',
     'D37': 'Queens Gambit Declined (Classical)',
+    'D50': 'Queens Gambit Declined',
+    'D55': 'Queens Gambit Declined',
+    'D70': 'Benoni Defense',
+    'D75': 'Benoni Defense',
     'D85': 'Grunfeld Defense',
     'E12': 'Queens Indian Defense',
     'E60': 'Kings Indian Defense',
@@ -225,6 +232,14 @@ function identifyOpeningFromMoves(pgn: string, side: 'white' | 'black'): string 
             if (normalizedMoves.length > 2 && normalizedMoves[2] === 'exd5') return 'Scandinavian Defense';
             return 'Scandinavian Defense';
         }
+        if (normalizedMoves.length > 1 && normalizedMoves[1] === 'g6') {
+            // Modern Defense (Robatsch)
+            if (normalizedMoves.length > 2 && normalizedMoves[2] === 'd4') {
+                if (normalizedMoves.length > 3 && normalizedMoves[3] === 'bg7') return 'Modern Defense';
+                return 'Modern Defense';
+            }
+            return 'Modern Defense';
+        }
         if (normalizedMoves.length > 1 && normalizedMoves[1] === 'nf6') {
             if (normalizedMoves.length > 2 && normalizedMoves[2] === 'e5') return 'Alekhine Defense';
             return 'Alekhine Defense';
@@ -331,7 +346,9 @@ function identifyOpeningFromMoves(pgn: string, side: 'white' | 'black'): string 
                 }
                 return 'King\'s Indian Defense';
             }
-            return 'Queen\'s Gambit Declined'; // Default to most common d4 opening
+            if (normalizedMoves[1] === 'c5') return 'Benoni Defense';
+            // Unrecognized d4 - use generic, NOT QGD (QGD requires 1.d4 d5 2.c4 e6)
+            return 'Queen\'s Pawn Game';
         }
         return 'Queen\'s Pawn Opening';
     }
@@ -364,15 +381,33 @@ function identifyOpeningFromMoves(pgn: string, side: 'white' | 'black'): string 
 /**
  * Aggregates openings by identifying them from PGN moves (more granular)
  * Falls back to ECO-based aggregation if PGN is not available
+ * When playing white, uses more granular grouping to show different opponent responses
+ * IMPORTANT: When Black plays 1...Nf6 (1.d4 Nf6), always use move-based identification
+ * so we get Indian defenses (King's Indian, Nimzo-Indian, etc.) not Queen's Gambit Declined.
  */
 function aggregateECO(eco: string, pgn?: string, side?: 'white' | 'black'): string {
-    // ALWAYS prefer ECO codes over move-based identification when available
-    // ECO codes are more reliable and specific than parsing moves
+    // Prefer move-based identification when PGN shows 1.d4 Nf6 (Indian) - APIs sometimes
+    // return D-codes for these games, which would wrongly label them as Queen's Gambit Declined
+    if (pgn && side) {
+        const fromMoves = identifyOpeningFromMoves(pgn, side);
+        const isIndian = fromMoves.includes('Indian');
+        if (isIndian && fromMoves !== 'Unknown') {
+            return fromMoves;
+        }
+    }
+
+    // When playing white, use more granular ECO-based identification to show different opponent responses
+    if (side === 'white' && eco && eco !== 'Unknown') {
+        const ecoBased = identifyFromECOForWhite(eco);
+        if (ecoBased !== 'Other Openings' && ecoBased !== 'Unknown') {
+            return ecoBased;
+        }
+    }
+
+    // Use ECO-based identification when available and not overridden by moves above
     if (eco && eco !== 'Unknown') {
-        // Use ECO-based identification first (most reliable)
         const ecoBased = identifyFromECO(eco);
-        // Only accept ECO-based if it's specific (not generic or "Other Openings")
-        if (ecoBased !== 'Other Openings' && 
+        if (ecoBased !== 'Other Openings' &&
             ecoBased !== 'Unknown' &&
             ecoBased !== 'King\'s Pawn Game' &&
             ecoBased !== 'Queen\'s Pawn Game' &&
@@ -381,11 +416,10 @@ function aggregateECO(eco: string, pgn?: string, side?: 'white' | 'black'): stri
             return ecoBased;
         }
     }
-    
+
     // If ECO-based fails or no ECO, try move-based identification
     if (pgn && side) {
         const identified = identifyOpeningFromMoves(pgn, side);
-        // Only accept move-based if it's specific (not generic)
         if (identified !== 'Unknown' &&
             identified !== 'King\'s Pawn Game' &&
             identified !== 'Queen\'s Pawn Game' &&
@@ -395,31 +429,131 @@ function aggregateECO(eco: string, pgn?: string, side?: 'white' | 'black'): stri
             return identified;
         }
     }
-    
-    // If we have ECO but both methods failed, try ECO again (might be edge case)
+
     if (eco && eco !== 'Unknown') {
         const ecoBased = identifyFromECO(eco);
-        // Accept ECO even if generic, as it's better than "Other Openings"
         if (ecoBased !== 'Other Openings' && ecoBased !== 'Unknown') {
             return ecoBased;
         }
     }
-    
-    // Last resort: try move-based even if generic
+
     if (pgn && side) {
         const identified = identifyOpeningFromMoves(pgn, side);
-        if (identified !== 'Unknown') {
-            return identified;
-        }
+        if (identified !== 'Unknown') return identified;
+    }
+
+    return 'Unknown';
+}
+
+/**
+ * Identifies opening from ECO code for white games (more granular to show different opponent responses)
+ * Uses more specific ECO codes to differentiate between variations
+ */
+function identifyFromECOForWhite(eco: string): string {
+    // Handle ECO codes that might be in range format (e.g., "D70-D79" or "E60-E69")
+    // Extract just the first ECO code from the range
+    if (eco.includes('-')) {
+        eco = eco.split('-')[0].trim();
     }
     
-    return 'Unknown';
+    // Use full ECO code or more specific prefixes to differentiate between variations
+    const ecoPrefix = eco.substring(0, 3); // e.g., "B20", "C00", "D30"
+    
+    // Check ECO_MAP first for specific mappings
+    if (ECO_MAP[eco]) {
+        return ECO_MAP[eco];
+    }
+    
+    // Use more granular grouping - differentiate by first 3 characters
+    // B codes (e4 responses) - differentiate between different defenses
+    if (ecoPrefix.match(/^B[2-9]\d$/)) {
+        // Sicilian Defense - try to differentiate variations
+        if (eco.startsWith('B20')) return 'Sicilian Defense';
+        if (eco.startsWith('B30')) return 'Sicilian Defense (Rossolimo)';
+        if (eco.startsWith('B40')) return 'Sicilian Defense (Paulsen)';
+        if (eco.startsWith('B50')) return 'Sicilian Defense';
+        if (eco.startsWith('B90')) return 'Sicilian Najdorf';
+        return 'Sicilian Defense'; // Fallback to general Sicilian
+    }
+    if (ecoPrefix.match(/^B1[2-9]$/)) return 'Caro-Kann Defense';
+    if (ecoPrefix.match(/^B0[7-9]$/)) return 'Pirc Defense';
+    if (eco.startsWith('B01')) return 'Scandinavian Defense';
+    if (eco.startsWith('B06')) return 'Modern Defense';
+    if (ecoPrefix.match(/^B0[2-5]$/)) return 'Alekhine Defense';
+    
+    // C codes (e4 e5 and other e4 responses)
+    if (ecoPrefix.match(/^C[0-1]\d$/)) {
+        // French Defense - differentiate variations
+        if (eco.startsWith('C00')) return 'French Defense';
+        if (eco.startsWith('C11')) return 'French Defense (Classical)';
+        return 'French Defense';
+    }
+    if (ecoPrefix.match(/^C5[0-9]$/)) return 'Italian Game';
+    if (ecoPrefix.match(/^C[6-7]\d$/)) {
+        // Ruy Lopez - differentiate variations
+        if (eco.startsWith('C60')) return 'Ruy Lopez';
+        if (eco.startsWith('C67')) return 'Ruy Lopez (Berlin)';
+        if (eco.startsWith('C77')) return 'Ruy Lopez';
+        if (eco.startsWith('C84')) return 'Ruy Lopez (Closed)';
+        return 'Ruy Lopez';
+    }
+    if (ecoPrefix.match(/^C4[5-6]$/)) return 'Scotch Game';
+    if (ecoPrefix.match(/^C4[2-3]$/)) return 'Petrov Defense';
+    if (ecoPrefix.match(/^C[2-4]\d$/)) return 'King\'s Pawn Game';
+    
+    // D codes (d4 openings)
+    if (ecoPrefix.match(/^D0[0-9]$/)) return 'Queen\'s Pawn Game';
+    if (ecoPrefix.match(/^D2[0-9]$/)) return 'Queen\'s Gambit Accepted';
+    if (ecoPrefix.match(/^D1[0-9]$/)) return 'Slav Defense';
+    if (ecoPrefix.match(/^D[3-4]\d$/)) {
+        // Queen's Gambit Declined - differentiate variations
+        if (eco.startsWith('D30')) return 'Queen\'s Gambit Declined';
+        if (eco.startsWith('D37')) return 'Queen\'s Gambit Declined (Classical)';
+        return 'Queen\'s Gambit Declined';
+    }
+    if (ecoPrefix.match(/^D[5-6]\d$/)) {
+        // Queen's Gambit Declined variations (D50-D69)
+        if (eco.startsWith('D50')) return 'Queen\'s Gambit Declined';
+        if (eco.startsWith('D55')) return 'Queen\'s Gambit Declined';
+        return 'Queen\'s Gambit Declined';
+    }
+    if (ecoPrefix.match(/^D[7]\d$/)) {
+        // Benoni Defense (D70-D79) - NOT Queen's Gambit Declined!
+        if (eco.startsWith('D70')) return 'Benoni Defense';
+        if (eco.startsWith('D75')) return 'Benoni Defense';
+        return 'Benoni Defense';
+    }
+    if (ecoPrefix.match(/^D[8-9]\d$/)) {
+        if (eco.startsWith('D85')) return 'Grunfeld Defense';
+        return 'Grunfeld Defense';
+    }
+    
+    // E codes (Indian defenses)
+    if (ecoPrefix.match(/^E0[0-9]$/)) return 'Catalan Opening';
+    if (ecoPrefix.match(/^E1[0-9]$/)) {
+        if (eco.startsWith('E12')) return 'Queen\'s Indian Defense';
+        return 'Queen\'s Indian Defense';
+    }
+    if (ecoPrefix.match(/^E[2-5]\d$/)) return 'Nimzo-Indian Defense';
+    if (ecoPrefix.match(/^E[6-9]\d$/)) {
+        if (eco.startsWith('E60')) return 'King\'s Indian Defense';
+        if (eco.startsWith('E90')) return 'King\'s Indian Defense';
+        return 'King\'s Indian Defense';
+    }
+    
+    // Fallback to general identification
+    return identifyFromECO(eco);
 }
 
 /**
  * Identifies opening from ECO code only (more reliable than move parsing)
  */
 function identifyFromECO(eco: string): string {
+    // Handle ECO codes that might be in range format (e.g., "D70-D79" or "E60-E69")
+    // Extract just the first ECO code from the range
+    if (eco.includes('-')) {
+        eco = eco.split('-')[0].trim();
+    }
     
     // Use first 2-3 characters of ECO for more granular grouping
     const ecoPrefix = eco.substring(0, 3); // e.g., "B20", "C00", "D30"
@@ -431,7 +565,8 @@ function identifyFromECO(eco: string): string {
     if (ecoPrefix.match(/^B1[2-9]$/)) return 'Caro-Kann Defense'; // B12-B19
     if (ecoPrefix.match(/^B0[7-9]$/)) return 'Pirc Defense'; // B07-B09
     if (ecoPrefix.startsWith('B01')) return 'Scandinavian Defense';
-    if (ecoPrefix.match(/^B0[2-6]$/)) return 'Alekhine Defense'; // B02-B06
+    if (ecoPrefix.startsWith('B06')) return 'Modern Defense'; // B06 = 1.e4 g6
+    if (ecoPrefix.match(/^B0[2-5]$/)) return 'Alekhine Defense'; // B02-B05
     
     // C codes (e4 e5 and other e4 responses)
     if (ecoPrefix.match(/^C[0-1]\d$/)) return 'French Defense'; // C00-C19
@@ -443,9 +578,11 @@ function identifyFromECO(eco: string): string {
     
     // D codes (d4 openings)
     if (ecoPrefix.match(/^D0[0-9]$/)) return 'Queen\'s Pawn Game'; // D00-D09
-    if (ecoPrefix.match(/^D[3-4]\d$/)) return 'Queen\'s Gambit Declined'; // D30-D49
     if (ecoPrefix.match(/^D2[0-9]$/)) return 'Queen\'s Gambit Accepted'; // D20-D29
     if (ecoPrefix.match(/^D1[0-9]$/)) return 'Slav Defense'; // D10-D19
+    if (ecoPrefix.match(/^D[3-4]\d$/)) return 'Queen\'s Gambit Declined'; // D30-D49 (QGD variations)
+    if (ecoPrefix.match(/^D[5-6]\d$/)) return 'Queen\'s Gambit Declined'; // D50-D69 (QGD variations)
+    if (ecoPrefix.match(/^D[7]\d$/)) return 'Benoni Defense'; // D70-D79 (Modern Benoni, Benoni Defense)
     if (ecoPrefix.match(/^D[8-9]\d$/)) return 'Grunfeld Defense'; // D80-D99
     
     // E codes (Indian defenses)
@@ -478,10 +615,15 @@ function identifyFromECO(eco: string): string {
     }
     
     // Last resort: try to identify from first letter only, but be more specific
+    // NOTE: This should rarely be reached if ECO codes are properly formatted
     if (letter === 'A') return 'Flank & Irregular Openings';
     if (letter === 'B') return 'Sicilian Defense'; // Most common B openings
     if (letter === 'C') return 'French Defense'; // Most common C openings
-    if (letter === 'D') return 'Queen\'s Gambit Declined'; // Most common D openings
+    if (letter === 'D') {
+        // D codes can be QGD, Benoni, Grunfeld, etc. - try to be more specific
+        // If we got here, the ECO code wasn't recognized, so use a generic name
+        return 'Queen\'s Pawn Game'; // Generic fallback for unrecognized D codes
+    }
     if (letter === 'E') return 'King\'s Indian Defense'; // Most common E openings
     
     return 'Other Openings';
@@ -558,6 +700,10 @@ function parseChessComGames(games: unknown[], targetUsername: string): GameData[
             }
             // Clean up ECO code - remove any non-standard characters
             eco = eco.trim().toUpperCase();
+            // Handle ECO codes that might be in range format (e.g., "D70-D79")
+            if (eco.includes('-')) {
+                eco = eco.split('-')[0].trim();
+            }
             // Validate ECO format (should be letter + 2-3 digits)
             if (!eco.match(/^[A-E]\d{2,3}$/)) {
                 eco = 'Unknown';
@@ -580,24 +726,67 @@ function parseChessComGames(games: unknown[], targetUsername: string): GameData[
 
 function parseLichessGames(ndjson: string, targetUsername: string): GameData[] {
     if (!ndjson) return [];
-    return ndjson.trim().split('\n').map(line => {
+    const games = ndjson.trim().split('\n').map((line, index) => {
         try {
             const g = JSON.parse(line) as LichessGame;
+            
+            // Check if PGN is missing and log a warning
+            if (!g.pgn || g.pgn.trim().length === 0) {
+                console.warn(`[Lichess] Game ${g.id || index} is missing PGN data. Available fields:`, Object.keys(g));
+            }
+            
+            // Lichess API might return moves in a different format
+            // Check for alternative PGN sources in the response
+            let pgn = g.pgn || '';
+            
+            // If PGN is missing, construct it from moves (Lichess API may return moves=true instead of full PGN)
+            if (!pgn && (g as any).moves) {
+                const rawMoves = (g as any).moves;
+                const moves: string[] = Array.isArray(rawMoves)
+                    ? rawMoves
+                    : (typeof rawMoves === 'string' ? rawMoves.trim().split(/\s+/) : []);
+                if (moves.length > 0) {
+                    const movePairs: string[] = [];
+                    for (let i = 0; i < moves.length; i += 2) {
+                        const moveNum = Math.floor(i / 2) + 1;
+                        const whiteMove = moves[i] || '';
+                        const blackMove = moves[i + 1] || '';
+                        if (whiteMove) {
+                            movePairs.push(`${moveNum}. ${whiteMove}${blackMove ? ' ' + blackMove : ''}`);
+                        }
+                    }
+                    pgn = movePairs.join(' ');
+                    if (index === 0) {
+                        console.log(`[Lichess] Constructed PGN from moves for game playback (${moves.length} moves)`);
+                    }
+                }
+            }
+            
+            const whiteName = g.players?.white?.user?.name ?? g.players?.white?.userId ?? 'Anonymous';
+            const blackName = g.players?.black?.user?.name ?? g.players?.black?.userId ?? 'Anonymous';
             return {
                 id: g.id,
                 source: 'lichess',
-                white: g.players.white.user.name,
-                black: g.players.black.user.name,
-                result: resolveResultLichess(g, targetUsername),
+                white: whiteName,
+                black: blackName,
+                result: resolveResultLichess(g, targetUsername, whiteName, blackName),
                 eco: g.opening?.eco || g.eco || 'Unknown',
-                pgn: g.pgn || '',
+                pgn: pgn,
                 playedAt: new Date(g.createdAt).toISOString(),
-                timeControl: g.speed
+                timeControl: g.speed,
+                openingName: g.opening?.name || undefined
             };
         } catch (e) {
+            console.error(`[Lichess] Failed to parse game at line ${index}:`, e);
             return null;
         }
     }).filter((g): g is GameData => g !== null);
+    
+    // Log statistics about PGN availability
+    const gamesWithPGN = games.filter(g => g.pgn && g.pgn.trim().length > 20).length;
+    console.log(`[Lichess] Parsed ${games.length} games, ${gamesWithPGN} have PGN data (${((gamesWithPGN / games.length) * 100).toFixed(1)}%)`);
+    
+    return games;
 }
 
 function resolveResult(game: ChessComGame, target: string): string {
@@ -649,23 +838,23 @@ function resolveResult(game: ChessComGame, target: string): string {
 
 interface LichessGame {
     id: string;
-    players: {
-        white: { user: { name: string } };
-        black: { user: { name: string } };
+    players?: {
+        white?: { user?: { name?: string }; userId?: string };
+        black?: { user?: { name?: string }; userId?: string };
     };
     winner?: 'white' | 'black';
     pgn?: string;
+    moves?: string[]; // Alternative format - moves array instead of PGN string
     createdAt: number;
     speed: string;
-    opening?: { eco?: string };
+    opening?: { eco?: string; name?: string };
     eco?: string;
 }
 
-function resolveResultLichess(game: LichessGame, target: string): string {
+function resolveResultLichess(game: LichessGame, target: string, whiteName?: string, blackName?: string): string {
     const winner = game.winner; // 'white' or 'black'
-    const whiteName = game.players.white.user.name.toLowerCase();
-    const blackName = game.players.black.user.name.toLowerCase();
-    const targetLower = target.toLowerCase();
+    const w = (whiteName ?? game.players?.white?.user?.name ?? game.players?.white?.userId ?? '').toLowerCase();
+    const b = (blackName ?? game.players?.black?.user?.name ?? game.players?.black?.userId ?? '').toLowerCase();
 
     if (!winner) return '1/2-1/2';
     
@@ -724,16 +913,31 @@ function generateStats(games: GameData[], targetUsername: string, side: 'white' 
     const draws = relevantGames.filter(g => g.result === '1/2-1/2').length;
     console.log(`[Stats] ${side.toUpperCase()} stats for ${targetUsername}: ${relevantGames.length} games (${wins} wins, ${losses} losses, ${draws} draws)`);
 
-    // Minimum games required for an opening to be included (ensures statistical significance)
-    const MIN_GAMES = 10; // Reduced from 20 to show more openings
+    // Minimum 10 games required - patterns need statistical significance
+    const MIN_GAMES = 10;
     
     // First pass: aggregate by mainline ECO
     const aggregatedStats: Record<string, any> = {};
 
+    // Aggregate to family level (e.g. "Sicilian Defense: Najdorf" -> "Sicilian Defense") for better graph variety
+    const getOpeningFamily = (name: string): string => {
+        if (!name) return 'Unknown';
+        const beforeColon = name.split(':')[0].trim();
+        const beforeParen = beforeColon.split('(')[0].trim();
+        return beforeParen || name;
+    };
+
+    const fallbackSamples: Array<{ eco: string; pgnLen: number }> = [];
     relevantGames.forEach(g => {
         const originalECO = g.eco || 'Unknown';
-        // Use PGN-based identification for more granular opening detection (5-10 moves)
-        const aggregatedECO = aggregateECO(originalECO, g.pgn, side);
+        // Prefer ECO library opening name (from openingService) when available
+        const rawName = g.openingName ?? (() => {
+            if (fallbackSamples.length < 5) {
+                fallbackSamples.push({ eco: originalECO, pgnLen: g.pgn?.length ?? 0 });
+            }
+            return aggregateECO(originalECO, g.pgn, side);
+        })();
+        const aggregatedECO = getOpeningFamily(rawName);
         const weight = 1; // All games weighted equally
 
         if (!aggregatedStats[aggregatedECO]) {
@@ -798,6 +1002,11 @@ function generateStats(games: GameData[], targetUsername: string, side: 'white' 
             aggregatedStats[aggregatedECO].lastPlayed = g.playedAt;
         }
     });
+
+    const fallbackTotal = relevantGames.filter(g => !g.openingName).length;
+    if (fallbackTotal > 0) {
+        console.log(`[Stats] ${side.toUpperCase()} used hardcoded aggregateECO fallback for ${fallbackTotal}/${relevantGames.length} games. Sample:`, fallbackSamples);
+    }
 
     interface StatValue {
         weightedCount: number;

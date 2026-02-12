@@ -7,9 +7,11 @@ interface LandingPageProps {
     onGetStarted: () => void;
     onLogin: (provider: 'google' | { email: string; password?: string; isNewUser?: boolean }) => void;
     user?: SupabaseUser | null;
+    onShowPrivacyPolicy?: () => void;
+    onShowTermsOfService?: () => void;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, onShowPrivacyPolicy, onShowTermsOfService }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [view, setView] = useState<'login' | 'signup' | 'success'>('login');
@@ -138,7 +140,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user }
                             </div>
                             <h3 className="text-2xl font-bold mb-3 text-white dark:text-white text-gray-900">Multi-Platform Game Aggregation</h3>
                             <p className="text-slate-400 dark:text-slate-400 text-gray-600 leading-relaxed">
-                                Analyzes up to 1,000 games from both Chess.com and Lichess simultaneously. Get a complete picture of your opponent's playing style across all platforms.
+                                Analyzes up to 5,000 games from both Chess.com and Lichess simultaneously. Get a complete picture of your opponent's playing style across all platforms.
                             </p>
                         </div>
 
@@ -250,7 +252,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user }
                             </div>
                             <h3 className="text-xl font-bold mb-3 text-white dark:text-white text-gray-900">Deep Analysis</h3>
                             <p className="text-slate-400 dark:text-slate-400 text-gray-600">
-                                We fetch up to 1,000 games, analyze them with Stockfish, and process opening statistics. This happens automatically in the background.
+                                We fetch up to 5,000 games, analyze them with Stockfish depth 10, and process opening statistics. This happens automatically in the background.
                             </p>
                         </div>
 
@@ -469,7 +471,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user }
                                 className="text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 text-sm transition-colors"
                                 onClick={(e) => {
                                     e.preventDefault();
-                                    // TODO: Navigate to privacy policy page
+                                    if (onShowPrivacyPolicy) {
+                                        onShowPrivacyPolicy();
+                                    }
                                 }}
                             >
                                 Privacy Policy
@@ -479,7 +483,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user }
                                 className="text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 text-sm transition-colors"
                                 onClick={(e) => {
                                     e.preventDefault();
-                                    // TODO: Navigate to terms of service page
+                                    if (onShowTermsOfService) {
+                                        onShowTermsOfService();
+                                    }
                                 }}
                             >
                                 Terms of Service

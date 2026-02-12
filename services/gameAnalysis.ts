@@ -1,19 +1,5 @@
-
 import { OpeningStat } from '../types';
-
-
-export interface GameData {
-    id: string;
-    source: 'chess.com' | 'lichess';
-    white: string;
-    black: string;
-    result: string;
-    eco: string;
-    pgn: string;
-    playedAt: string;
-    timeControl: string;
-    weight?: number;
-}
+import { identifyOpeningsBatch } from './openingService';
 import AnalysisWorker from './analysis.worker?worker';
 
 export interface GameData {
@@ -27,6 +13,8 @@ export interface GameData {
     playedAt: string;
     timeControl: string;
     weight?: number;
+    /** Opening name from ECO library (when available) - replaces hardcoded classification */
+    openingName?: string;
 }
 
 // Singleton worker instance to avoid spawning multiple threads
@@ -90,9 +78,24 @@ export const gameAnalysisService = {
 
     /**
      * Aggregates stats (Async via Worker).
+     * Uses ECO opening library for accurate classification (Caro-Kann, Sicilian, QGD, etc.).
      */
     async generateStats(games: GameData[], targetUsername: string, side: 'white' | 'black'): Promise<OpeningStat[]> {
-        return runWorkerTask('ANALYZE_GAMES', { games, targetUsername, side });
+        // Pre-process: identify openings via ECO library (12,000+ openings from lichess, SCID, etc.)
+        // Lichess games may already have openingName - preserve it; only lookup when missing
+        const openingResults = await identifyOpeningsBatch(games);
+        const enrichedGames: GameData[] = games.map((g, i) => ({
+            ...g,
+            openingName: g.openingName ?? openingResults.get(i)?.name ?? undefined,
+        }));
+        const fromLibrary = enrichedGames.filter(g => g.openingName).length;
+        const fromFallback = enrichedGames.length - fromLibrary;
+        console.log(`[GameAnalysis] generateStats ${side}: ${enrichedGames.length} games, ${fromLibrary} from ECO library, ${fromFallback} will use fallback`);
+        if (fromFallback > 0) {
+            const sample = enrichedGames.filter(g => !g.openingName).slice(0, 3);
+            console.log(`[GameAnalysis] Sample games without library match:`, sample.map(g => ({ eco: g.eco, pgnLen: g.pgn?.length })));
+        }
+        return runWorkerTask('ANALYZE_GAMES', { games: enrichedGames, targetUsername, side });
     },
 
     // Kept for backward compat if needed, but ideally unused

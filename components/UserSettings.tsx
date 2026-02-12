@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, User, Mail, Shield, Trash2, AlertTriangle } from 'lucide-react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { getEnvConfig } from '../lib/env';
 import ConfirmationModal from './ConfirmationModal';
 
 interface UserSettingsProps {
@@ -17,24 +18,38 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onAccountDele
   const handleDeleteAccount = async () => {
     setIsDeleting(true);
     try {
-      // Delete user's scouting reports first (they will be cascade deleted, but we can be explicit)
-      const { error: reportsError } = await supabase
-        .from('scouting_reports')
-        .delete()
-        .eq('user_id', user.id);
-
-      if (reportsError) {
-        console.error('[UserSettings] Error deleting reports:', reportsError);
-        // Continue with account deletion even if reports deletion fails
+      // Get the current session to pass authentication token
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        alert('You must be logged in to delete your account.');
+        setIsDeleting(false);
+        setShowDeleteConfirm(false);
+        return;
       }
 
-      // Delete the user account
-      // Note: This requires admin privileges or a database function
-      // For now, we'll use the admin API or a database function
-      // Since we don't have admin access, we'll sign out and show a message
-      // In production, you'd want to create a database function or use admin API
-      
-      // Sign out the user
+      // Get config for apikey header
+      const config = getEnvConfig();
+
+      // Call the delete-user edge function
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': config.supabaseAnonKey,
+        },
+      });
+
+      if (error) {
+        console.error('[UserSettings] Error calling delete-user function:', error);
+        throw new Error(error.message || 'Failed to delete account');
+      }
+
+      if (data?.error) {
+        console.error('[UserSettings] Delete function returned error:', data.error);
+        throw new Error(data.error);
+      }
+
+      // Sign out the user after successful deletion
       await supabase.auth.signOut();
       
       // Call the callback if provided
@@ -42,10 +57,11 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onAccountDele
         onAccountDeleted();
       }
       
-      alert('Account deletion request submitted. Your account and all associated data will be permanently deleted.');
+      alert('Your account and all associated data have been permanently deleted.');
     } catch (error) {
       console.error('[UserSettings] Error deleting account:', error);
-      alert('Failed to delete account. Please contact support.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete account. Please contact support.';
+      alert(errorMessage);
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirm(false);

@@ -23,5 +23,18 @@ dist-ssr
 *.sln
 *.sw?
 
-.env.local
+# Environment variables
 .env
+.env.local
+.env.production
+.env.*.local
+
+# Testing
+coverage
+.nyc_output
+
+# Supabase
+.supabase
+
+# Build outputs
+*.tsbuildinfo

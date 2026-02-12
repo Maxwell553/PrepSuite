@@ -1,12 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { getCorsHeadersForRequest } from "../_shared/cors.ts";
 
 serve(async (req) => {
   console.log('[Function] Request received');
+  
+  // Get CORS headers based on request origin
+  const corsHeaders = getCorsHeadersForRequest(req);
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -70,7 +69,11 @@ serve(async (req) => {
     // Build Gemini request
     const geminiRequestBody: any = {
       contents: [{ parts: [{ text: promptText }] }],
-      generationConfig: { responseMimeType: "application/json" }
+      generationConfig: { 
+        responseMimeType: "application/json",
+        maxOutputTokens: 65536, // Maximum allowed - prevents truncation (finishReason: MAX_TOKENS)
+        temperature: 0.7 // Balanced creativity for comprehensive reports
+      }
     };
 
     if (responseSchema) {
@@ -83,20 +86,51 @@ serve(async (req) => {
     // Model name: gemini-3-flash-preview
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiApiKey}`;
     
-    const geminiResponse = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(geminiRequestBody),
-    });
+    // Retry logic for 503 errors (model overloaded)
+    const maxRetries = 2;
+    let geminiResponse: Response | null = null;
+    let lastError: string | null = null;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        // Exponential backoff: 5s, 10s
+        const backoffMs = 5000 * Math.pow(2, attempt - 1);
+        const jitter = Math.random() * 2000; // 0-2s jitter
+        console.log(`[Function] Retry attempt ${attempt}/${maxRetries} after ${Math.round((backoffMs + jitter) / 1000)}s...`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs + jitter));
+      }
+      
+      geminiResponse = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geminiRequestBody),
+      });
 
-    console.log('[Function] Gemini response status:', geminiResponse.status);
+      console.log(`[Function] Gemini response status (attempt ${attempt + 1}):`, geminiResponse.status);
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
+      // If successful, break out of retry loop
+      if (geminiResponse.ok) {
+        break;
+      }
+      
+      // If 503 and we have retries left, continue
+      if (geminiResponse.status === 503 && attempt < maxRetries) {
+        const errorText = await geminiResponse.text();
+        console.warn(`[Function] Model overloaded (503) on attempt ${attempt + 1}, will retry...`);
+        lastError = errorText;
+        continue;
+      }
+      
+      // For other errors or final retry, break and handle below
+      break;
+    }
+
+    if (!geminiResponse || !geminiResponse.ok) {
+      const errorText = lastError || (geminiResponse ? await geminiResponse.text() : 'No response received');
       console.error('[Function] Gemini error:', errorText);
       
       // Handle rate limiting specifically
-      if (geminiResponse.status === 429) {
+      if (geminiResponse && geminiResponse.status === 429) {
         let errorData;
         try {
           errorData = JSON.parse(errorText);
@@ -115,9 +149,37 @@ serve(async (req) => {
         );
       }
       
+      // Handle 503 (model overloaded) with helpful message
+      if (geminiResponse && geminiResponse.status === 503) {
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText };
+        }
+        
+        console.error('[Function] Model overloaded (503) after retries:', errorData);
+        return new Response(
+          JSON.stringify({ 
+            error: `Gemini API server error (503). This is usually temporary.`,
+            details: errorData,
+            code: 503,
+            suggestion: 'Please retry in a few moments.'
+          }),
+          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       return new Response(
-        JSON.stringify({ error: `Gemini API error: ${errorText}`, code: geminiResponse.status }),
-        { status: geminiResponse.status >= 500 ? 500 : geminiResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: `Gemini API error: ${errorText}`, code: geminiResponse?.status || 500 }),
+        { status: (geminiResponse?.status && geminiResponse.status >= 500) ? 500 : (geminiResponse?.status || 500), headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!geminiResponse) {
+      return new Response(
+        JSON.stringify({ error: 'No response received from Gemini API' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -218,18 +280,35 @@ serve(async (req) => {
       // Try extracting JSON object
       const extractedJson = responseText.substring(jsonStart, jsonEnd + 1);
       
+      // Helper to count brace/bracket imbalance
+      const getImbalance = (s: string): { braces: number; brackets: number } => {
+        let openBraces = 0, openBrackets = 0, inString = false, escapeNext = false;
+        const quote = '"';
+        for (let i = 0; i < s.length; i++) {
+          const c = s[i];
+          if (escapeNext) { escapeNext = false; continue; }
+          if (c === '\\') { escapeNext = true; continue; }
+          if (c === quote && !escapeNext) { inString = !inString; continue; }
+          if (inString) continue;
+          if (c === '{') openBraces++;
+          if (c === '}') openBraces--;
+          if (c === '[') openBrackets++;
+          if (c === ']') openBrackets--;
+        }
+        return { braces: openBraces, brackets: openBrackets };
+      };
+
       // Check if extracted JSON appears complete
       if (!isJsonComplete(extractedJson)) {
         console.error('[Function] Extracted JSON appears incomplete (unbalanced braces)');
         console.error('[Function] Last 200 chars:', extractedJson.substring(Math.max(0, extractedJson.length - 200)));
         
-        // Try to repair incomplete JSON by finding the last complete object/array
         let repairedJson = extractedJson;
         let foundComplete = false;
         
-        // Find the last complete closing brace by working backwards
-        for (let i = extractedJson.length - 1; i >= jsonStart; i--) {
-          const testJson = extractedJson.substring(jsonStart, i + 1);
+        // Strategy 1: Find last complete JSON by trimming from end (extractedJson is 0-based)
+        for (let i = extractedJson.length - 1; i >= 0; i--) {
+          const testJson = extractedJson.substring(0, i + 1);
           if (isJsonComplete(testJson)) {
             repairedJson = testJson;
             foundComplete = true;
@@ -238,8 +317,25 @@ serve(async (req) => {
           }
         }
         
-        // If we couldn't repair it, return error (client will retry)
-        if (!foundComplete || !isJsonComplete(repairedJson)) {
+        // Strategy 2: If truncation cut off the end, try closing with missing } and ]
+        if (!foundComplete) {
+          const { braces, brackets } = getImbalance(extractedJson);
+          if (braces > 0 || brackets > 0) {
+            const suffix = ']'.repeat(Math.max(0, brackets)) + '}'.repeat(Math.max(0, braces));
+            const closed = extractedJson + suffix;
+            if (isJsonComplete(closed)) {
+              try {
+                parsedResponse = JSON.parse(closed);
+                console.log('[Function] Successfully parsed JSON closed with', suffix.length, 'chars');
+                foundComplete = true;
+              } catch {
+                // Fall through to error
+              }
+            }
+          }
+        }
+        
+        if (!foundComplete) {
           return new Response(
             JSON.stringify({ 
               error: 'Gemini response contains incomplete JSON that could not be repaired. The response may have been truncated.',
@@ -253,21 +349,22 @@ serve(async (req) => {
           );
         }
         
-        // Try parsing the repaired JSON
-        try {
-          parsedResponse = JSON.parse(repairedJson);
-          console.log('[Function] Successfully parsed repaired JSON');
-        } catch (repairError) {
-          console.error('[Function] Failed to parse repaired JSON:', repairError);
-          return new Response(
-            JSON.stringify({ 
-              error: 'Gemini response contains incomplete JSON that could not be repaired.',
-              responseLength: responseText.length,
-              finishReason: finishReason,
-              responsePreview: responseText.substring(0, 500)
-            }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+        if (!parsedResponse) {
+          try {
+            parsedResponse = JSON.parse(repairedJson);
+            console.log('[Function] Successfully parsed repaired JSON');
+          } catch (repairError) {
+            console.error('[Function] Failed to parse repaired JSON:', repairError);
+            return new Response(
+              JSON.stringify({ 
+                error: 'Gemini response contains incomplete JSON that could not be repaired.',
+                responseLength: responseText.length,
+                finishReason: finishReason,
+                responsePreview: responseText.substring(0, 500)
+              }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
         }
       } else {
         // Extracted JSON appears complete, try parsing it

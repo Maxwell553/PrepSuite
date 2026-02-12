@@ -10,7 +10,7 @@ export interface MoveSequence {
 /**
  * Parses PGN to extract moves (similar to Stockfish parser)
  */
-function parsePGNMoves(pgn: string): string[] {
+export function parsePGNMoves(pgn: string): string[] {
   if (!pgn || pgn.trim().length === 0) return [];
   
   // Remove comments, annotations, and metadata
@@ -53,9 +53,33 @@ function parsePGNMoves(pgn: string): string[] {
 }
 
 /**
+ * Truncates a PGN to the first N moves (half-moves).
+ * In chess, a "line" means a sequence of moves - so we truncate by moves, not by raw text lines.
+ * Preserves tag pairs (Event, Site, Date, etc.) and replaces the move text with truncated notation.
+ */
+export function truncatePGNToMoves(pgn: string, maxMoves: number): string {
+  if (!pgn || pgn.trim().length === 0) return pgn;
+  const moves = parsePGNMoves(pgn);
+  if (moves.length <= maxMoves) return pgn;
+
+  const lines = pgn.split('\n');
+  const tagLines: string[] = [];
+  let i = 0;
+  while (i < lines.length && lines[i].trim().match(/^\[.*\]$/)) {
+    tagLines.push(lines[i]);
+    i++;
+  }
+  while (i < lines.length && !lines[i].trim()) i++;
+
+  const truncatedMoves = moves.slice(0, maxMoves);
+  const moveText = formatMoveSequence(truncatedMoves) + ' ...';
+  return tagLines.join('\n') + '\n\n' + moveText;
+}
+
+/**
  * Formats moves into standard chess notation (e.g., "1. e4 e5 2. Nc3 Nc6 3. b3")
  */
-function formatMoveSequence(moves: string[]): string {
+export function formatMoveSequence(moves: string[]): string {
   if (moves.length === 0) return '';
   
   const formatted: string[] = [];

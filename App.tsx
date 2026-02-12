@@ -11,9 +11,11 @@ import { playerRepository } from './services/playerRepository';
 import Toast, { ToastType } from './components/Toast';
 import ConfirmationModal from './components/ConfirmationModal';
 import { getUserFriendlyError, logError } from './lib/errorUtils';
-import SettingsModal from './components/SettingsModal';
 import UserSettings from './components/UserSettings';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import TermsOfService from './components/TermsOfService';
 import { ThemeProvider } from './lib/themeContext';
+import { setSentryUser, clearSentryUser } from './lib/sentry';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'search' | 'dashboard' | 'history'>('search');
@@ -23,9 +25,15 @@ const App: React.FC = () => {
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; reportId: string | null }>({ isOpen: false, reportId: null });
-  const [showSettings, setShowSettings] = useState(false);
   const [showUserSettings, setShowUserSettings] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(false);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [showTermsOfService, setShowTermsOfService] = useState(false);
+  // Persist loading state across tab switches
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingStage, setLoadingStage] = useState<'identity' | 'fetching' | 'analyzing' | 'generating' | null>(null);
+  const [scanningStatus, setScanningStatus] = useState<string>('');
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
@@ -34,13 +42,35 @@ const App: React.FC = () => {
   useEffect(() => {
     // Check current session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
       setLoadingAuth(false);
+      
+      // Set Sentry user context
+      if (currentUser) {
+        setSentryUser({
+          id: currentUser.id,
+          email: currentUser.email,
+        });
+      } else {
+        clearSentryUser();
+      }
     });
 
     // Listen for changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      
+      // Update Sentry user context
+      if (currentUser) {
+        setSentryUser({
+          id: currentUser.id,
+          email: currentUser.email,
+        });
+      } else {
+        clearSentryUser();
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -205,6 +235,22 @@ const App: React.FC = () => {
     );
   }
 
+  if (showPrivacyPolicy) {
+    return (
+      <ThemeProvider>
+        <PrivacyPolicy onBack={() => setShowPrivacyPolicy(false)} />
+      </ThemeProvider>
+    );
+  }
+
+  if (showTermsOfService) {
+    return (
+      <ThemeProvider>
+        <TermsOfService onBack={() => setShowTermsOfService(false)} />
+      </ThemeProvider>
+    );
+  }
+
   if (!user || showLandingPage) {
     return (
       <ThemeProvider>
@@ -213,12 +259,14 @@ const App: React.FC = () => {
             if (user) {
               handleNavigateToApp();
             } else {
-              const el = document.getElementById('security');
+              const el = document.getElementById('access');
               el?.scrollIntoView({ behavior: 'smooth' });
             }
           }} 
           onLogin={handleLogin}
           user={user}
+          onShowPrivacyPolicy={() => setShowPrivacyPolicy(true)}
+          onShowTermsOfService={() => setShowTermsOfService(true)}
         />
       </ThemeProvider>
     );
@@ -231,7 +279,6 @@ const App: React.FC = () => {
           <Sidebar 
             activeTab={activeTab} 
             setActiveTab={setActiveTab}
-            onSettingsClick={() => setShowSettings(true)}
             onLogoClick={handleNavigateToLanding}
           />
         )}
@@ -276,7 +323,18 @@ const App: React.FC = () => {
 
               <div className="p-6 max-w-7xl mx-auto">
                 {activeTab === 'search' && (
-                  <SearchScreen onReportGenerated={handleReportGenerated} user={user} />
+                  <SearchScreen 
+                    onReportGenerated={handleReportGenerated} 
+                    user={user}
+                    isAnalyzing={isAnalyzing}
+                    setIsAnalyzing={setIsAnalyzing}
+                    loadingProgress={loadingProgress}
+                    setLoadingProgress={setLoadingProgress}
+                    loadingStage={loadingStage}
+                    setLoadingStage={setLoadingStage}
+                    scanningStatus={scanningStatus}
+                    setScanningStatus={setScanningStatus}
+                  />
                 )}
 
                 {activeTab === 'dashboard' && selectedReport && (
@@ -341,11 +399,6 @@ const App: React.FC = () => {
             </>
           )}
         </main>
-
-        <SettingsModal
-          isOpen={showSettings}
-          onClose={() => setShowSettings(false)}
-        />
 
         <ConfirmationModal
           isOpen={confirmModal.isOpen}

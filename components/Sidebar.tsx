@@ -1,15 +1,14 @@
 
 import React from 'react';
-import { Search, LayoutDashboard, History, Settings, ExternalLink } from 'lucide-react';
+import { Search, LayoutDashboard, History, ExternalLink } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: 'search' | 'dashboard' | 'history';
   setActiveTab: (tab: 'search' | 'dashboard' | 'history') => void;
-  onSettingsClick: () => void;
   onLogoClick?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onSettingsClick, onLogoClick }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogoClick }) => {
   const menuItems = [
     { id: 'search', icon: Search, label: 'Search Opponent' },
     { id: 'dashboard', icon: LayoutDashboard, label: 'Active Report' },
@@ -74,13 +73,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onSettingsCl
           <span>FIDE Portal</span>
           <ExternalLink className="w-3 h-3" />
         </a>
-        <button 
-          onClick={onSettingsClick}
-          className="w-full flex items-center gap-3 px-4 py-2 text-slate-400 dark:text-slate-400 text-gray-600 hover:text-white dark:hover:text-white hover:text-gray-900 transition-colors text-sm"
-        >
-          <Settings className="w-4 h-4" />
-          Config
-        </button>
       </div>
     </aside>
   );

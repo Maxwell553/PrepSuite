@@ -5,6 +5,8 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
+  const isProduction = mode === 'production';
+  
   return {
     server: {
       port: 3000,
@@ -24,9 +26,14 @@ export default defineConfig(({ mode }) => {
           rewrite: (path) => path.replace(/^\/fide-proxy/, ''),
         },
         '/uscf-proxy': {
-          target: 'https://www.uschess.org',
+          target: 'https://ratings.uschess.org',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/uscf-proxy/, ''),
+        },
+        '/uscf-msa-proxy': {
+          target: 'https://www.uschess.org',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/uscf-msa-proxy/, '/msa'),
         },
         '/chess-api': {
           target: 'https://api.chess.com',
@@ -37,6 +44,11 @@ export default defineConfig(({ mode }) => {
           target: 'https://lichess.org/api',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/lichess-api/, ''),
+        },
+        '/lichess-export': {
+          target: 'https://lichess.org',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/lichess-export/, ''),
         }
       }
     },
@@ -44,11 +56,16 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
     ],
+    build: {
+      minify: 'esbuild',
+      // Remove console.log statements in production builds
+      esbuildOptions: {
+        drop: isProduction ? ['console', 'debugger'] : [],
+      },
+    },
     define: {
-      // Note: API keys should ideally be on backend, but keeping for backward compatibility
-      // The env.ts module now properly validates and handles missing keys
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY)
+      // API keys are now server-side only (via Supabase Edge Functions)
+      // No client-side API key exposure - all Gemini calls go through edge functions
     },
     resolve: {
       alias: {

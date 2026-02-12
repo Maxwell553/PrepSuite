@@ -37,12 +37,12 @@ export const lichessService = {
         }
     },
 
-    async getRecentGames(username: string, limit: number = 1000): Promise<string> {
+    async getRecentGames(username: string, limit: number = 5000): Promise<string> {
         if (!username) return '';
 
         // Lichess API allows up to 500 games per request, so we need pagination
-        // Fetch up to 1000 games by making 2 requests if needed
-        const targetGames = Math.min(limit, 1000);
+        // Fetch up to 5000 games by making multiple requests if needed
+        const targetGames = Math.min(limit, 5000);
         const gamesPerRequest = 500;
         const numRequests = Math.ceil(targetGames / gamesPerRequest);
         
@@ -53,11 +53,12 @@ export const lichessService = {
         try {
             for (let i = 0; i < numRequests; i++) {
                 const maxGames = Math.min(gamesPerRequest, targetGames - (i * gamesPerRequest));
-                const url = `${BASE_URL}/games/user/${username}?max=${maxGames}&opening=true`;
+                // Request PGNs in the JSON response - Lichess API includes PGN by default in JSON format
+                // But we explicitly request it to ensure it's included
+                // Note: Lichess API returns PGNs in the 'pgn' field when Accept: application/x-ndjson is used
+                // Include moves so we have PGN (or moves array) for game playback; pgnInJson asks for full PGN in JSON when supported
+                const url = `${BASE_URL}/games/user/${username}?max=${maxGames}&opening=true&moves=true&pgnInJson=true`;
                 
-                // For pagination, use the `since` parameter based on the last game's timestamp
-                // But Lichess API doesn't support offset, so we'll fetch most recent games
-                // and rely on the API returning games in reverse chronological order
                 console.log(`[Lichess] Fetching batch ${i + 1}/${numRequests}: up to ${maxGames} games from: ${url}`);
                 
             const response = await fetch(url, {
@@ -88,6 +89,20 @@ export const lichessService = {
                 if (gameLines.length === 0) {
                     console.log(`[Lichess] Batch ${i + 1} returned no games, stopping`);
                     break; // No more games available
+                }
+                
+                // Sample first game to check if PGNs are included
+                if (i === 0 && gameLines.length > 0) {
+                    try {
+                        const sampleGame = JSON.parse(gameLines[0]);
+                        const hasPgn = !!(sampleGame.pgn || sampleGame.moves);
+                        console.log(`[Lichess] Sample game check - Has PGN: ${hasPgn}, Has moves array: ${!!sampleGame.moves}, Available fields:`, Object.keys(sampleGame));
+                        if (!hasPgn) {
+                            console.warn(`[Lichess] WARNING: Games are missing PGN data. The API might not be returning PGNs.`);
+                        }
+                    } catch (e) {
+                        console.warn(`[Lichess] Could not parse sample game to check PGN availability:`, e);
+                    }
                 }
                 
                 allGames.push(...gameLines);

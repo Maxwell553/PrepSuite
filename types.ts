@@ -36,6 +36,18 @@ export interface MoveSequence {
   games: number; // Number of games with this sequence
 }
 
+export interface GameData {
+  id?: string;
+  white: string;
+  black: string;
+  result: string;
+  eco: string;
+  pgn?: string;
+  playedAt: string;
+  source: string;
+  timeControl?: string;
+}
+
 export interface ScoutingReport {
   id: string;
   player: PlayerMetadata;
@@ -57,6 +69,8 @@ export interface ScoutingReport {
     white: MoveSequence[];
     black: MoveSequence[];
   };
+  games?: GameData[]; // All games for analysis board
+  engineDepth?: number; // Stockfish engine depth used for analysis
   lastUpdated: string;
 }
 

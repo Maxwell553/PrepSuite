@@ -137,13 +137,14 @@ export const chessComService = {
   },
 
   /**
-   * Fetches the last 1000 games from Chess.com for a player
+   * Fetches games from Chess.com for a player
    * Fetches ALL games regardless of time control (rapid, blitz, bullet, classical, etc.)
    * @param username - Chess.com username
    * @param deep - Whether to fetch from multiple archives (default: true)
-   * @returns Array of up to 1000 most recent games
+   * @param limit - Maximum number of games to fetch (default: 5000)
+   * @returns Array of up to limit most recent games
    */
-  async getRecentGames(username: string, deep: boolean = true): Promise<any[]> {
+  async getRecentGames(username: string, deep: boolean = true, limit: number = 5000): Promise<any[]> {
     if (!username) {
       console.warn('[ChessCom] getRecentGames called with empty username');
       return [];
@@ -197,17 +198,17 @@ export const chessComService = {
           const oldestDate = `${lastDateMatch[1]}-${lastDateMatch[2]}`;
           console.log(`[ChessCom] Fetching most recent ${recentArchives.length} archive(s) from ${newestDate} (newest) back to ${oldestDate} (oldest)`);
         } else {
-          console.log(`[ChessCom] Will fetch from ${recentArchives.length} recent archive(s) to maximize game count (target: 1000 games)`);
+          console.log(`[ChessCom] Will fetch from ${recentArchives.length} recent archive(s) to maximize game count (target: ${limit} games)`);
         }
       } else {
-        console.log(`[ChessCom] Will fetch from ${recentArchives.length} recent archive(s) to maximize game count (target: 1000 games)`);
+        console.log(`[ChessCom] Will fetch from ${recentArchives.length} recent archive(s) to maximize game count (target: ${limit} games)`);
       }
 
       // Throttled batch processing
       // Process 5 archives at a time to speed up fetching
       // Process NEWEST archives first to ensure newly played games are included
       const BATCH_SIZE = 5;
-      const MAX_GAMES = 1000; // Increased limit to 1000 games
+      const MAX_GAMES = limit;
       const allGames: unknown[] = [];
 
       for (let i = 0; i < recentArchives.length; i += BATCH_SIZE) {
@@ -286,9 +287,9 @@ export const chessComService = {
         return timeB - timeA; // Most recent first (descending order)
       });
 
-      // Return up to 1000 most recent games
-      const maxGames = 1000;
-      const finalGames = sortedGames.slice(0, maxGames); // Take first 1000 (most recent)
+      // Return up to limit most recent games
+      const maxGames = limit;
+      const finalGames = sortedGames.slice(0, maxGames); // Take first limit (most recent)
       console.log(`[ChessCom] Total games fetched for ${username}: ${allGames.length}, returning ${finalGames.length} most recent games (max ${maxGames})`);
       return finalGames;
     } catch (error) {

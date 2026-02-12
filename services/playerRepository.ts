@@ -111,6 +111,13 @@ export const playerRepository = {
             
             console.log('[Repository] Inserting player with data:', JSON.stringify(insertData, null, 2));
             
+            // Verify user is authenticated before insert
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                throw new Error('User must be authenticated to create players. Please log in.');
+            }
+            console.log('[Repository] User authenticated, user_id:', session.user.id);
+            
             const { data: newPlayer, error } = await supabase
                 .from('players')
                 .insert(insertData)
