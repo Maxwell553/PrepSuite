@@ -216,7 +216,7 @@ Find the FIDE/USCF IDs and use the age and rating of the player to cross referen
                 // Use Gemini API via Edge Function (secure server-side call)
                 try {
                     // Must use Google Search - do NOT guess usernames from the player name
-                    const prompt = `Search for this chess player's Chess.com and Lichess accounts: "${officialName}"${fideProfile ? ` (FIDE ID: ${fideProfile.id})` : ''}${uscfProfile ? ` (USCF ID: ${uscfProfile.id})` : ''}.
+                    const prompt = `Search for this chess player's Chess.com and Lichess accounts: "${officialName}"${finalFideId ? ` (FIDE ID: ${finalFideId})` : ''}${finalUscfId ? ` (USCF ID: ${finalUscfId})` : ''}.
 
 CHESS.COM: Use Google Search with site:chess.com/members. Simulate searching chess.com/members by the player name - input the name into the search, find the player in question, then select the most fitting match (correct name, rating, country). Extract the username from the profile URL (chess.com/member/USERNAME or chess.com/player/USERNAME). Also search site:chess.com for additional profile URLs.
 
@@ -424,14 +424,15 @@ Return JSON: {"chessComCandidates":["username or []"],"lichessCandidates":["user
                             }
                             
                             // Verify bio-metric matching (same logic as verifyHandle)
-                            const bio = platform === 'chess.com' ? (profile as Record<string, unknown>).status : (profile as Record<string, unknown>).profile?.['bio'] || '';
+                            const profileAnyScrape = profile as unknown as Record<string, unknown>;
+                            const bio = platform === 'chess.com' ? profileAnyScrape.status : profileAnyScrape.profile?.['bio'] || '';
                             const profileName = platform === 'chess.com'
-                                ? (profile as Record<string, unknown>).name as string
-                                : ((profile as Record<string, unknown>).profile?.['firstName'] as string || '') + ' ' + ((profile as Record<string, unknown>).profile?.['lastName'] as string || '');
+                                ? (profileAnyScrape.name as string) ?? ''
+                                : ((profileAnyScrape.profile?.['firstName'] as string) || '') + ' ' + ((profileAnyScrape.profile?.['lastName'] as string) || '');
                             
                             // Check title match (critical)
                             if (fideProfile?.title && fideProfile.title.trim() !== '') {
-                                const profileTitle = (profile as Record<string, unknown>).title as string || '';
+                                const profileTitle = (profileAnyScrape.title as string) || '';
                                 const profileTitleUpper = profileTitle.toUpperCase().trim();
                                 const fideTitleUpper = fideProfile.title.toUpperCase().trim();
                                 
@@ -594,12 +595,13 @@ Return JSON: {"chessComCandidates":["username or []"],"lichessCandidates":["user
                     console.log(`[Identity] Profile found for ${username} on ${platform}, checking bio-metric match...`);
 
                     // Bio-metric matching
-                    const bio = platform === 'chess.com' ? (profile as Record<string, unknown>).status : (profile as Record<string, unknown>).profile?.['bio'] || '';
+                    const profileAny = profile as unknown as Record<string, unknown>;
+                    const bio = platform === 'chess.com' ? profileAny.status : profileAny.profile?.['bio'] || '';
                     const profileName = platform === 'chess.com'
-                        ? (profile as Record<string, unknown>).name as string
-                        : ((profile as Record<string, unknown>).profile?.['firstName'] as string || '') + ' ' + ((profile as Record<string, unknown>).profile?.['lastName'] as string || '');
+                        ? (profileAny.name as string) ?? ''
+                        : ((profileAny.profile?.['firstName'] as string) || '') + ' ' + ((profileAny.profile?.['lastName'] as string) || '');
 
-                    const titleMatch = fideProfile?.title && (profile as Record<string, unknown>).title === fideProfile.title;
+                    const titleMatch = fideProfile?.title && profileAny.title === fideProfile.title;
 
                     // Extract name parts from official name (handle "Last, First Middle" format)
                     const officialNameClean = officialName.toLowerCase().replace(/[^a-z ]/g, '').trim();
@@ -643,7 +645,7 @@ Return JSON: {"chessComCandidates":["username or []"],"lichessCandidates":["user
                     // CRITICAL: If player has a FIDE title, the profile MUST have that title
                     // This is a strong negative signal - reject immediately if title mismatch
                     if (fideProfile?.title && fideProfile.title.trim() !== '') {
-                        const profileTitle = (profile as Record<string, unknown>).title as string || '';
+                        const profileTitle = (profileAny.title as string) || '';
                         const profileTitleUpper = profileTitle.toUpperCase().trim();
                         const fideTitleUpper = fideProfile.title.toUpperCase().trim();
                         
@@ -692,7 +694,7 @@ Return JSON: {"chessComCandidates":["username or []"],"lichessCandidates":["user
                         console.log(`[Identity] ✓ Medium confidence match: handle + title`);
                         return username;
                     }
-                    if (handleMatch && nameMatch && (platform === 'lichess' ? ((profile as Record<string, unknown>).perfs?.['blitz']?.['rating'] as number || 0) > 2000 : true)) {
+                    if (handleMatch && nameMatch && (platform === 'lichess' ? ((profileAny.perfs?.['blitz']?.['rating'] as number) || 0) > 2000 : true)) {
                         console.log(`[Identity] ✓ Medium confidence match: handle + name`);
                         return username;
                     }

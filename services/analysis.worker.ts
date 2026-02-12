@@ -693,10 +693,11 @@ function parseChessComGames(games: unknown[], targetUsername: string): GameData[
         let eco = 'Unknown';
         if (g.eco) {
             // ECO might be a string like "B20" or an array like ["B20", "Sicilian Defense"]
-            if (typeof g.eco === 'string') {
-                eco = g.eco.split('/').pop() || g.eco;
-            } else if (Array.isArray(g.eco) && g.eco.length > 0) {
-                eco = String(g.eco[0]);
+            const ecoVal = g.eco as string | string[] | undefined;
+            if (typeof ecoVal === 'string') {
+                eco = ecoVal.split('/').pop() || ecoVal;
+            } else if (Array.isArray(ecoVal) && ecoVal.length > 0) {
+                eco = String(ecoVal[0]);
             }
             // Clean up ECO code - remove any non-standard characters
             eco = eco.trim().toUpperCase();
@@ -740,8 +741,8 @@ function parseLichessGames(ndjson: string, targetUsername: string): GameData[] {
             let pgn = g.pgn || '';
             
             // If PGN is missing, construct it from moves (Lichess API may return moves=true instead of full PGN)
-            if (!pgn && (g as any).moves) {
-                const rawMoves = (g as any).moves;
+            const rawMoves = (g as { moves?: string | string[] }).moves;
+            if (!pgn && rawMoves) {
                 const moves: string[] = Array.isArray(rawMoves)
                     ? rawMoves
                     : (typeof rawMoves === 'string' ? rawMoves.trim().split(/\s+/) : []);
@@ -780,11 +781,11 @@ function parseLichessGames(ndjson: string, targetUsername: string): GameData[] {
             console.error(`[Lichess] Failed to parse game at line ${index}:`, e);
             return null;
         }
-    }).filter((g): g is GameData => g !== null);
+    }).filter((g): g is NonNullable<typeof g> => g !== null) as GameData[];
     
     // Log statistics about PGN availability
     const gamesWithPGN = games.filter(g => g.pgn && g.pgn.trim().length > 20).length;
-    console.log(`[Lichess] Parsed ${games.length} games, ${gamesWithPGN} have PGN data (${((gamesWithPGN / games.length) * 100).toFixed(1)}%)`);
+    console.log(`[Lichess] Parsed ${games.length} games, ${games.length > 0 ? ((gamesWithPGN / games.length) * 100).toFixed(1) : '0'}% have PGN data`);
     
     return games;
 }

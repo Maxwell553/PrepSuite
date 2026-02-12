@@ -180,8 +180,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
       
       if (identity.fideProfile || identity.uscfProfile) {
         const ids = [];
-        if (identity.fideProfile) ids.push(`FIDE: ${identity.fideProfile.id}`);
-        if (identity.uscfProfile) ids.push(`USCF: ${identity.uscfProfile.id}`);
+        if (identity.fideProfile && fideId) ids.push(`FIDE: ${fideId}`);
+        if (identity.uscfProfile && uscfId) ids.push(`USCF: ${uscfId}`);
         setScanningStatus(`Step 1 complete: Found ${ids.join(', ')}`);
       } else {
         setScanningStatus('Step 1 complete: No FIDE/USCF IDs found');

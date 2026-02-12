@@ -4,13 +4,15 @@ import { GameData } from '../gameAnalysis';
 
 describe('moveSequenceExtractor', () => {
   const mockGameData: GameData = {
+    id: 'test-1',
+    source: 'lichess',
     white: 'TestPlayer',
     black: 'Opponent',
     result: '1-0',
-    date: '2024.01.01',
+    eco: 'B00',
+    playedAt: '2024-01-01',
+    timeControl: '600',
     pgn: '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7',
-    whiteElo: 1500,
-    blackElo: 1500,
   };
 
   describe('extractMostPlayedLines', () => {

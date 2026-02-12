@@ -110,7 +110,7 @@ describe('chessComService', () => {
         createMockFetchResponse({ games: mockGames })
       );
 
-      const result = await chessComService.getRecentGames('testplayer', 10);
+      const result = await chessComService.getRecentGames('testplayer', true, 10);
       
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
@@ -130,7 +130,7 @@ describe('chessComService', () => {
       // Mock setTimeout to speed up test
       vi.useFakeTimers();
       
-      const promise = chessComService.getRecentGames('testplayer', 10);
+      const promise = chessComService.getRecentGames('testplayer', true, 10);
       
       // Fast-forward time
       await vi.advanceTimersByTimeAsync(2000);

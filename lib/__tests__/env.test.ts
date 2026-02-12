@@ -16,7 +16,7 @@ describe('env', () => {
     it('should return config when env vars are set', async () => {
       vi.stubEnv('VITE_SUPABASE_URL', 'https://test.supabase.co');
       vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'test-anon-key');
-      vi.stubEnv('PROD', '0');
+      vi.stubEnv('PROD', false);
 
       vi.resetModules();
       const { getEnvConfig } = await import('../env');
@@ -51,7 +51,7 @@ describe('env', () => {
     it('should throw error in production when variables are missing', () => {
       vi.stubEnv('VITE_SUPABASE_URL', '');
       vi.stubEnv('VITE_SUPABASE_ANON_KEY', '');
-      vi.stubEnv('PROD', 'true');
+      vi.stubEnv('PROD', true);
 
       expect(() => getEnvConfig()).toThrow();
     });
