@@ -10,13 +10,11 @@ test.describe('Search Flow', () => {
   });
 
   test('should display search screen', async ({ page }) => {
-    // When not logged in: LandingPage is shown. When logged in: SearchScreen with form.
-    // Check for either the search form (logged in) or the landing page CTA (not logged in)
-    const searchForm = page.locator('form').first();
-    const landingCta = page.getByRole('button', { name: /get started|start analyzing|go to dashboard/i });
+    // When not logged in: LandingPage with hero. When logged in: SearchScreen with form.
+    // Use .first() to avoid strict mode violation when multiple elements match
     const heroHeading = page.getByRole('heading', { name: /master your opponent/i });
-    
-    await expect(searchForm.or(landingCta).or(heroHeading)).toBeVisible();
+    const searchForm = page.locator('form').first();
+    await expect(heroHeading.or(searchForm).first()).toBeVisible();
   });
 
   test('should show validation error for empty name', async ({ page }) => {
