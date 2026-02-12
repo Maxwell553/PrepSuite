@@ -680,6 +680,13 @@ export const geminiService = {
             throw new Error('Rate limit exceeded. Please wait a few moments and try again. If this persists, check your Google AI Studio quota.');
           }
           
+          // If WORKER_LIMIT (546) - local Supabase ran out of compute resources
+          if (errorStatus === 546 || errorMessage?.includes('WORKER_LIMIT') || errorMessage?.includes('compute resources')) {
+            throw new Error(
+              'Report generation hit resource limits (546). Try: 1) Restart Supabase functions (stop and run `supabase functions serve` again), 2) Reduce game limit (e.g. 500 instead of 1000), 3) Wait a moment and retry.'
+            );
+          }
+          
           // If 503 (overloaded), use longer backoff
           if (errorStatus === 503 || errorMessage.includes('overloaded')) {
             console.warn(`[Gemini] Model overloaded (503) detected, will retry with longer backoff...`);

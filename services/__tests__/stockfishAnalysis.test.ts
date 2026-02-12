@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StockfishAnalyzer } from '../stockfishAnalysis';
+import { GameData } from '../gameAnalysis';
 
 // Mock Stockfish worker
 class MockStockfishWorker {
@@ -8,7 +9,6 @@ class MockStockfishWorker {
 
   addMessageListener(handler: (line: string) => void) {
     this.listeners.set('message', handler as any);
-    // Simulate UCI ready
     setTimeout(() => {
       handler('uciok');
       this.ready = true;
@@ -43,7 +43,6 @@ class MockStockfishWorker {
     } else if (command.startsWith('position')) {
       // Position set
     } else if (command.startsWith('go depth')) {
-      // Simulate analysis response
       setTimeout(() => {
         const handler = this.listeners.get('message');
         if (handler) {
@@ -51,13 +50,14 @@ class MockStockfishWorker {
           handler({ data: 'bestmove e2e4' } as MessageEvent);
         }
       }, 50);
+    } else if (command === 'ucinewgame') {
+      // New game
     }
   }
 
   terminate() {}
 }
 
-// Mock Worker constructor
 global.Worker = vi.fn().mockImplementation(() => {
   return new MockStockfishWorker() as any;
 }) as any;
@@ -70,8 +70,8 @@ describe('StockfishAnalyzer', () => {
   });
 
   afterEach(async () => {
-    if (analyzer) {
-      await analyzer.cleanup();
+    if (analyzer && typeof analyzer.destroy === 'function') {
+      analyzer.destroy();
     }
   });
 
@@ -79,7 +79,7 @@ describe('StockfishAnalyzer', () => {
     it('should initialize Stockfish engine', async () => {
       analyzer = new StockfishAnalyzer();
       await analyzer.waitForReady();
-      
+
       expect(analyzer).toBeDefined();
     }, 10000);
   });
@@ -94,7 +94,9 @@ describe('StockfishAnalyzer', () => {
 
       expect(evaluation).toBeDefined();
       expect(evaluation).toHaveProperty('evaluation');
-      expect(evaluation).toHaveProperty('depth');
+      expect(evaluation).toHaveProperty('bestMove');
+      // evaluatePosition returns { evaluation, bestMove?, pv? } - no depth in return
+      expect(typeof evaluation.evaluation).toBe('number');
     }, 15000);
   });
 
@@ -103,8 +105,18 @@ describe('StockfishAnalyzer', () => {
       analyzer = new StockfishAnalyzer();
       await analyzer.waitForReady();
 
-      const pgn = '1. e4 e5 2. Nf3 Nc6 3. Bb5';
-      const analysis = await analyzer.analyzeGame(pgn, 'test-game-id', 10);
+      const game: GameData = {
+        id: 'test-game-id',
+        source: 'lichess',
+        white: 'testplayer',
+        black: 'opponent',
+        result: '1-0',
+        eco: 'B00',
+        pgn: '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 Nb8 10. d4 Nbd7',
+        playedAt: '2024-01-01',
+        timeControl: '600',
+      };
+      const analysis = await analyzer.analyzeGame(game, 'testplayer', 10);
 
       expect(analysis).toBeDefined();
       expect(analysis).toHaveProperty('gameId', 'test-game-id');
@@ -113,14 +125,13 @@ describe('StockfishAnalyzer', () => {
     }, 20000);
   });
 
-  describe('cleanup', () => {
+  describe('destroy', () => {
     it('should cleanup resources', async () => {
       analyzer = new StockfishAnalyzer();
       await analyzer.waitForReady();
 
-      await analyzer.cleanup();
+      analyzer.destroy();
 
-      // Cleanup should complete without errors
       expect(true).toBe(true);
     });
   });

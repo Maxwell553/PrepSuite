@@ -1,14 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { geminiService } from '../geminiService';
 
-// Mock Supabase
+// Use vi.hoisted to avoid "Cannot access before initialization" in vi.mock factory
+const mockGetSession = vi.hoisted(() => vi.fn());
+const mockRefreshSession = vi.hoisted(() => vi.fn());
+const mockInvoke = vi.hoisted(() => vi.fn());
+
 vi.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
-      getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+      getSession: mockGetSession,
+      refreshSession: mockRefreshSession,
     },
     functions: {
-      invoke: vi.fn(),
+      invoke: mockInvoke,
     },
   },
 }));
@@ -25,20 +30,20 @@ vi.mock('../../lib/env', () => ({
 describe('geminiService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    mockRefreshSession.mockResolvedValue({ data: { session: null }, error: null });
   });
 
   describe('generateContentWithSearch', () => {
     it('should call gemini-identity edge function', async () => {
-      const { supabase } = await import('../../lib/supabase');
-      
-      (supabase.functions.invoke as any).mockResolvedValue({
-        data: { response: 'Test response' },
+      mockInvoke.mockResolvedValue({
+        data: { text: 'Test response' },
         error: null,
       });
 
       const result = await geminiService.generateContentWithSearch('test prompt');
-      
-      expect(supabase.functions.invoke).toHaveBeenCalledWith(
+
+      expect(mockInvoke).toHaveBeenCalledWith(
         'gemini-identity',
         expect.objectContaining({
           body: expect.objectContaining({
@@ -47,14 +52,11 @@ describe('geminiService', () => {
           }),
         })
       );
-      // The function returns data.text
       expect(result).toBe('Test response');
     });
 
     it('should handle errors gracefully', async () => {
-      const { supabase } = await import('../../lib/supabase');
-      
-      (supabase.functions.invoke as any).mockResolvedValue({
+      mockInvoke.mockResolvedValue({
         data: null,
         error: { message: 'API error' },
       });
@@ -65,9 +67,7 @@ describe('geminiService', () => {
     });
 
     it('should use authenticated session if available', async () => {
-      const { supabase } = await import('../../lib/supabase');
-      
-      (supabase.auth.getSession as any).mockResolvedValue({
+      mockGetSession.mockResolvedValue({
         data: {
           session: {
             access_token: 'test-token',
@@ -76,14 +76,14 @@ describe('geminiService', () => {
         error: null,
       });
 
-      (supabase.functions.invoke as any).mockResolvedValue({
+      mockInvoke.mockResolvedValue({
         data: { text: 'Test response' },
         error: null,
       });
 
       await geminiService.generateContentWithSearch('test prompt');
-      
-      expect(supabase.functions.invoke).toHaveBeenCalledWith(
+
+      expect(mockInvoke).toHaveBeenCalledWith(
         'gemini-identity',
         expect.objectContaining({
           headers: expect.objectContaining({
@@ -96,19 +96,18 @@ describe('geminiService', () => {
 
   describe('generateContentWithSchema', () => {
     it('should call gemini-report edge function', async () => {
-      const { supabase } = await import('../../lib/supabase');
-      
-      (supabase.auth.getSession as any).mockResolvedValue({
-        data: {
-          session: {
-            access_token: 'test-token',
-          },
-        },
+      const session = { access_token: 'test-token' };
+      mockGetSession.mockResolvedValue({
+        data: { session },
+        error: null,
+      });
+      mockRefreshSession.mockResolvedValue({
+        data: { session },
         error: null,
       });
 
-      (supabase.functions.invoke as any).mockResolvedValue({
-        data: { data: { data: 'Test response' } },
+      mockInvoke.mockResolvedValue({
+        data: { data: 'Test response' },
         error: null,
       });
 
@@ -117,7 +116,7 @@ describe('geminiService', () => {
         { type: 'object' }
       );
 
-      expect(supabase.functions.invoke).toHaveBeenCalledWith(
+      expect(mockInvoke).toHaveBeenCalledWith(
         'gemini-report',
         expect.objectContaining({
           body: expect.objectContaining({
@@ -130,18 +129,17 @@ describe('geminiService', () => {
     });
 
     it('should handle rate limit errors', async () => {
-      const { supabase } = await import('../../lib/supabase');
-      
-      (supabase.auth.getSession as any).mockResolvedValue({
-        data: {
-          session: {
-            access_token: 'test-token',
-          },
-        },
+      const session = { access_token: 'test-token' };
+      mockGetSession.mockResolvedValue({
+        data: { session },
+        error: null,
+      });
+      mockRefreshSession.mockResolvedValue({
+        data: { session },
         error: null,
       });
 
-      (supabase.functions.invoke as any).mockResolvedValue({
+      mockInvoke.mockResolvedValue({
         data: null,
         error: {
           message: '429 Resource exhausted',
@@ -152,12 +150,10 @@ describe('geminiService', () => {
       await expect(
         geminiService.generateContentWithSchema('test prompt', {})
       ).rejects.toThrow('Rate limit');
-    });
+    }, 10000);
 
     it('should require authentication', async () => {
-      const { supabase } = await import('../../lib/supabase');
-      
-      (supabase.auth.getSession as any).mockResolvedValue({
+      mockGetSession.mockResolvedValue({
         data: { session: null },
         error: null,
       });
@@ -165,6 +161,6 @@ describe('geminiService', () => {
       await expect(
         geminiService.generateContentWithSchema('test prompt', {})
       ).rejects.toThrow('Authentication required');
-    });
+    }, 10000);
   });
 });

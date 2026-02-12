@@ -229,6 +229,17 @@ After deployment, verify:
 
 ---
 
+## 🔧 Troubleshooting: Report Generation Fails (546 / WORKER_LIMIT)
+
+If you see **"Function failed due to not having enough compute resources"** or status **546** when generating a report:
+
+1. **Restart Supabase functions** – Stop `supabase functions serve` (Ctrl+C) and start it again.
+2. **Use `oneshot` policy** – In `supabase/config.toml`, set `[edge_runtime] policy = "oneshot"` (avoids worker pool limits).
+3. **Reduce game limit** – Lower the game limit (e.g. 500) in the search form to shrink the payload.
+4. **Retry** – Wait a minute and try again; the error is often transient.
+
+---
+
 ## 📚 Additional Resources
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)

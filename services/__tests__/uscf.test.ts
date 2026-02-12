@@ -25,32 +25,32 @@ describe('uscfService', () => {
         </html>
       `;
 
-      // Mock: API fails (3 endpoints), then HTML succeeds
-      (global.fetch as any)
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 1
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 2
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 3
-        .mockResolvedValueOnce(createMockFetchResponse(mockHtml)); // HTML scraping succeeds
+      // USCF tries profile page first, then MSA - 2 fetches per attempt
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // profile attempt 1
+        .mockResolvedValueOnce(createMockFetchResponse(mockHtml)); // MSA attempt 1 succeeds
 
       const result = await uscfService.getProfile('12345678');
 
       expect(result).not.toBeNull();
       expect(result?.name).toContain('Test Player');
       expect(result?.rating).toBe(2400);
-      // Should have tried all 3 API endpoints, then HTML
-      expect(global.fetch).toHaveBeenCalledTimes(4);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
-    it('should use API if available', async () => {
-      const mockApiResponse = {
-        name: 'Test Player',
-        rating: 2400,
-        state: 'CA',
-      };
+    it('should use profile page when available', async () => {
+      // Profile page (first try) uses JSON-style or h1 patterns; MSA uses font/b
+      const mockHtml = `
+        <html>
+          <body>
+            <h1>Test Player</h1>
+            <script type="application/ld+json">{"regular": 2400}</script>
+          </body>
+        </html>
+      `;
 
-      // Mock: First API endpoint succeeds
-      (global.fetch as any).mockResolvedValueOnce(
-        createMockFetchResponse(mockApiResponse)
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+        createMockFetchResponse(mockHtml)
       );
 
       const result = await uscfService.getProfile('12345678');
@@ -58,7 +58,6 @@ describe('uscfService', () => {
       expect(result).not.toBeNull();
       expect(result?.name).toBe('Test Player');
       expect(result?.rating).toBe(2400);
-      // Should only call first API endpoint, not try others or HTML scraping
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
@@ -68,28 +67,26 @@ describe('uscfService', () => {
           <body>
             <font size=+1><b>12345678: Test Player</b></font>
             <table>
-              <tr>
-                <td>Regular Rating</td>
-                <td><b>2200</b></td>
-              </tr>
+              <tr><td>Regular Rating</td><td><b>2200</b></td></tr>
             </table>
           </body>
         </html>
       `;
 
-      // Mock: API fails (3 endpoints), HTML attempt 1 fails, HTML attempt 2 succeeds
-      (global.fetch as any)
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 1
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 2
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 3
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 500)) // HTML attempt 1 fails
-        .mockResolvedValueOnce(createMockFetchResponse(mockHtml)); // HTML attempt 2 succeeds
+      // Each attempt: profile fetch + MSA fetch. Need 6 mocks for 3 attempts, success on last MSA
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // attempt 1 profile
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 500)) // attempt 1 MSA
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // attempt 2 profile
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 500)) // attempt 2 MSA
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // attempt 3 profile
+        .mockResolvedValueOnce(createMockFetchResponse(mockHtml)); // attempt 3 MSA succeeds
 
       const result = await uscfService.getProfile('12345678');
 
       expect(result).not.toBeNull();
-      // Should have tried all 3 API endpoints, then retried HTML scraping
-      expect(global.fetch).toHaveBeenCalledTimes(5);
+      expect(result?.rating).toBe(2200);
+      expect(global.fetch).toHaveBeenCalledTimes(6);
     });
 
     it('should return null for empty USCF ID', async () => {
@@ -100,9 +97,8 @@ describe('uscfService', () => {
     });
 
     it('should handle network errors gracefully', async () => {
-      (global.fetch as any)
-        .mockRejectedValueOnce(new Error('Network error')) // API fails
-        .mockRejectedValueOnce(new Error('Network error')); // HTML fails
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockRejectedValue(new Error('Network error'));
 
       const result = await uscfService.getProfile('12345678');
 
@@ -115,21 +111,15 @@ describe('uscfService', () => {
           <body>
             <font size=+1><b>12345678: Test Player Name</b></font>
             <table>
-              <tr>
-                <td>Regular Rating</td>
-                <td><b>2200</b></td>
-              </tr>
+              <tr><td>Regular Rating</td><td><b>2200</b></td></tr>
             </table>
           </body>
         </html>
       `;
 
-      // Mock: API fails (3 endpoints), then HTML succeeds
-      (global.fetch as any)
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 1
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 2
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 3
-        .mockResolvedValueOnce(createMockFetchResponse(mockHtml)); // HTML succeeds
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404))
+        .mockResolvedValueOnce(createMockFetchResponse(mockHtml));
 
       const result = await uscfService.getProfile('12345678');
 

@@ -10,7 +10,7 @@ describe('fideService', () => {
   });
 
   describe('getProfile', () => {
-    it('should try API first, then fall back to HTML scraping', async () => {
+    it('should fetch profile via HTML scraping', async () => {
       const mockHtml = `
         <html>
           <head><title>Magnus Carlsen FIDE Profile</title></head>
@@ -27,12 +27,11 @@ describe('fideService', () => {
         </html>
       `;
 
-      // Mock: API fails (3 endpoints), then HTML succeeds
-      (global.fetch as any)
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 1
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 2
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 3
-        .mockResolvedValueOnce(createMockFetchResponse(mockHtml)); // HTML scraping succeeds
+      // FIDE now uses HTML scraping only; 1 fetch per attempt, 3 attempts max
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // attempt 1
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // attempt 2
+        .mockResolvedValueOnce(createMockFetchResponse(mockHtml)); // attempt 3 succeeds
 
       const result = await fideService.getProfile('1503014');
 
@@ -40,22 +39,22 @@ describe('fideService', () => {
       expect(result?.name).toContain('Magnus');
       expect(result?.rating).toBe(2850);
       expect(result?.title).toBe('GM');
-      // Should have tried all 3 API endpoints, then HTML
-      expect(global.fetch).toHaveBeenCalledTimes(4);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
     });
 
-    it('should use API if available', async () => {
-      const mockApiResponse = {
-        name: 'Magnus Carlsen',
-        federation: 'NOR',
-        birth_year: '1990',
-        rating: 2850,
-        title: 'GM',
-      };
+    it('should succeed on first attempt when HTML returns valid data', async () => {
+      const mockHtml = `
+        <html>
+          <head><title>Magnus Carlsen FIDE Profile</title></head>
+          <body>
+            <h1 class="player-title">Magnus Carlsen</h1>
+            <div class="profile-standart"><p>2850</p></div>
+          </body>
+        </html>
+      `;
 
-      // Mock: First API endpoint succeeds
-      (global.fetch as any).mockResolvedValueOnce(
-        createMockFetchResponse(mockApiResponse)
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+        createMockFetchResponse(mockHtml)
       );
 
       const result = await fideService.getProfile('1503014');
@@ -63,7 +62,6 @@ describe('fideService', () => {
       expect(result).not.toBeNull();
       expect(result?.name).toBe('Magnus Carlsen');
       expect(result?.rating).toBe(2850);
-      // Should only call first API endpoint, not try others or HTML scraping
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
@@ -73,26 +71,22 @@ describe('fideService', () => {
           <head><title>Test Player FIDE Profile</title></head>
           <body>
             <h1 class="player-title">Test Player</h1>
-            <div class="profile-standart">
-              <p>2500</p>
-            </div>
+            <div class="profile-standart"><p>2500</p></div>
           </body>
         </html>
       `;
 
-      // Mock: API fails (3 endpoints), HTML attempt 1 fails, HTML attempt 2 succeeds
-      (global.fetch as any)
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 1
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 2
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 3
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 500)) // HTML attempt 1 fails
-        .mockResolvedValueOnce(createMockFetchResponse(mockHtml)); // HTML attempt 2 succeeds
+      // 404, 404, then success on 3rd attempt
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404))
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404))
+        .mockResolvedValueOnce(createMockFetchResponse(mockHtml));
 
       const result = await fideService.getProfile('1234567');
 
       expect(result).not.toBeNull();
-      // Should have tried all 3 API endpoints, then retried HTML scraping
-      expect(global.fetch).toHaveBeenCalledTimes(5);
+      expect(result?.rating).toBe(2500);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
     });
 
     it('should return null for empty FIDE ID', async () => {
@@ -103,9 +97,8 @@ describe('fideService', () => {
     });
 
     it('should handle network errors gracefully', async () => {
-      (global.fetch as any)
-        .mockRejectedValueOnce(new Error('Network error')) // API fails
-        .mockRejectedValueOnce(new Error('Network error')); // HTML fails
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockRejectedValue(new Error('Network error'));
 
       const result = await fideService.getProfile('1503014');
 
@@ -126,12 +119,10 @@ describe('fideService', () => {
         </html>
       `;
 
-      // Mock: API fails (3 endpoints), then HTML succeeds
-      (global.fetch as any)
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 1
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 2
-        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404)) // API endpoint 3
-        .mockResolvedValueOnce(createMockFetchResponse(mockHtml)); // HTML succeeds
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404))
+        .mockResolvedValueOnce(createMockFetchResponse(null, false, 404))
+        .mockResolvedValueOnce(createMockFetchResponse(mockHtml));
 
       const result = await fideService.getProfile('1234567');
 

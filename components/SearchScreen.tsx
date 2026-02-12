@@ -15,6 +15,38 @@ import { useTheme } from '../lib/themeContext';
 import { validatePlayerSearch } from '../lib/validation';
 import { parsePGNMoves, formatMoveSequence, truncatePGNToMoves } from '../services/moveSequenceExtractor';
 
+// Prompt size limits: keep token count manageable for 5000+ games while retaining full statistical coverage
+const MAX_GAME_METADATA_IN_PROMPT = 40;
+const MAX_MOVE_LIST_IN_PROMPT = 120;
+const MAX_PGN_SAMPLE_IN_PROMPT = 80;
+
+/** Stratified sample: pick games from each opening group for diversity. Preserves per-opening representation. */
+function stratifiedSample<T>(games: T[], getOpeningKey: (g: T) => string, maxSize: number): T[] {
+  if (games.length <= maxSize) return games;
+  const byOpening: Record<string, T[]> = {};
+  games.forEach(g => {
+    const k = getOpeningKey(g);
+    if (!byOpening[k]) byOpening[k] = [];
+    byOpening[k].push(g);
+  });
+  const groups = Object.values(byOpening);
+  const perGroup = Math.max(1, Math.floor(maxSize / groups.length));
+  const sampled: T[] = [];
+  const used = new Set<T>();
+  groups.forEach(group => {
+    const pick = Math.min(perGroup, group.length);
+    const shuffled = [...group].sort(() => Math.random() - 0.5);
+    for (let i = 0; i < pick && i < shuffled.length; i++) {
+      if (!used.has(shuffled[i])) { sampled.push(shuffled[i]); used.add(shuffled[i]); }
+    }
+  });
+  const remaining = games.filter(g => !used.has(g));
+  for (let i = 0; sampled.length < maxSize && i < remaining.length; i++) {
+    sampled.push(remaining[i]);
+  }
+  return sampled;
+}
+
 interface SearchScreenProps {
   onReportGenerated: (report: ScoutingReport) => void;
   user: SupabaseUser;
@@ -450,10 +482,17 @@ ${openingInsights.length > 0 ? openingInsights.join('\n\n') : 'Insufficient game
       const totalGamesCount = allGames.length;
       const gamesWithPGN = allGames.filter(g => g.pgn && g.pgn.trim().length > 20);
       
-      // Use ALL games with PGN (no sampling) - if user asks for 1000 games, they get 1000
-      const pgnSample = [...gamesWithPGN].sort((a, b) => 
-        new Date(a.playedAt).getTime() - new Date(b.playedAt).getTime()
-      );
+      // Stratified samples for prompt efficiency - full stats still come from ALL games
+      const getOpeningKey = (g: GameData) => (g.openingName || g.eco || 'Unknown').split(/[-:]/)[0].trim();
+      const metadataSample = allGames.length <= MAX_GAME_METADATA_IN_PROMPT
+        ? allGames
+        : stratifiedSample(allGames, getOpeningKey, MAX_GAME_METADATA_IN_PROMPT);
+      const moveListSample = gamesWithPGN.length <= MAX_MOVE_LIST_IN_PROMPT
+        ? gamesWithPGN
+        : stratifiedSample(gamesWithPGN, getOpeningKey, MAX_MOVE_LIST_IN_PROMPT);
+      const pgnSample = gamesWithPGN.length <= MAX_PGN_SAMPLE_IN_PROMPT
+        ? [...gamesWithPGN].sort((a, b) => new Date(a.playedAt).getTime() - new Date(b.playedAt).getTime())
+        : stratifiedSample(gamesWithPGN, getOpeningKey, MAX_PGN_SAMPLE_IN_PROMPT);
       
       // Create comprehensive game summary
       // Use accurate counts - gamesWithPGN is the actual number analyzed
@@ -490,13 +529,12 @@ ${openingInsights.length > 0 ? openingInsights.join('\n\n') : 'Insufficient game
         ⚠️ CRITICAL INSTRUCTION: You have access to ${totalGamesCount} total games fetched, with ${gameSummary.gamesWithPGN} games having complete PGN data for detailed analysis. Use ALL of this data to achieve 100% confidence in your analysis. 
         DO NOT rely on small samples - you have access to the FULL dataset. Every statistic, pattern, and recommendation must be based on the complete data provided.
         
-        DATA SUMMARY (what is passed to you):
-        - Total Games in Dataset: ${totalGamesCount}
-        - Move List: ALL ${totalGamesCount} games, up to 20 moves per game
-        - PGN Sample: ALL ${gameSummary.pgnSampleSize} games, up to 20 moves each (truncated for token efficiency)
-        - Game Metadata: ALL ${totalGamesCount} games (source, players, result, ECO, date)
-        - Chess.com: ${gameSummary.chessComGames} | Lichess: ${gameSummary.lichessGames}
+        DATA SUMMARY (full dataset: ${totalGamesCount} games; compact samples below for token efficiency):
+        - Total Games: ${totalGamesCount} | Chess.com: ${gameSummary.chessComGames} | Lichess: ${gameSummary.lichessGames}
+        - Results: ${allGames.filter(g => g.result === '1-0' || g.result === '0-1').length} decisive, ${allGames.filter(g => g.result === '1/2-1/2').length} draws
         ${gameSummary.dateRange ? `- Date Range: ${new Date(gameSummary.dateRange.earliest).toLocaleDateString()} to ${new Date(gameSummary.dateRange.latest).toLocaleDateString()}` : ''}
+        - Opening stats (whiteOpenings/blackDefenses) below are computed from ALL ${totalGamesCount} games.
+        - Metadata/Move/PGN samples are stratified subsets representing the full dataset.
         
         VERIFIED IDENTITY:
         - FIDE Rating: ${identity.fideProfile?.rating != null ? identity.fideProfile.rating : 'Not found'} (Title: ${identity.fideProfile?.title || 'None'})
@@ -524,16 +562,16 @@ ${openingInsights.length > 0 ? openingInsights.join('\n\n') : 'Insufficient game
         - White: ${(mostPlayedLinesForPrompt.white || []).map((l, i) => `${i + 1}. ${l.notation} (${l.games} games)`).join('\n') || 'None'}
         - Black: ${(mostPlayedLinesForPrompt.black || []).map((l, i) => `${i + 1}. ${l.notation} (${l.games} games)`).join('\n') || 'None'}
 
-        GAME METADATA SUMMARY (ALL ${totalGamesCount} games):
-        ${allGames.map((g, idx) => 
+        GAME METADATA SUMMARY (sample of ${metadataSample.length} games from ${totalGamesCount} - stratified by opening):
+        ${metadataSample.map((g, idx) => 
           `Game ${idx + 1}: ${g.source} | ${g.white} vs ${g.black} | Result: ${g.result} | ECO: ${g.eco} | Date: ${new Date(g.playedAt).toLocaleDateString()} | Time Control: ${g.timeControl}`
         ).join('\n')}
 
-        MOVE LIST (ALL ${totalGamesCount} games, up to 20 moves per game - for pattern verification):
+        MOVE LIST (sample of ${moveListSample.length} games from ${totalGamesCount}, up to 20 moves each - stratified by opening):
         ONLY mention a pattern if it appears in 10+ games. Do NOT cite lines like "appeared twice" - that is NOT a pattern.
         ${(() => {
           const maxMovesPerGame = 20;
-          return allGames.map((g, idx) => {
+          return moveListSample.map((g, idx) => {
             const moves = g.pgn && g.pgn.trim().length > 20 ? parsePGNMoves(g.pgn) : [];
             const movesToShow = moves.length > maxMovesPerGame ? moves.slice(0, maxMovesPerGame) : moves;
             const line = movesToShow.length > 0 ? formatMoveSequence(movesToShow) + (moves.length > maxMovesPerGame ? ' ...' : '') : '(no PGN)';
@@ -541,7 +579,7 @@ ${openingInsights.length > 0 ? openingInsights.join('\n\n') : 'Insufficient game
           }).join('\n');
         })()}
 
-        PGN SAMPLE (ALL ${pgnSample.length} games, up to 20 moves each - tags + truncated movetext):
+        PGN SAMPLE (${pgnSample.length} games from ${totalGamesCount}, up to 20 moves each - stratified by opening):
         ${pgnSample.map((g, idx) => {
           const truncatedPGN = truncatePGNToMoves(g.pgn, 20);
           return `\n--- Game ${idx + 1} (${g.source}, ${new Date(g.playedAt).toLocaleDateString()}) ---\n${truncatedPGN}`;
@@ -570,12 +608,12 @@ ${openingInsights.length > 0 ? openingInsights.join('\n\n') : 'Insufficient game
            - Calculate win rates from the REAL data provided
            
         2. STYLISTIC ANALYSIS (OPENING-SPECIFIC):
-           - Analyze the ${gameSummary.pgnSampleSize} PGN samples for tactical patterns
+           - Analyze the ${pgnSample.length} PGN samples (stratified from ${totalGamesCount} games) for tactical patterns
            - Use the opening-specific Stockfish insights provided above
            - Focus on identifying weaknesses and strengths PER OPENING (not overall)
            - Each opening has its own mistake patterns and accuracy metrics - use these opening-specific insights
            - Identify recurring themes within each opening family
-           - ⚠️ CRITICAL: When analyzing PGN samples, you have ALL ${gameSummary.pgnSampleSize} games. Before claiming a pattern is "common" or "typical", verify it appears in MULTIPLE games (10+). A single game does not establish a pattern.
+           - ⚠️ CRITICAL: PGN sample has ${pgnSample.length} games (stratified from ${totalGamesCount}). Opening stats use all ${totalGamesCount} games. Before claiming a pattern is "common", verify it appears in 10+ games or is supported by aggregate stats. A single game does not establish a pattern.
            - ⚠️ CRITICAL: DO NOT over-emphasize themes from recent games. You have the FULL dataset (${gameSummary.dateRange ? `${new Date(gameSummary.dateRange.earliest).toLocaleDateString()} to ${new Date(gameSummary.dateRange.latest).toLocaleDateString()}` : 'N/A'}). Weight all games equally regardless of when they were played. Recent games should NOT be given more importance than older games in your analysis.
            
         3. STATISTICAL ACCURACY:
