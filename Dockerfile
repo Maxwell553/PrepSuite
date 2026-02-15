@@ -2,10 +2,10 @@
 FROM node:22-slim AS frontend-builder
 WORKDIR /app
 
-# VITE_ vars are baked in at build time (these are public client-side values)
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-ARG VITE_PIPELINE_SERVICE_URL=""
+# Public client-side Supabase config (these are safe to embed — anon key is public by design)
+ENV VITE_SUPABASE_URL=https://luzhlmrytqhdzaxaxlag.supabase.co
+ENV VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx1emhsbXJ5dHFoZHpheGF4bGFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3NDYzOTksImV4cCI6MjA4MzMyMjM5OX0.SzIG6mNl2JfT-m7KrUi1tDwTVoKGYHdiVMsDTZKva-s
+ENV VITE_PIPELINE_SERVICE_URL=
 
 COPY package.json package-lock.json ./
 RUN npm ci
