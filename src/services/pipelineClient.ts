@@ -48,10 +48,8 @@ export async function runPipeline(
   accessToken: string,
   callbacks: PipelineCallbacks = {},
 ): Promise<PipelineResult> {
-  const baseUrl = import.meta.env.VITE_PIPELINE_SERVICE_URL;
-  if (!baseUrl) {
-    throw new Error('VITE_PIPELINE_SERVICE_URL is not configured');
-  }
+  // Default to same-origin when served from the pipeline service
+  const baseUrl = import.meta.env.VITE_PIPELINE_SERVICE_URL || '';
 
   const url = `${baseUrl}/api/analyze`;
 
@@ -170,10 +168,8 @@ export async function chatWithPipeline(
   question: string,
   accessToken: string,
 ): Promise<string> {
-  const baseUrl = import.meta.env.VITE_PIPELINE_SERVICE_URL;
-  if (!baseUrl) {
-    throw new Error('VITE_PIPELINE_SERVICE_URL is not configured');
-  }
+  // Default to same-origin when served from the pipeline service
+  const baseUrl = import.meta.env.VITE_PIPELINE_SERVICE_URL || '';
 
   const url = `${baseUrl}/api/chat`;
 
