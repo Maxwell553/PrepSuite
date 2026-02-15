@@ -1,0 +1,14 @@
+node_modules
+dist
+pipeline-service/node_modules
+pipeline-service/dist
+.git
+.gitignore
+.env*
+*.md
+docs/
+__tests__/
+test-results/
+playwright-report/
+.gemini/
+CLAUDE.md
