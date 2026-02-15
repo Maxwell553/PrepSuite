@@ -62,8 +62,6 @@ jobs:
       - name: Deploy Supabase Edge Functions
         run: |
           npm install -g supabase
-          supabase functions deploy gemini-report --project-ref ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
-          supabase functions deploy gemini-identity --project-ref ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
           supabase functions deploy health --project-ref ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
           supabase functions deploy delete-user --project-ref ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
         env:
@@ -120,8 +118,6 @@ jobs:
       - name: Deploy Supabase Edge Functions
         run: |
           npm install -g supabase
-          supabase functions deploy gemini-report --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
-          supabase functions deploy gemini-identity --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
           supabase functions deploy health --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
           supabase functions deploy delete-user --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
         env:

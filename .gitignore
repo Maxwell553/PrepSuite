@@ -32,9 +32,15 @@ dist-ssr
 # Testing
 coverage
 .nyc_output
+playwright-report
+test-results
 
 # Supabase
 .supabase
 
 # Build outputs
 *.tsbuildinfo
+
+# Pipeline service
+pipeline-service/node_modules
+pipeline-service/dist

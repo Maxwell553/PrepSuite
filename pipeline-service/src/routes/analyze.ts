@@ -1,0 +1,240 @@
+import { Hono } from 'hono';
+import { logger } from '../lib/logger.js';
+import { validateAnalyzeRequest } from '../lib/validation.js';
+import { SSEStream } from '../lib/sse.js';
+import { resolveIdentity } from '../pipeline/identity.js';
+import { fetchGames } from '../pipeline/gameFetcher.js';
+import { parseChessComGames, parseLichessGames } from '../pipeline/gameParser.js';
+import { identifyOpeningsBatch } from '../pipeline/openingClassifier.js';
+import { generateStats } from '../pipeline/statsAggregator.js';
+import { extractMostPlayedLines } from '../pipeline/moveSequenceExtractor.js';
+import { StockfishPool } from '../pipeline/enginePool.js';
+import { sampleGamesForAnalysis } from '../pipeline/engineSampler.js';
+import { buildReportPrompt, reportResponseSchema } from '../pipeline/promptBuilder.js';
+import { generateReport } from '../pipeline/geminiReport.js';
+import { postProcessReport } from '../pipeline/reportPostProcessor.js';
+
+export const analyzeRoute = new Hono();
+
+analyzeRoute.post('/analyze', async (c) => {
+  // Validate input
+  let input;
+  try {
+    const body = await c.req.json();
+    input = validateAnalyzeRequest(body);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Invalid request';
+    return c.json({ error: message }, 400);
+  }
+
+  const user = c.get('user');
+  logger.info({ userId: user.sub, name: input.name }, '[Analyze] Starting pipeline');
+
+  // Create SSE stream
+  const sse = new SSEStream();
+
+  // Create a promise that resolves when the pipeline finishes.
+  // We must NOT return the response until we start piping, and
+  // we must keep the async pipeline referenced so the stream stays open.
+  const pipelinePromise = (async () => {
+    try {
+      // ── Phase 1: Identity ──────────────────────────────────
+      const identityStart = Date.now();
+      sse.sendPhase({ phase: 'identity', status: 'started' });
+
+      const identity = await resolveIdentity(
+        input.name,
+        input.fideId || '',
+        input.uscfId || '',
+        input.chessComUsername || undefined,
+        input.lichessUsername || undefined,
+      );
+
+      sse.sendPhase({
+        phase: 'identity',
+        status: 'complete',
+        durationMs: Date.now() - identityStart,
+      });
+
+      logger.info(
+        {
+          name: identity.verifiedName,
+          chessCom: identity.chessComUsername,
+          lichess: identity.lichessUsername,
+          hasFide: !!identity.fideProfile,
+          hasUscf: !!identity.uscfProfile,
+        },
+        '[Analyze] Identity resolved',
+      );
+
+      // ── Phase 2: Game Fetching ─────────────────────────────
+      const gameLimit = input.gameLimit || 1000;
+      const gameResult = await fetchGames(
+        identity.chessComUsername,
+        identity.lichessUsername,
+        gameLimit,
+        sse,
+      );
+
+      logger.info(
+        {
+          chessComGames: gameResult.chessComGames.length,
+          lichessGames: gameResult.lichessGamesNdjson
+            ? gameResult.lichessGamesNdjson.split('\n').filter((l) => l.trim()).length
+            : 0,
+          durationMs: gameResult.durationMs,
+        },
+        '[Analyze] Games fetched',
+      );
+
+      // ── Phase 3: Parsing + Stats ───────────────────────────
+      const parsingStart = Date.now();
+      sse.sendPhase({ phase: 'parsing', status: 'started' });
+
+      // Parse raw games into GameData[]
+      const chessComGames = parseChessComGames(
+        gameResult.chessComGames,
+        identity.chessComUsername,
+      );
+      const lichessGames = parseLichessGames(
+        gameResult.lichessGamesNdjson,
+        identity.lichessUsername,
+      );
+      const allGames = [...chessComGames, ...lichessGames];
+
+      logger.info(
+        { chessCom: chessComGames.length, lichess: lichessGames.length, total: allGames.length },
+        '[Analyze] Games parsed',
+      );
+
+      // Enrich with ECO library opening names
+      const openingResults = await identifyOpeningsBatch(
+        allGames.map((g) => ({ pgn: g.pgn, eco: g.eco })),
+      );
+      for (const [idx, result] of openingResults) {
+        if (result && allGames[idx]) {
+          allGames[idx].openingName = result.name;
+        }
+      }
+
+      // Determine the target username for stats
+      const targetUsername =
+        identity.chessComUsername || identity.lichessUsername || identity.verifiedName;
+
+      // Generate opening stats for both sides
+      const whiteStats = generateStats(allGames, targetUsername, 'white');
+      const blackStats = generateStats(allGames, targetUsername, 'black');
+
+      // Extract most-played lines
+      const moveSequences = extractMostPlayedLines(allGames, targetUsername, 10, 10);
+
+      sse.sendPhase({
+        phase: 'parsing',
+        status: 'complete',
+        durationMs: Date.now() - parsingStart,
+        gameCount: allGames.length,
+      });
+
+      logger.info(
+        { whiteOpenings: whiteStats.length, blackOpenings: blackStats.length },
+        '[Analyze] Stats generated',
+      );
+
+      // ── Phase 4: Engine Analysis ───────────────────────────
+      const engineStart = Date.now();
+      sse.sendPhase({ phase: 'engine', status: 'started' });
+
+      let engineAnalysis: import('../lib/types.js').GameAnalysis[] = [];
+
+      const sampled = sampleGamesForAnalysis(allGames, 80);
+      if (sampled.length > 0) {
+        let pool: StockfishPool | null = null;
+        try {
+          pool = new StockfishPool({ workerCount: 4, depth: 10 });
+          await pool.initialize();
+
+          engineAnalysis = await pool.analyzeGames(sampled, targetUsername, (current, total) => {
+            sse.sendProgress({ phase: 'engine', current, total });
+          });
+        } catch (err) {
+          logger.warn({ err }, '[Analyze] Engine analysis failed, continuing without it');
+        } finally {
+          if (pool) await pool.shutdown().catch(() => { });
+        }
+      }
+
+      sse.sendPhase({
+        phase: 'engine',
+        status: 'complete',
+        durationMs: Date.now() - engineStart,
+        gamesAnalyzed: engineAnalysis.length,
+      });
+
+      logger.info(
+        { gamesAnalyzed: engineAnalysis.length, durationMs: Date.now() - engineStart },
+        '[Analyze] Engine analysis complete',
+      );
+
+      // ── Phase 5: Report Generation ─────────────────────────
+      const reportStart = Date.now();
+      sse.sendPhase({ phase: 'report', status: 'started' });
+
+
+
+      const prompt = buildReportPrompt({
+        identity,
+        allGames,
+        whiteStats,
+        blackStats,
+        moveSequences,
+        engineAnalysis,
+        targetUsername,
+      });
+
+      logger.info(
+        { promptLength: prompt.length },
+        '[Analyze] Built report prompt',
+      );
+
+      const rawReport = await generateReport(prompt, reportResponseSchema);
+
+      const report = postProcessReport(rawReport, {
+        identity,
+        whiteStats,
+        blackStats,
+        moveSequences,
+        allGames,
+      });
+
+      sse.sendPhase({
+        phase: 'report',
+        status: 'complete',
+        durationMs: Date.now() - reportStart,
+      });
+
+      logger.info(
+        { reportId: report.id, durationMs: Date.now() - reportStart },
+        '[Analyze] Report generated',
+      );
+
+      // ── Complete ───────────────────────────────────────────
+      sse.sendComplete({ report });
+
+      logger.info('[Analyze] Pipeline complete, sent complete event');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Pipeline error';
+      logger.error({ err }, '[Analyze] Pipeline error');
+      sse.sendError({ error: message });
+    } finally {
+      sse.close();
+    }
+  })();
+
+  // Attach the pipeline promise to the response so node-server keeps
+  // the connection alive until the async work (and stream writes) finish.
+  const resp = sse.response();
+  // Keep the pipeline referenced to prevent GC and ensure the stream stays open.
+  // @hono/node-server will keep writing chunks as long as the ReadableStream is open.
+  pipelinePromise.catch(() => { });  // Prevent unhandled rejection (errors go via SSE)
+  return resp;
+});

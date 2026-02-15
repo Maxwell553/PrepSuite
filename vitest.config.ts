@@ -34,11 +34,11 @@ export default defineConfig({
       },
     },
     include: ['**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**', 'pipeline-service/**'],
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, '.'),
+      '@': path.resolve(__dirname, 'src'),
     },
   },
 });

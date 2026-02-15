@@ -92,33 +92,41 @@ PrepSuite is a comprehensive chess scouting platform that aggregates player data
 
 ```
 prepsuite/
-├── components/          # React components
-│   ├── SearchScreen.tsx
-│   ├── ReportDashboard.tsx
-│   ├── ErrorBoundary.tsx
-│   └── ...
-├── services/           # Business logic services
-│   ├── chessCom.ts     # Chess.com API integration
-│   ├── lichess.ts      # Lichess API integration
-│   ├── fide.ts         # FIDE profile scraping
-│   ├── uscf.ts         # USCF profile scraping
-│   ├── geminiService.ts # AI report generation
-│   ├── gameAnalysis.ts  # Game parsing and analysis
-│   └── ...
-├── lib/                # Utilities and configuration
-│   ├── supabase.ts     # Supabase client
-│   ├── env.ts          # Environment validation
-│   ├── validation.ts   # Input validation schemas
-│   ├── errorUtils.ts   # Error handling utilities
-│   └── sentry.ts       # Sentry error tracking
+├── src/                 # Application source code
+│   ├── App.tsx          # Main app component
+│   ├── index.tsx        # Entry point
+│   ├── index.css        # Global styles
+│   ├── types.ts         # TypeScript type definitions
+│   ├── components/      # React components
+│   │   ├── SearchScreen.tsx
+│   │   ├── ReportDashboard.tsx
+│   │   ├── ErrorBoundary.tsx
+│   │   └── ...
+│   ├── services/        # Business logic services
+│   │   ├── chessCom.ts  # Chess.com API integration
+│   │   ├── lichess.ts   # Lichess API integration
+│   │   ├── fide.ts      # FIDE profile scraping
+│   │   ├── uscf.ts      # USCF profile scraping
+│   │   ├── geminiService.ts # AI report generation
+│   │   ├── gameAnalysis.ts  # Game parsing and analysis
+│   │   └── ...
+│   ├── lib/             # Utilities and configuration
+│   │   ├── supabase.ts  # Supabase client
+│   │   ├── env.ts       # Environment validation
+│   │   ├── validation.ts # Input validation schemas
+│   │   ├── errorUtils.ts # Error handling utilities
+│   │   └── sentry.ts    # Sentry error tracking
+│   └── hooks/           # Custom React hooks
+├── docs/                # Current documentation
+│   └── bak/             # Historical/archived docs
 ├── supabase/
-│   ├── functions/      # Edge functions
+│   ├── functions/       # Edge functions
 │   │   ├── gemini-identity/
 │   │   ├── gemini-report/
 │   │   └── health/
-│   └── migrations/    # Database migrations
-├── e2e/                # E2E tests (Playwright)
-└── __tests__/          # Unit tests
+│   └── migrations/      # Database migrations
+├── e2e/                 # E2E tests (Playwright)
+└── __tests__/           # Shared test utilities
 ```
 
 ---
@@ -218,11 +226,16 @@ Returns:
 
 ## Documentation
 
-- `PRODUCTION_READINESS_ANALYSIS.md` - Comprehensive production readiness analysis
-- `SECURITY_AUDIT.md` - Security audit results
-- `TESTING_COMPLETE.md` - Testing implementation details
-- `DEPLOYMENT.md` - Deployment guide
-- `EDGE_FUNCTIONS_SETUP.md` - Edge functions setup guide
+Current documentation lives in `docs/`:
+
+- `docs/DEPLOYMENT_SETUP.md` - Deployment and CI/CD setup guide
+- `docs/SECURITY_AUDIT.md` - Security audit results
+- `docs/EDGE_FUNCTIONS_SETUP.md` - Edge functions setup guide
+- `docs/SETUP_CHECKLIST.md` - Initial setup checklist
+- `docs/OAUTH_SETUP.md` - OAuth configuration
+- `docs/ALTERNATIVE_DATABASES.md` - Alternative chess data sources
+
+Historical analysis docs are archived in `docs/bak/`.
 
 ---
 

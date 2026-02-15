@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   const isProduction = mode === 'production';
-  
+
   return {
     server: {
       port: 3000,
@@ -20,31 +20,6 @@ export default defineConfig(({ mode }) => {
         ignored: ['**/terminals/**', '**/node_modules/**', '**/.git/**']
       },
       proxy: {
-        '/fide-proxy': {
-          target: 'https://ratings.fide.com',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/fide-proxy/, ''),
-        },
-        '/uscf-proxy': {
-          target: 'https://ratings.uschess.org',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/uscf-proxy/, ''),
-        },
-        '/uscf-msa-proxy': {
-          target: 'https://www.uschess.org',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/uscf-msa-proxy/, '/msa'),
-        },
-        '/chess-api': {
-          target: 'https://api.chess.com',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/chess-api/, ''),
-        },
-        '/lichess-api': {
-          target: 'https://lichess.org/api',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/lichess-api/, ''),
-        },
         '/lichess-export': {
           target: 'https://lichess.org',
           changeOrigin: true,
@@ -69,7 +44,7 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(__dirname, 'src'),
       }
     }
   };
