@@ -1,6 +1,12 @@
 # ── Stage 1: Build Vite frontend ──────────────────────────────────────
 FROM node:22-slim AS frontend-builder
 WORKDIR /app
+
+# VITE_ vars are baked in at build time (these are public client-side values)
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_PIPELINE_SERVICE_URL=""
+
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY index.html vite.config.ts tsconfig.json ./
