@@ -9,14 +9,15 @@ import { getAccessToken, getVertexUrl } from '../lib/vertexAuth.js';
 import { validateChatRequest } from '../lib/validation.js';
 import type { ChatContext } from '../lib/types.js';
 
-const GEMINI_MODEL_PRIMARY = 'gemini-3-flash-preview';
-const GEMINI_MODEL_FALLBACK = 'gemini-2.5-flash';
+// Same models as identity (geminiFallback) and report generation (geminiReport)
+const GEMINI_MODELS = ['gemini-3-flash-preview', 'gemini-2.5-flash'] as const;
 const GEMINI_TIMEOUT_MS = 60_000;
 
-function shouldFallbackTo25(status: number, errorText: string): boolean {
-  if (status === 404) return true;
-  if (status === 501) return true;
-  if (status === 400 && /model|not found|unavailable/i.test(errorText)) return true;
+/** Fall back to next model on 400/404/501 (model/request issues) or when error suggests model problem */
+function shouldTryNextModel(status: number, errorText: string): boolean {
+  if (status === 404 || status === 501) return true;
+  if (status === 400) return true; // 400 often means model not available or invalid request for this model
+  if (/model|not found|unavailable|not supported/i.test(errorText)) return true;
   return false;
 }
 
@@ -131,14 +132,16 @@ chatRoute.post('/chat', async (c) => {
 
   const prompt = buildChatPrompt(input.report as ChatContext, input.question);
   const requestBody = {
-    contents: [{ parts: [{ text: prompt }] }],
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       maxOutputTokens: 16384,
       temperature: 0.7,
     },
   };
 
-  for (const model of [GEMINI_MODEL_PRIMARY, GEMINI_MODEL_FALLBACK]) {
+  let lastError = '';
+  for (let i = 0; i < GEMINI_MODELS.length; i++) {
+    const model = GEMINI_MODELS[i];
     try {
       const geminiUrl = getVertexUrl(model);
       const accessToken = await getAccessToken();
@@ -155,12 +158,13 @@ chatRoute.post('/chat', async (c) => {
 
       if (!res.ok) {
         const errorText = await res.text().catch(() => 'unable to read');
-        logger.error({ status: res.status, errorText: errorText.slice(0, 200) }, '[Chat] Gemini API error');
-        if (model === GEMINI_MODEL_PRIMARY && shouldFallbackTo25(res.status, errorText)) {
-          logger.warn({ model: GEMINI_MODEL_PRIMARY }, '[Chat] Primary model failed, falling back to 2.5');
+        lastError = `Vertex AI ${model}: ${res.status} - ${errorText.slice(0, 150)}`;
+        logger.error({ model, status: res.status, errorText: errorText.slice(0, 300) }, '[Chat] Gemini API error');
+        if (shouldTryNextModel(res.status, errorText) && i < GEMINI_MODELS.length - 1) {
+          logger.warn({ model, nextModel: GEMINI_MODELS[i + 1] }, '[Chat] Model failed, trying next');
           continue;
         }
-        return c.json({ error: `AI service error: ${res.status}` }, 502);
+        return c.json({ error: `AI service error: ${res.status}. ${errorText.slice(0, 100)}` }, 502);
       }
 
       const data = await res.json();
@@ -181,18 +185,19 @@ chatRoute.post('/chat', async (c) => {
       return c.json({ text });
     } catch (err: unknown) {
       const errObj = err as { name?: string; message?: string };
+      lastError = errObj.message ?? String(err);
       if (errObj.name === 'AbortError' || errObj.name === 'TimeoutError') {
         logger.warn('[Chat] Request timed out');
         return c.json({ error: 'AI request timed out' }, 504);
       }
-      if (model === GEMINI_MODEL_PRIMARY && /404|501|model.*not found/i.test(errObj.message ?? '')) {
-        logger.warn({ model: GEMINI_MODEL_PRIMARY, err: errObj.message }, '[Chat] Primary model failed, falling back to 2.5');
+      if (i < GEMINI_MODELS.length - 1 && /404|501|model|not found/i.test(errObj.message ?? '')) {
+        logger.warn({ model, err: errObj.message, nextModel: GEMINI_MODELS[i + 1] }, '[Chat] Model failed, trying next');
         continue;
       }
-      logger.error({ err }, '[Chat] Error');
-      return c.json({ error: 'Chat request failed' }, 500);
+      logger.error({ model, err }, '[Chat] Error');
+      return c.json({ error: `Chat request failed: ${lastError.slice(0, 100)}` }, 500);
     }
   }
 
-  return c.json({ error: 'AI service unavailable' }, 502);
+  return c.json({ error: `AI service unavailable. Last error: ${lastError.slice(0, 150)}` }, 502);
 });

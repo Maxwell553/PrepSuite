@@ -16,6 +16,12 @@ vi.mock('../../src/lib/logger.js', () => ({
   },
 }));
 
+// Mock Vertex AI auth so tests don't need GCP credentials
+vi.mock('../../src/lib/vertexAuth.js', () => ({
+  getAccessToken: vi.fn().mockResolvedValue('mock-token'),
+  getVertexUrl: vi.fn().mockReturnValue('https://us-central1-aiplatform.googleapis.com/v1/projects/test/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent'),
+}));
+
 import { chatRoute } from '../../src/routes/chat.js';
 
 function createApp() {
@@ -124,7 +130,7 @@ describe('POST /api/chat', () => {
   });
 
   it('handles Gemini error gracefully', async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       new Response('Internal Server Error', { status: 500 }),
     );
 

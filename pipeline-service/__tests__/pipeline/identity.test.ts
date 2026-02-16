@@ -49,6 +49,7 @@ beforeEach(() => {
 describe('resolveIdentity', () => {
   it('uses provided FIDE ID without searching', async () => {
     mockedSearchUscf.mockResolvedValue([]);
+    mockedSearchUsernames.mockResolvedValue({ chessComCandidates: [], lichessCandidates: [] });
     mockedGetFide.mockResolvedValue({
       name: 'Carlsen, Magnus',
       federation: 'NOR',
@@ -66,6 +67,8 @@ describe('resolveIdentity', () => {
   });
 
   it('searches FIDE by name when no ID provided', async () => {
+    mockedSearchUsernames.mockResolvedValue({ chessComCandidates: [], lichessCandidates: [] });
+    mockedSearchIds.mockResolvedValue({ fideId: null, uscfId: null });
     mockedSearchFide.mockResolvedValue([
       { fideId: '1503014', name: 'Carlsen, Magnus', federation: 'NOR', title: 'GM' },
     ]);

@@ -68,14 +68,26 @@ describe('verifyHandle', () => {
     expect(result).toBe('magnuscarlsen');
   });
 
-  it('accepts on title match alone (strong evidence)', () => {
+  it('rejects when title matches but name not in bio or profile', () => {
     const profile = {
       username: 'unknownhandle',
       title: 'GM',
       name: '',
+      status: '',
     } as unknown as ChessComProfile;
     const result = verifyHandle('unknownhandle', 'chess.com', profile, 'Magnus Carlsen', fideProfile);
-    expect(result).toBe('unknownhandle');
+    expect(result).toBeNull();
+  });
+
+  it('accepts when title matches + name in bio', () => {
+    const profile = {
+      username: 'magnuscarlsen',
+      title: 'GM',
+      name: '',
+      status: 'Magnus Carlsen, World Champion',
+    } as unknown as ChessComProfile;
+    const result = verifyHandle('magnuscarlsen', 'chess.com', profile, 'Magnus Carlsen', fideProfile);
+    expect(result).toBe('magnuscarlsen');
   });
 
   it('accepts on name match without title', () => {

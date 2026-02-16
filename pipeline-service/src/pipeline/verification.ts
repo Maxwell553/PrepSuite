@@ -36,11 +36,9 @@ export function namesMatch(searchName: string, profileName: string): boolean {
 }
 
 /**
- * Verification of a platform username against known player identity.
- * Uses profile data from Chess.com/Lichess APIs: name, title, bio.
- * Compares platform profile name and title to FIDE/USCF data.
- * Does NOT use username string matching (e.g. "groff" in "jmwgroff").
- * If FIDE/USCF has a title and the platform profile does not, reject.
+ * Verification of a platform username found via Vertex/Google Search.
+ * Cross-checks: (1) same title as player, (2) player name appears in profile bio.
+ * If both true, assume that is the correct username.
  * Returns the username if verified, null otherwise.
  */
 export function verifyHandle(
@@ -53,17 +51,7 @@ export function verifyHandle(
 ): string | null {
   const profileAny = profile as unknown as Record<string, unknown>;
 
-  // Extract profile name from platform APIs (Chess.com: name; Lichess: realName or firstName+lastName)
-  const profileName =
-    platform === 'chess.com'
-      ? ((profileAny.name as string) ?? '')
-      : (((profileAny.profile as Record<string, unknown>)?.['realName'] as string) || '').trim() ||
-        [((profileAny.profile as Record<string, unknown>)?.['firstName'] as string) || '', ((profileAny.profile as Record<string, unknown>)?.['lastName'] as string) || '']
-          .filter(Boolean)
-          .join(' ')
-          .trim();
-
-  // Extract bio
+  // Bio: Chess.com uses "status", Lichess uses profile.bio
   const bio =
     platform === 'chess.com'
       ? (profileAny.status as string) || ''
@@ -72,7 +60,7 @@ export function verifyHandle(
   const profileTitle = ((profileAny.title as string) || '').toUpperCase().trim();
   const expectedTitle = (fideProfile?.title || uscfProfile?.title || '').toUpperCase().trim();
 
-  // CRITICAL: If we have an official title and platform doesn't, reject
+  // 1. Title: if player has FIDE/USCF title, profile must have same title
   if (expectedTitle) {
     if (!profileTitle) {
       logger.info({ username, platform, expectedTitle }, '[Verify] Rejecting: platform missing title');
@@ -82,39 +70,38 @@ export function verifyHandle(
       logger.info({ username, platform, expectedTitle, profileTitle }, '[Verify] Rejecting: title mismatch');
       return null;
     }
-    if (profileTitle === expectedTitle) {
-      logger.info({ username, platform, title: expectedTitle }, '[Verify] Title match');
-      // Title match + profile name match = accept
-      const nameMatch = namesMatch(officialName, profileName);
-      if (nameMatch) {
-        logger.info({ username, platform }, '[Verify] Accepting: title + profile name match');
-        return username;
-      }
-      // Title match alone is strong evidence when profile name is empty (user didn't fill it)
-      if (!profileName.trim()) {
-        logger.info({ username, platform }, '[Verify] Accepting: title match (profile name empty)');
-        return username;
-      }
-      // Title matches but profile name doesn't - reject (wrong person)
-      logger.info({ username, platform, profileName, officialName }, '[Verify] Rejecting: title match but profile name mismatch');
-      return null;
-    }
   }
 
-  // Profile-based verification only (no username string matching)
-  const nameMatch = namesMatch(officialName, profileName);
-  const titleMatch = expectedTitle && profileTitle === expectedTitle;
-  const birthYearInBio = fideProfile?.birthYear ? bio.includes(fideProfile.birthYear) : false;
+  // 2. Name in bio: player name must appear in profile bio (or profile name field)
+  const profileName =
+    platform === 'chess.com'
+      ? ((profileAny.name as string) ?? '')
+      : (((profileAny.profile as Record<string, unknown>)?.['realName'] as string) || '').trim() ||
+        [((profileAny.profile as Record<string, unknown>)?.['firstName'] as string) || '', ((profileAny.profile as Record<string, unknown>)?.['lastName'] as string) || '']
+          .filter(Boolean)
+          .join(' ')
+          .trim();
 
-  // Accept when profile name matches FIDE/USCF
-  if (nameMatch && titleMatch) return username;
-  if (nameMatch && birthYearInBio) return username;
+  const nameInBio = bio.toLowerCase().includes(officialName.toLowerCase().trim());
+  const nameInProfile = namesMatch(officialName, profileName);
+  const nameMatch = nameInBio || nameInProfile;
+
+  // When we have a title: both title match AND name in bio/profile required
+  // When no title: name in bio or profile is sufficient
+  if (expectedTitle) {
+    if (nameMatch) {
+      logger.info({ username, platform }, '[Verify] Accepting: title + name in bio/profile');
+      return username;
+    }
+    logger.info({ username, platform, officialName }, '[Verify] Rejecting: title matches but name not in bio/profile');
+    return null;
+  }
+
   if (nameMatch) {
-    logger.info({ username, platform }, '[Verify] Accepting based on profile name match');
+    logger.info({ username, platform }, '[Verify] Accepting: name in bio/profile (no title to check)');
     return username;
   }
-  if (titleMatch && birthYearInBio) return username;
 
-  logger.info({ username, platform, profileName, officialName }, '[Verify] No match found');
+  logger.info({ username, platform, officialName }, '[Verify] Rejecting: name not in bio or profile');
   return null;
 }

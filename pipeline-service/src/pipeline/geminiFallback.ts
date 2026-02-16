@@ -165,35 +165,31 @@ Return ONLY raw JSON with no markdown or code blocks: {"fideId":number or null,"
  */
 export async function searchUsernamesViaGemini(
   playerName: string,
-  fideId: string | null,
-  uscfId: string | null,
+  _fideId: string | null,
+  _uscfId: string | null,
 ): Promise<GeminiUsernameResult> {
-  const idContext = [
-    fideId ? `FIDE ID: ${fideId}` : null,
-    uscfId ? `USCF ID: ${uscfId}` : null,
-  ]
-    .filter(Boolean)
-    .join(', ');
-
+  // Chess.com and Lichess discovery: Vertex/Google Search only. No other sources.
   const prompts = [
-    `Search for this chess player's Chess.com and Lichess accounts: "${playerName}"${idContext ? ` (${idContext})` : ''}.
+    `Search the web for this chess player's Chess.com and Lichess profiles: "${playerName}".
 
-CHESS.COM: Use Google Search with these queries:
-- site:chess.com/member "${playerName}"
-- site:chess.com/player "${playerName}"
+You MUST use Google Search. Perform these searches:
+
+CHESS.COM:
+- "${playerName} chess.com"
 - site:chess.com/members "${playerName}"
-Extract the username from profile URLs (chess.com/member/USERNAME, chess.com/player/USERNAME, or chess.com/members/USERNAME). Match by name, rating, and country.
+- site:chess.com/member "${playerName}"
+Extract usernames from profile URLs (chess.com/member/USERNAME, chess.com/members/USERNAME).
 
-LICHESS: Use Google Search with:
-- site:lichess.org "@${playerName}"
+LICHESS:
+- "${playerName} lichess"
 - site:lichess.org "${playerName}"
-Extract the username from lichess.org/@/USERNAME URLs.
+Extract usernames from lichess.org/@/USERNAME URLs.
 
 Return ONLY usernames found in search results. Do NOT guess.
 Return JSON: {"chessComCandidates":["username1","username2"] or [],"lichessCandidates":["username1"] or []}.`,
 
-    `Find Chess.com and Lichess usernames for chess player "${playerName}"${idContext ? ` (${idContext})` : ''}.
-Search: "chess.com ${playerName}" and "lichess ${playerName}" and "lichess.org ${playerName}".
+    `Find Chess.com and Lichess usernames for chess player "${playerName}".
+Search: "${playerName} chess.com" and "${playerName} lichess" and site:chess.com/members "${playerName}".
 Extract usernames from URLs. Return JSON: {"chessComCandidates":[],"lichessCandidates":[]}.`,
   ];
 

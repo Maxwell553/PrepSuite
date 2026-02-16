@@ -48,20 +48,6 @@ async function getLichessProfile(username: string): Promise<LichessProfile | nul
   }
 }
 
-// ─── Bogus name filter ──────────────────────────────────────────────
-
-const BOGUS_NAMES = [
-  'Chess Players Arbiters Trainers Database',
-  'FIDE Profile',
-  'US Chess',
-  'Player Search',
-  'Ratings',
-];
-
-function isBogusName(s: string): boolean {
-  return BOGUS_NAMES.some((b) => s.includes(b)) || s.length > 60;
-}
-
 // ─── Main orchestrator ──────────────────────────────────────────────
 
 export async function resolveIdentity(
@@ -191,22 +177,9 @@ export async function resolveIdentity(
       }
     }
 
-    // Normalize "LastName, FirstName" → "FirstName LastName"
-    const normalizeName = (n: string): string => {
-      const parts = n.split(',').map((p) => p.trim());
-      if (parts.length === 2 && parts[0] && parts[1]) {
-        return `${parts[1]} ${parts[0]}`;
-      }
-      return n;
-    };
-
-    // Resolve official name (prefer FIDE, then USCF, then input)
+    // Always use the name provided by the user in the search box for the report.
+    // Do NOT override with FIDE/USCF profile names — the user's input is authoritative.
     officialName = inputName.trim();
-    if (fideProfile?.name?.trim() && !isBogusName(fideProfile.name.trim())) {
-      officialName = normalizeName(fideProfile.name.trim());
-    } else if (uscfProfile?.name?.trim() && !isBogusName(uscfProfile.name.trim())) {
-      officialName = normalizeName(uscfProfile.name.trim());
-    }
 
     // ── Step 4: Platform usernames ──────────────────────────────────
     let verifiedChessCom = '';
