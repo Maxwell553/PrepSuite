@@ -1,5 +1,26 @@
 @import "tailwindcss";
 
+/* Use .dark class instead of prefers-color-scheme - app is always dark regardless of system setting */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Force dark mode regardless of system preference - forbids browser from overriding */
+html {
+    color-scheme: dark;
+}
+@supports (color-scheme: only dark) {
+    html {
+        color-scheme: only dark;
+    }
+}
+
+/* Override system light mode - ensure dark canvas even when prefers-color-scheme: light */
+@media (prefers-color-scheme: light) {
+    html, body, #root {
+        background-color: #0f172a !important;
+        color: #f1f5f9 !important;
+    }
+}
+
 html, body {
     overflow-x: hidden;
     overscroll-behavior: none;
