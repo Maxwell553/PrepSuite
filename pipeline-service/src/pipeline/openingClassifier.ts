@@ -100,70 +100,81 @@ export async function identifyOpeningsBatch(
   }
 
   const results = new Map<number, OpeningResult | null>();
-  let pgnMatchCount = 0;
-  let ecoMatchCount = 0;
-  let noMatchCount = 0;
-  let parseFailCount = 0;
+  const CHUNK_SIZE = 50;
 
-  for (let i = 0; i < games.length; i++) {
-    const g = games[i];
-    if (!g.pgn || g.pgn.trim().length < 10) {
-      parseFailCount++;
-      results.set(i, null);
-      continue;
-    }
-
-    try {
-      const chess = new Chess();
-      const movetext = extractMovetext(g.pgn);
-      if (!movetext) {
-        parseFailCount++;
+  async function processChunk(indices: number[]): Promise<{ pgnMatch: number; ecoMatch: number; noMatch: number; parseFail: number }> {
+    let pgnMatch = 0;
+    let ecoMatch = 0;
+    let noMatch = 0;
+    let parseFail = 0;
+    for (const i of indices) {
+      const g = games[i];
+      if (!g.pgn || g.pgn.trim().length < 10) {
+        parseFail++;
         results.set(i, null);
         continue;
       }
-
-      const standardPgn = normalizeToStandardPgn(movetext);
       try {
-        chess.loadPgn(`[White "?"]\n[Black "?"]\n\n${standardPgn}`);
-      } catch {
-        parseFailCount++;
-        results.set(i, null);
-        continue;
-      }
-
-      const result = lookupByMoves(chess, book, {
-        positionBook: posBook,
-        maxMovesBack: 30,
-      });
-
-      if (result.opening) {
-        pgnMatchCount++;
-        results.set(i, {
-          name: result.opening.name,
-          eco: result.opening.eco,
-          moves: result.opening.moves || '',
+        const chess = new Chess();
+        const movetext = extractMovetext(g.pgn);
+        if (!movetext) {
+          parseFail++;
+          results.set(i, null);
+          continue;
+        }
+        const standardPgn = normalizeToStandardPgn(movetext);
+        try {
+          chess.loadPgn(`[White "?"]\n[Black "?"]\n\n${standardPgn}`);
+        } catch {
+          parseFail++;
+          results.set(i, null);
+          continue;
+        }
+        const result = lookupByMoves(chess, book, {
+          positionBook: posBook,
+          maxMovesBack: 30,
         });
-      } else {
-        const ecoCode = normalizeEco(g.eco);
-        if (ecoCode) {
-          const name = await lookupByEcoCode(book, ecoCode);
-          if (name) {
-            ecoMatchCount++;
-            results.set(i, { name, eco: ecoCode, moves: '' });
+        if (result.opening) {
+          pgnMatch++;
+          results.set(i, {
+            name: result.opening.name,
+            eco: result.opening.eco,
+            moves: result.opening.moves || '',
+          });
+        } else {
+          const ecoCode = normalizeEco(g.eco);
+          if (ecoCode) {
+            const name = await lookupByEcoCode(book, ecoCode);
+            if (name) {
+              ecoMatch++;
+              results.set(i, { name, eco: ecoCode, moves: '' });
+            } else {
+              noMatch++;
+              results.set(i, null);
+            }
           } else {
-            noMatchCount++;
+            noMatch++;
             results.set(i, null);
           }
-        } else {
-          noMatchCount++;
-          results.set(i, null);
         }
+      } catch {
+        parseFail++;
+        results.set(i, null);
       }
-    } catch {
-      parseFailCount++;
-      results.set(i, null);
     }
+    return { pgnMatch, ecoMatch, noMatch, parseFail };
   }
+
+  const chunks: number[][] = [];
+  for (let i = 0; i < games.length; i += CHUNK_SIZE) {
+    chunks.push(Array.from({ length: Math.min(CHUNK_SIZE, games.length - i) }, (_, j) => i + j));
+  }
+
+  const chunkResults = await Promise.all(chunks.map(processChunk));
+  const pgnMatchCount = chunkResults.reduce((s, r) => s + r.pgnMatch, 0);
+  const ecoMatchCount = chunkResults.reduce((s, r) => s + r.ecoMatch, 0);
+  const noMatchCount = chunkResults.reduce((s, r) => s + r.noMatch, 0);
+  const parseFailCount = chunkResults.reduce((s, r) => s + r.parseFail, 0);
 
   logger.info(
     { total: games.length, pgnMatch: pgnMatchCount, ecoMatch: ecoMatchCount, noMatch: noMatchCount, parseFail: parseFailCount },

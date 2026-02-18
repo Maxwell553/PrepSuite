@@ -1,6 +1,7 @@
 import { logger } from '../lib/logger.js';
 import { capitalizeName } from '../lib/validation.js';
 import { fetchWithRetry } from '../lib/fetchWithRetry.js';
+import { getCachedIdentity, setCachedIdentity } from '../lib/identityCache.js';
 import type {
   FideProfile,
   UscfProfile,
@@ -61,7 +62,46 @@ export async function resolveIdentity(
   let fideProfile: FideProfile | null = null;
   let uscfProfile: UscfProfile | null = null;
 
+  const hasFideId = !!fideId?.trim();
+  const hasUscfId = !!uscfId?.trim();
+  const hasChessCom = !!providedChessComUsername?.trim();
+  const hasLichess = !!providedLichessUsername?.trim();
 
+  // Cache lookup (server-side DB)
+  const cached = await getCachedIdentity(
+    inputName,
+    fideId,
+    uscfId,
+    providedChessComUsername,
+    providedLichessUsername,
+  );
+  if (cached) return cached;
+
+  // Fast path: user provided all IDs and usernames — skip search and Gemini
+  if (hasFideId && hasUscfId && hasChessCom && hasLichess) {
+    logger.info({ name: inputName }, '[Identity] Fast path: all IDs provided, skipping search');
+    const [fideProfileFetched, uscfProfileFetched] = await Promise.all([
+      getFideProfile(fideId.trim()),
+      getUscfProfile(uscfId.trim()),
+    ]);
+    const fastResult: ResolvedIdentity = {
+      verifiedName: capitalizeName(inputName.trim()),
+      fideProfile: fideProfileFetched,
+      uscfProfile: uscfProfileFetched,
+      chessComUsername: providedChessComUsername!.trim(),
+      lichessUsername: providedLichessUsername!.trim(),
+      confidence: 1.0,
+    };
+    await setCachedIdentity(
+      inputName,
+      fideId,
+      uscfId,
+      providedChessComUsername,
+      providedLichessUsername,
+      fastResult,
+    );
+    return fastResult;
+  }
 
   try {
     let finalFideId = fideId;
@@ -238,7 +278,7 @@ export async function resolveIdentity(
       }
     }
 
-    return {
+    const result: ResolvedIdentity = {
       verifiedName: capitalizeName(officialName),
       fideProfile,
       uscfProfile,
@@ -246,6 +286,16 @@ export async function resolveIdentity(
       lichessUsername: verifiedLichess,
       confidence: verifiedChessCom || verifiedLichess ? 1.0 : 0,
     };
+
+    await setCachedIdentity(
+      inputName,
+      fideId,
+      uscfId,
+      providedChessComUsername,
+      providedLichessUsername,
+      result,
+    );
+    return result;
   } catch (err) {
     logger.error({ err, name: inputName }, '[Identity] Fatal discovery failure');
     return {

@@ -11,8 +11,8 @@ export interface GameFetchResult {
 }
 
 /**
- * Fetch games from both platforms with SSE progress events.
- * Fetches Lichess first (to determine remaining budget for Chess.com).
+ * Fetch games from both platforms in parallel with SSE progress events.
+ * Merges results and trims to gameLimit (most recent by date).
  */
 export async function fetchGames(
   chessComUsername: string,
@@ -25,39 +25,47 @@ export async function fetchGames(
   sse.sendPhase({ phase: 'games', status: 'started' });
 
   let lichessNdjson = '';
-  let lichessCount = 0;
   let chessComGames: unknown[] = [];
 
-  // Fetch Lichess first
-  if (lichessUsername) {
-    logger.info({ username: lichessUsername, limit: gameLimit }, '[GameFetcher] Fetching Lichess');
+  const hasLichess = !!lichessUsername;
+  const hasChessCom = !!chessComUsername;
+
+  if (hasLichess && hasChessCom) {
+    // Parallel fetch: both platforms with full limit, merge and trim
+    logger.info({ lichess: lichessUsername, chessCom: chessComUsername, limit: gameLimit }, '[GameFetcher] Fetching both platforms in parallel');
+    let lichessCount = 0;
+    let chessComCount = 0;
+    const onProgress = () => {
+      sse.sendProgress({ phase: 'games', current: lichessCount + chessComCount, total: gameLimit });
+    };
+    const [lichessResult, chessComResult] = await Promise.all([
+      fetchLichessGames(lichessUsername, gameLimit, (cur, _tot) => {
+        lichessCount = cur;
+        onProgress();
+      }),
+      fetchChessComGames(chessComUsername, gameLimit, (cur, _tot) => {
+        chessComCount = cur;
+        onProgress();
+      }),
+    ]);
+    lichessNdjson = lichessResult.ndjson;
+    chessComGames = chessComResult.games;
+    logger.info({ lichess: lichessResult.totalFetched, chessCom: chessComResult.totalFetched }, '[GameFetcher] Both complete');
+  } else if (hasLichess) {
     const lichessResult = await fetchLichessGames(lichessUsername, gameLimit, (current, total) => {
       sse.sendProgress({ phase: 'games', current, total });
     });
     lichessNdjson = lichessResult.ndjson;
-    lichessCount = lichessResult.totalFetched;
-    logger.info({ count: lichessCount }, '[GameFetcher] Lichess complete');
-  }
-
-  // Chess.com gets the remaining budget
-  const chessComLimit = Math.max(0, gameLimit - lichessCount);
-  if (chessComUsername && chessComLimit > 0) {
-    logger.info(
-      { username: chessComUsername, limit: chessComLimit },
-      '[GameFetcher] Fetching Chess.com',
-    );
-    const chessComResult = await fetchChessComGames(
-      chessComUsername,
-      chessComLimit,
-      (current, total) => {
-        sse.sendProgress({ phase: 'games', current: lichessCount + current, total: gameLimit });
-      },
-    );
+    logger.info({ count: lichessResult.totalFetched }, '[GameFetcher] Lichess complete');
+  } else if (hasChessCom) {
+    const chessComResult = await fetchChessComGames(chessComUsername, gameLimit, (current, total) => {
+      sse.sendProgress({ phase: 'games', current, total });
+    });
     chessComGames = chessComResult.games;
     logger.info({ count: chessComResult.totalFetched }, '[GameFetcher] Chess.com complete');
   }
 
-  const totalGames = lichessCount + chessComGames.length;
+  const totalGames = (lichessNdjson ? lichessNdjson.split('\n').filter((l) => l.trim()).length : 0) + chessComGames.length;
   const durationMs = Date.now() - start;
 
   sse.sendPhase({

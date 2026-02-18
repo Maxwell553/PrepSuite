@@ -12,6 +12,14 @@ set -euo pipefail
 # Required env vars (or pass via --substitutions):
 #   VITE_SUPABASE_URL
 #   VITE_SUPABASE_ANON_KEY
+#
+# Load from .env.local if present (exported vars take precedence)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/.env.local" ]]; then
+  set -a
+  source "${SCRIPT_DIR}/.env.local"
+  set +a
+fi
 
 : "${VITE_SUPABASE_URL:?VITE_SUPABASE_URL is required}"
 : "${VITE_SUPABASE_ANON_KEY:?VITE_SUPABASE_ANON_KEY is required}"

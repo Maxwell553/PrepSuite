@@ -23,8 +23,10 @@ export async function searchFideByName(name: string): Promise<FideSearchResult[]
 
   try {
     const res = await fetchWithRetry(url, {
-      timeoutMs: 10000,
+      timeoutMs: 20000,
       headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'X-Requested-With': 'XMLHttpRequest',
         'Referer': 'https://ratings.fide.com/',
       },

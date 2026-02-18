@@ -327,7 +327,7 @@ const App: React.FC = () => {
                 </div>
               </header>
 
-              <div className="p-6 max-w-7xl mx-auto">
+              <div className={`p-6 mx-auto ${activeTab === 'dashboard' && selectedReport ? 'max-w-[90rem]' : 'max-w-7xl'}`}>
                 {activeTab === 'search' && (
                   <SearchScreen 
                     onReportGenerated={handleReportGenerated} 

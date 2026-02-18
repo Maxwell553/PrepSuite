@@ -142,10 +142,14 @@ analyzeRoute.post('/analyze', async (c) => {
         gameResult.lichessGamesNdjson,
         identity.lichessUsername,
       );
-      const allGames = [...chessComGames, ...lichessGames];
+      // Merge, sort by most recent, trim to gameLimit (parallel fetch can return up to 2*gameLimit)
+      const merged = [...chessComGames, ...lichessGames].sort(
+        (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
+      );
+      const allGames = merged.slice(0, gameLimit);
 
       logger.info(
-        { chessCom: chessComGames.length, lichess: lichessGames.length, total: allGames.length },
+        { chessCom: chessComGames.length, lichess: lichessGames.length, merged: merged.length, trimmed: allGames.length },
         '[Analyze] Games parsed',
       );
 

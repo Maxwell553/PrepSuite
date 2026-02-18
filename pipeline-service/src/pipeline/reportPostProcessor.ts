@@ -96,7 +96,7 @@ export function postProcessReport(
 
   // Username that appears in games (for AnalysisBoard win/loss matching)
   if (actualUsername) {
-    (reportData.player as Record<string, unknown>).actualUsername = actualUsername;
+    (reportData.player as unknown as Record<string, unknown>).actualUsername = actualUsername;
   }
 
   // Ensure required arrays exist

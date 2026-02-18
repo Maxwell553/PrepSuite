@@ -84,11 +84,10 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-8">
-        {/* Left/Middle Column */}
-        <div className="lg:col-span-2 space-y-8">
-          {/* Executive Summary */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
+      <div className="space-y-8">
+        {/* Top Row: Strategic Profile (left) | Tactical Rec + Specific Vulnerability (right, same width, combined height = left) */}
+        <div className="grid lg:grid-cols-3 gap-8 items-stretch">
+          <section className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
             <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
               <Target className="w-5 h-5 text-indigo-400" />
               Strategic Profile Analysis
@@ -125,15 +124,48 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
             </div>
           </section>
 
-          {/* Repertoire Breakdown: White & Black */}
-          <div className="grid md:grid-cols-2 gap-8">
+          {/* Right column: Tactical Rec + Specific Vulnerability, same width, combined height = Strategic Profile */}
+          <div className="flex flex-col gap-4 h-full min-h-0">
+            <section className="flex-1 min-h-0 flex flex-col bg-indigo-600 border border-indigo-400 rounded-2xl p-6 shadow-xl shadow-indigo-900/20 relative overflow-hidden">
+              <div className="absolute -right-4 -top-4 opacity-10">
+                <Crosshair className="w-32 h-32 text-white" />
+              </div>
+              <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-white shrink-0">
+                <Zap className="w-5 h-5" />
+                Tactical Recommendation
+              </h3>
+              <div className="text-indigo-50 text-sm leading-relaxed space-y-3 whitespace-pre-wrap min-h-0 overflow-y-auto">
+                <p className="font-semibold">{(report.tacticalRecommendation || '').replace(/\*\*/g, '')}</p>
+                <div className="p-3 bg-white/10 rounded-xl border border-white/20 shrink-0">
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/70 mb-1">Target Profile: {player.name}</h4>
+                  <p className="text-xs italic opacity-80">Focus on the transition between late-middlegame and endgame where target accuracy deviates.</p>
+                </div>
+              </div>
+            </section>
+
+            <section className="flex-1 min-h-0 flex flex-col bg-slate-900 dark:bg-slate-900 border border-slate-800 dark:border-slate-800 rounded-2xl p-6 shadow-lg">
+              <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-red-400 dark:text-red-400 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+                Specific Vulnerability
+              </h3>
+              <div className="text-slate-300 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap min-h-0 overflow-y-auto">
+                <p className="p-4 bg-slate-950 dark:bg-slate-950 rounded-xl border border-slate-800 dark:border-slate-800 italic">
+                  "{(report.specificVulnerability || '').replace(/\*\*/g, '')}"
+                </p>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        {/* Repertoire Graphs - full width, 2 columns */}
+        <div className="grid md:grid-cols-2 gap-8">
             {/* White Opening Efficiency */}
             <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg flex flex-col">
               <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-white">
                 <TrendingUp className="w-5 h-5 text-indigo-400" />
                 White Repertoire (Primary Openings)
               </h3>
-              <div className="h-56 mb-6">
+              <div className="h-64 mb-6">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={whiteOpenings} margin={{ bottom: 40 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
@@ -185,7 +217,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
                 <Clock className="w-5 h-5 text-indigo-400" />
                 Black Repertoire (Defensive Systems)
               </h3>
-              <div className="h-56 mb-6">
+              <div className="h-64 mb-6">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={blackDefenses} margin={{ bottom: 40 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
@@ -232,60 +264,25 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
             </section>
           </div>
 
-          {/* Preparation Summaries */}
-          <div className="grid md:grid-cols-2 gap-8">
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
-              <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-indigo-400">
-                <BookOpen className="w-5 h-5" />
-                White Repertoire Strategy
-              </h3>
-              <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 leading-relaxed text-slate-400 text-sm whitespace-pre-wrap">
-                {(report.preparationSummary || '').replace(/\*\*/g, '')}
-              </div>
-            </section>
-
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
-              <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-indigo-400">
-                <Target className="w-5 h-5" />
-                Black Defensive Philosophy
-              </h3>
-              <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 leading-relaxed text-slate-400 text-sm whitespace-pre-wrap">
-                {(report.blackStrategicSummary || "Detailed analysis of black repertoire pending...").replace(/\*\*/g, '')}
-              </div>
-            </section>
-          </div>
-        </div>
-
-        {/* Right Column */}
-        <div className="space-y-8">
-          {/* Tactical Recommendation Section */}
-          <section className="bg-indigo-600 border border-indigo-400 rounded-2xl p-8 shadow-xl shadow-indigo-900/20 relative overflow-hidden">
-            <div className="absolute -right-4 -top-4 opacity-10">
-              <Crosshair className="w-32 h-32 text-white" />
-            </div>
-            <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">
-              <Zap className="w-5 h-5" />
-              Tactical Recommendation
+        {/* Text Summaries - full width, 2 columns */}
+        <div className="grid md:grid-cols-2 gap-8">
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
+            <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-indigo-400">
+              <BookOpen className="w-5 h-5" />
+              White Repertoire Strategy
             </h3>
-            <div className="text-indigo-50 text-sm leading-relaxed space-y-4 whitespace-pre-wrap">
-              <p className="font-semibold">{(report.tacticalRecommendation || '').replace(/\*\*/g, '')}</p>
-              <div className="p-4 bg-white/10 rounded-xl border border-white/20">
-                <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/70 mb-2">Target Profile: {player.name}</h4>
-                <p className="text-xs italic opacity-80">Focus on the transition between late-middlegame and endgame where target accuracy deviates.</p>
-              </div>
+            <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 leading-relaxed text-slate-400 text-sm whitespace-pre-wrap">
+              {(report.preparationSummary || '').replace(/\*\*/g, '')}
             </div>
           </section>
 
-          {/* Specific Vulnerability Section */}
-          <section className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-8 shadow-lg">
-            <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-red-400 dark:text-red-400 text-red-600">
-              <AlertTriangle className="w-5 h-5" />
-              Specific Vulnerability
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
+            <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-indigo-400">
+              <Target className="w-5 h-5" />
+              Black Defensive Philosophy
             </h3>
-            <div className="text-slate-300 dark:text-slate-300 text-gray-700 space-y-4 text-sm leading-relaxed whitespace-pre-wrap">
-              <p className="p-4 bg-slate-950 dark:bg-slate-950 bg-gray-50 rounded-xl border border-slate-800 dark:border-slate-800 border-gray-200 italic">
-                "{(report.specificVulnerability || '').replace(/\*\*/g, '')}"
-              </p>
+            <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 leading-relaxed text-slate-400 text-sm whitespace-pre-wrap">
+              {(report.blackStrategicSummary || "Detailed analysis of black repertoire pending...").replace(/\*\*/g, '')}
             </div>
           </section>
         </div>

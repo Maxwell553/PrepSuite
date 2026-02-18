@@ -95,17 +95,26 @@ export function parseFideProfileHtml(html: string, fideId: string): FideProfile 
  */
 export async function getFideProfile(
   fideId: string,
-  retries = 2,
+  retries = 3,
 ): Promise<FideProfile | null> {
   if (!fideId?.trim()) return null;
 
   const cleanId = fideId.trim();
 
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://ratings.fide.com/',
+    'Connection': 'keep-alive',
+  };
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       logger.info({ fideId: cleanId, attempt: attempt + 1 }, '[FideProfile] Fetching');
       const res = await fetchWithRetry(`https://ratings.fide.com/profile/${cleanId}`, {
-        timeoutMs: 10000,
+        timeoutMs: 30000,
+        headers,
       });
 
       if (!res.ok) {
@@ -117,7 +126,14 @@ export async function getFideProfile(
         return null;
       }
 
-      const html = await res.text();
+      // Read body with timeout (res.text() can hang if server stalls after headers)
+      const BODY_TIMEOUT_MS = 15000;
+      const html = await Promise.race([
+        res.text(),
+        new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error('Body read timeout')), BODY_TIMEOUT_MS),
+        ),
+      ]);
       const profile = parseFideProfileHtml(html, cleanId);
       if (profile) {
         logger.info({ fideId: cleanId, name: profile.name }, '[FideProfile] Success');
@@ -128,7 +144,13 @@ export async function getFideProfile(
         await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
       }
     } catch (err) {
-      logger.error({ err, fideId: cleanId, attempt: attempt + 1 }, '[FideProfile] Error');
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const errName = err instanceof Error ? err.name : undefined;
+      const errCode = err && typeof err === 'object' && 'code' in err ? (err as { code?: number }).code : undefined;
+      logger.error(
+        { errMsg, errName, errCode, fideId: cleanId, attempt: attempt + 1 },
+        '[FideProfile] Error',
+      );
       if (attempt < retries) {
         await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
       }
