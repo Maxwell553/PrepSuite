@@ -78,7 +78,7 @@ function formatEngineAnalysis(engineAnalysis: GameAnalysis[], allGames: GameData
   const openingInsights: string[] = [];
   Object.entries(analysesByOpening).forEach(([eco, data]) => {
     if (data.analyses.length >= 3) {
-      const openingName = data.games[0]?.eco || eco;
+      const openingName = data.games[0]?.openingName || data.games[0]?.eco || eco;
       const totalMistakes = data.analyses.reduce((sum, a) => sum + a.criticalMistakes.length, 0);
       const avgEndgameAccuracy =
         data.analyses.reduce((sum, a) => sum + a.endgameAccuracy, 0) / data.analyses.length;
@@ -177,7 +177,7 @@ RULES (apply to entire response):
 - Do not reference specific game numbers ("Game 19"). Use aggregate language only.
 - Do not use ** (bold markdown). Use * only for bullet points.
 - whiteOpenings = what ${identity.verifiedName} PLAYS as White. blackDefenses = what they PLAY as Black. Never confuse.
-- Use human opening names only, never ECO codes like "B20-B29" in text.
+- Use human opening names only (e.g. "Sicilian Defense", "Queen's Gambit"). Never use ECO codes (A05, B20, etc.) in narrative text — readers expect names like "King's Pawn Game", not "B00".
 - Weight all games equally regardless of date.
 - winRate/frequency are decimals 0.0-1.0. totalGames must = wins+draws+losses. Never return NaN/null.
 - Response MUST be complete, valid JSON. Every { must close with }.
@@ -244,7 +244,7 @@ Required fields:
 - mostPlayedLines: { white[], black[] } each { moves[], frequency, games }
 - repertoireReliability: number 0-1
 
-Opening names: QGD=1.d4 d5 2.c4 e6 only. 1.d4 Nf6=Indian defenses. Caro-Kann=1.e4 c6. French=1.e4 e6. Sicilian=1.e4 c5.
+Opening names: Use human names. QGD=Queen's Gambit Declined. Sicilian=1.e4 c5. Caro-Kann=1.e4 c6. French=1.e4 e6. Indian defenses=1.d4 Nf6. Never write "A05", "B20" etc. in prose — use "King's Pawn Game", "Sicilian Defense", etc.
       `;
 }
 

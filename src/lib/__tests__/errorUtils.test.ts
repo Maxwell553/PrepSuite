@@ -27,6 +27,13 @@ describe('errorUtils', () => {
       expect(message).toContain('Authentication');
     });
 
+    it('should handle Gemini/Vertex AI 401 as service unavailable (not user auth)', () => {
+      const error = new Error('Gemini API error: 401');
+      const message = getUserFriendlyError(error);
+      expect(message).toContain('AI service temporarily unavailable');
+      expect(message).not.toContain('log in');
+    });
+
     it('should handle 403 forbidden errors', () => {
       const error = new Error('403 Forbidden');
       const message = getUserFriendlyError(error, { operation: 'save report' });

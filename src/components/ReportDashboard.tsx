@@ -48,11 +48,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
             </div>
           </div>
         </div>
-        <div className="py-8 px-10 grid grid-cols-3 gap-8 bg-slate-950/30 dark:bg-slate-950/30 bg-gray-50 border-t border-slate-800 dark:border-slate-800 border-gray-200">
-          <div className="space-y-1">
-            <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Engine Depth</div>
-            <div className="text-sm font-semibold text-blue-400 dark:text-blue-400 text-blue-600">Depth {report.engineDepth || 10}</div>
-          </div>
+        <div className="py-8 px-10 grid grid-cols-2 gap-8 bg-slate-950/30 dark:bg-slate-950/30 bg-gray-50 border-t border-slate-800 dark:border-slate-800 border-gray-200">
           <div className="space-y-1">
             <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Chess.com Handle</div>
             <div className="text-sm font-semibold text-emerald-400 dark:text-emerald-400 text-emerald-600">

@@ -56,7 +56,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [gameLimit, setGameLimit] = useState(1000);
-  const [engineDepth, setEngineDepth] = useState(10);
   const [formData, setFormData] = useState({
     name: '',
     fideId: '',
@@ -442,49 +441,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                           </span>
                           <span className="text-xs text-slate-400 dark:text-slate-400 text-gray-600">
                             games
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-3 uppercase tracking-widest">Stockfish Engine Depth</label>
-
-                    {/* Info Bar */}
-                    <div className="mb-4 flex items-start gap-2 p-3 bg-blue-900/10 dark:bg-blue-900/10 bg-blue-50 border border-blue-500/20 dark:border-blue-500/20 border-blue-200 rounded-lg">
-                      <Info className="w-4 h-4 text-blue-400 dark:text-blue-400 text-blue-600 shrink-0 mt-0.5" />
-                      <p className="text-xs text-blue-300 dark:text-blue-300 text-blue-700">
-                        <span className="font-semibold">Depth {engineDepth}</span> controls how deeply Stockfish analyzes each position. Higher depth (10-15) provides more accurate analysis but takes longer. Lower depth (5-9) is faster but less precise.
-                      </p>
-                    </div>
-
-                    {/* Range Slider */}
-                    <div className="space-y-3">
-                      <div className="relative">
-                        <input
-                          type="range"
-                          min="5"
-                          max="15"
-                          step="1"
-                          value={engineDepth}
-                          onChange={(e) => setEngineDepth(Number(e.target.value))}
-                          disabled={loading}
-                          className="w-full h-2.5 bg-slate-800 dark:bg-slate-800 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{
-                            background: `linear-gradient(to right, rgb(59, 130, 246) 0%, rgb(59, 130, 246) ${((engineDepth - 5) / (15 - 5)) * 100}%, rgb(30, 41, 59) ${((engineDepth - 5) / (15 - 5)) * 100}%, rgb(30, 41, 59) 100%)`
-                          }}
-                        />
-                      </div>
-
-                      {/* Value Display */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 dark:bg-slate-800/50 bg-gray-100 rounded-lg border border-blue-500/20 dark:border-blue-500/20 border-blue-200">
-                          <span className="text-lg font-bold text-blue-400 dark:text-blue-400 text-blue-600">
-                            Depth {engineDepth}
-                          </span>
-                          <span className="text-xs text-slate-400 dark:text-slate-400 text-gray-600">
-                            {engineDepth <= 8 ? 'Fast' : engineDepth <= 12 ? 'Balanced' : 'Deep'}
                           </span>
                         </div>
                       </div>

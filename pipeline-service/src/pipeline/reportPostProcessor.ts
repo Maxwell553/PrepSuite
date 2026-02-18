@@ -17,6 +17,8 @@ export interface PostProcessOpts {
   blackStats: OpeningStat[];
   moveSequences: { white: MoveSequence[]; black: MoveSequence[] };
   allGames: GameData[];
+  /** Username that appears in games (for AnalysisBoard win/loss matching) */
+  actualUsername?: string;
 }
 
 /** Validate opening stats: clamp winRate [0,1], ensure wins+draws+losses = totalGames */
@@ -61,7 +63,7 @@ export function postProcessReport(
   reportData: ScoutingReport,
   opts: PostProcessOpts,
 ): ScoutingReport {
-  const { identity, whiteStats, blackStats, moveSequences, allGames } = opts;
+  const { identity, whiteStats, blackStats, moveSequences, allGames, actualUsername } = opts;
 
   // Generate ID if missing
   if (!reportData.id || reportData.id.trim() === '') {
@@ -91,6 +93,11 @@ export function postProcessReport(
     identity.uscfProfile?.name?.split(',')?.pop()?.trim() ||
     reportData.player.country ||
     '';
+
+  // Username that appears in games (for AnalysisBoard win/loss matching)
+  if (actualUsername) {
+    (reportData.player as Record<string, unknown>).actualUsername = actualUsername;
+  }
 
   // Ensure required arrays exist
   reportData.strengths = reportData.strengths || [];

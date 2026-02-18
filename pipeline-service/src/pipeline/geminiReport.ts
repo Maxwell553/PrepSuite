@@ -4,12 +4,12 @@
  */
 
 import { logger } from '../lib/logger.js';
-import { getAccessToken, getVertexUrl } from '../lib/vertexAuth.js';
+import { getAccessToken, getVertexUrl, invalidateAccessTokenCache } from '../lib/vertexAuth.js';
 import { parseLLMJson } from '../lib/jsonRepair.js';
 import type { ScoutingReport } from '../lib/types.js';
 
-const GEMINI_MODEL_PRIMARY = 'gemini-3-flash-preview';
-const GEMINI_MODEL_FALLBACK = 'gemini-2.5-flash';
+const GEMINI_MODEL_PRIMARY = 'gemini-2.5-flash';
+const GEMINI_MODEL_FALLBACK = 'gemini-2.0-flash-001';
 const GEMINI_TIMEOUT_MS = 120_000;
 const MAX_RETRIES = 2;
 
@@ -17,13 +17,14 @@ const MAX_RETRIES = 2;
 function shouldFallbackTo25(status: number, errorText: string): boolean {
   if (status === 404) return true;
   if (status === 501) return true;
+  if (status === 429) return true; // Resource exhausted — try fallback model
   if (status === 400 && /model|not found|unavailable/i.test(errorText)) return true;
   return false;
 }
 
 /**
  * Call Vertex AI Gemini with JSON schema mode to generate a scouting report.
- * Tries gemini-3 first, falls back to gemini-2.5-flash if the model is unavailable.
+ * Tries gemini-2.5-flash first, falls back to gemini-2.0-flash-001 if unavailable.
  */
 export async function generateReport(
   prompt: string,
@@ -39,7 +40,7 @@ export async function generateReport(
       const status = (err as { status?: number }).status;
       const errorText = (err as { errorText?: string }).errorText ?? msg;
       if (model === GEMINI_MODEL_PRIMARY && (status ? shouldFallbackTo25(status, errorText) : /404|501|model.*not found/i.test(msg))) {
-        logger.warn({ model: GEMINI_MODEL_PRIMARY, err: msg }, '[GeminiReport] Primary model failed, falling back to 2.5');
+        logger.warn({ model: GEMINI_MODEL_PRIMARY, err: msg }, '[GeminiReport] Primary model failed, falling back to 2.0');
         continue;
       }
       throw err;
@@ -109,7 +110,16 @@ async function generateReportWithModel(
         await new Promise((r) => setTimeout(r, 10_000));
         continue;
       }
-      throw new Error('Gemini API rate limited');
+      const err = new Error('Gemini API rate limited') as Error & { status?: number; errorText?: string };
+      err.status = 429;
+      err.errorText = 'Resource exhausted';
+      throw err;
+    }
+
+    if (res.status === 401 && attempt < MAX_RETRIES) {
+      logger.warn('[GeminiReport] Auth token invalid (401), refreshing and retrying');
+      invalidateAccessTokenCache();
+      continue;
     }
 
     if (!res.ok) {

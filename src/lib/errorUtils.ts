@@ -26,7 +26,12 @@ export function getUserFriendlyError(error: unknown, context?: ErrorContext): st
       return `Request timed out. The ${operation} is taking longer than expected. Please try again.`;
     }
 
-    // Authentication/Authorization errors
+    // Backend AI service auth (Vertex/Gemini) - not user login
+    if (message.includes('gemini api error: 401') || message.includes('ai service error: 401')) {
+      return `AI service temporarily unavailable. Please try again in a moment.`;
+    }
+
+    // User authentication errors (Supabase)
     if (message.includes('401') || message.includes('unauthorized') || message.includes('authentication')) {
       return `Authentication failed. Please log in again.`;
     }

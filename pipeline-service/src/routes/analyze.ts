@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { logger } from '../lib/logger.js';
 import { validateAnalyzeRequest } from '../lib/validation.js';
 import { SSEStream } from '../lib/sse.js';
+import type { ResolvedIdentity } from '../lib/types.js';
+import type { GameData } from '../lib/types.js';
 import { resolveIdentity } from '../pipeline/identity.js';
 import { fetchGames } from '../pipeline/gameFetcher.js';
 import { parseChessComGames, parseLichessGames } from '../pipeline/gameParser.js';
@@ -15,6 +17,46 @@ import { generateReport } from '../pipeline/geminiReport.js';
 import { postProcessReport } from '../pipeline/reportPostProcessor.js';
 
 export const analyzeRoute = new Hono();
+
+/** Pick the identity username that appears in the most games. Prevents empty stats when platform usernames differ. */
+function resolveTargetUsername(games: GameData[], identity: ResolvedIdentity): string {
+  const candidates = [
+    identity.chessComUsername,
+    identity.lichessUsername,
+    identity.verifiedName,
+  ].filter(Boolean) as string[];
+
+  if (candidates.length === 0) return '';
+  if (games.length === 0) return candidates[0];
+
+  const counts = new Map<string, number>();
+  for (const c of candidates) {
+    counts.set(c, 0);
+  }
+
+  for (const g of games) {
+    const w = g.white.toLowerCase().trim();
+    const b = g.black.toLowerCase().trim();
+    for (const c of candidates) {
+      const cLower = c.toLowerCase().trim();
+      if (w === cLower || b === cLower || w.includes(cLower) || cLower.includes(w) || b.includes(cLower) || cLower.includes(b)) {
+        counts.set(c, (counts.get(c) ?? 0) + 1);
+        break;
+      }
+    }
+  }
+
+  let best = candidates[0];
+  let bestCount = counts.get(best) ?? 0;
+  for (const c of candidates.slice(1)) {
+    const n = counts.get(c) ?? 0;
+    if (n > bestCount) {
+      best = c;
+      bestCount = n;
+    }
+  }
+  return best;
+}
 
 analyzeRoute.post('/analyze', async (c) => {
   // Validate input
@@ -117,9 +159,9 @@ analyzeRoute.post('/analyze', async (c) => {
         }
       }
 
-      // Determine the target username for stats
-      const targetUsername =
-        identity.chessComUsername || identity.lichessUsername || identity.verifiedName;
+      // Resolve target username: use the identity username that actually appears in games.
+      // Prevents empty stats when e.g. chessCom is primary but all games are from Lichess.
+      const targetUsername = resolveTargetUsername(allGames, identity);
 
       // Generate opening stats for both sides
       const whiteStats = generateStats(allGames, targetUsername, 'white');
@@ -204,6 +246,7 @@ analyzeRoute.post('/analyze', async (c) => {
         blackStats,
         moveSequences,
         allGames,
+        actualUsername: targetUsername,
       });
 
       sse.sendPhase({

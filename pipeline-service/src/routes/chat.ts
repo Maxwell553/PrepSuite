@@ -5,19 +5,19 @@
 
 import { Hono } from 'hono';
 import { logger } from '../lib/logger.js';
-import { getAccessToken, getVertexUrl } from '../lib/vertexAuth.js';
+import { getAccessToken, getVertexUrl, invalidateAccessTokenCache } from '../lib/vertexAuth.js';
 import { validateChatRequest } from '../lib/validation.js';
 import type { ChatContext } from '../lib/types.js';
 
 // Same models as identity (geminiFallback) and report generation (geminiReport)
-const GEMINI_MODELS = ['gemini-3-flash-preview', 'gemini-2.5-flash'] as const;
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash-001'] as const;
 const GEMINI_TIMEOUT_MS = 60_000;
 
-/** Fall back to next model on 400/404/501 (model/request issues) or when error suggests model problem */
+/** Fall back to next model on 400/404/501/429 (model/request/rate-limit issues) or when error suggests model problem */
 function shouldTryNextModel(status: number, errorText: string): boolean {
-  if (status === 404 || status === 501) return true;
+  if (status === 404 || status === 501 || status === 429) return true;
   if (status === 400) return true; // 400 often means model not available or invalid request for this model
-  if (/model|not found|unavailable|not supported/i.test(errorText)) return true;
+  if (/model|not found|unavailable|not supported|resource exhausted/i.test(errorText)) return true;
   return false;
 }
 
@@ -142,30 +142,45 @@ chatRoute.post('/chat', async (c) => {
   let lastError = '';
   for (let i = 0; i < GEMINI_MODELS.length; i++) {
     const model = GEMINI_MODELS[i];
+    const MAX_AUTH_RETRIES = 2;
+    let authRetries = 0;
+    let res: Response;
     try {
-      const geminiUrl = getVertexUrl(model);
-      const accessToken = await getAccessToken();
+      for (;;) {
+        const geminiUrl = getVertexUrl(model);
+        const accessToken = await getAccessToken();
 
-      const res = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-      });
+        res = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(requestBody),
+          signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+        });
 
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => 'unable to read');
-        lastError = `Vertex AI ${model}: ${res.status} - ${errorText.slice(0, 150)}`;
-        logger.error({ model, status: res.status, errorText: errorText.slice(0, 300) }, '[Chat] Gemini API error');
-        if (shouldTryNextModel(res.status, errorText) && i < GEMINI_MODELS.length - 1) {
-          logger.warn({ model, nextModel: GEMINI_MODELS[i + 1] }, '[Chat] Model failed, trying next');
+        if (res.status === 401 && authRetries < MAX_AUTH_RETRIES) {
+          logger.warn({ authRetries: authRetries + 1, max: MAX_AUTH_RETRIES }, '[Chat] Auth token invalid (401), refreshing and retrying');
+          invalidateAccessTokenCache();
+          authRetries++;
           continue;
         }
-        return c.json({ error: `AI service error: ${res.status}. ${errorText.slice(0, 100)}` }, 502);
+
+        if (!res.ok) {
+          const errorText = await res.text().catch(() => 'unable to read');
+          lastError = `Vertex AI ${model}: ${res.status} - ${errorText.slice(0, 150)}`;
+          logger.error({ model, status: res.status, errorText: errorText.slice(0, 300) }, '[Chat] Gemini API error');
+          if (shouldTryNextModel(res.status, errorText) && i < GEMINI_MODELS.length - 1) {
+            logger.warn({ model, nextModel: GEMINI_MODELS[i + 1] }, '[Chat] Model failed, trying next');
+            break; // exit inner loop to try next model
+          }
+          return c.json({ error: `AI service error: ${res.status}. ${errorText.slice(0, 100)}` }, 502);
+        }
+        break; // success
       }
+
+      if (!res.ok) continue; // try next model
 
       const data = await res.json();
       const candidate = data.candidates?.[0];

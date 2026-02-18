@@ -1,15 +1,16 @@
 import { logger } from '../lib/logger.js';
-import { getAccessToken, getVertexUrl } from '../lib/vertexAuth.js';
+import { getAccessToken, getVertexUrl, invalidateAccessTokenCache } from '../lib/vertexAuth.js';
 import { parseLLMJson } from '../lib/jsonRepair.js';
 
-const GEMINI_MODEL_PRIMARY = 'gemini-3-flash-preview';
-const GEMINI_MODEL_FALLBACK = 'gemini-2.5-flash';
+const GEMINI_MODEL_PRIMARY = 'gemini-2.5-flash';
+const GEMINI_MODEL_FALLBACK = 'gemini-2.0-flash-001';
 const GEMINI_TIMEOUT_MS = 55000;
 const MAX_RETRIES = 2;
 
 function shouldFallbackTo25(status: number, errorText: string): boolean {
   if (status === 404) return true;
   if (status === 501) return true;
+  if (status === 429) return true; // Resource exhausted — try fallback model
   if (status === 400 && /model|not found|unavailable/i.test(errorText)) return true;
   return false;
 }
@@ -26,7 +27,7 @@ interface GeminiUsernameResult {
 
 /**
  * Call Vertex AI Gemini with optional Google Search grounding.
- * Tries gemini-3 first, falls back to gemini-2.5-flash if the model is unavailable.
+ * Tries gemini-2.5-flash first, falls back to gemini-2.0-flash-001 if unavailable.
  */
 async function callGemini(
   prompt: string,
@@ -55,7 +56,7 @@ ${prompt}`;
     const result = await callGeminiWithModel(requestBody, model);
     if (result !== null) return result;
     if (model === GEMINI_MODEL_PRIMARY) {
-      logger.warn({ model: GEMINI_MODEL_PRIMARY }, '[GeminiFallback] Primary model failed, falling back to 2.5');
+      logger.warn({ model: GEMINI_MODEL_PRIMARY }, '[GeminiFallback] Primary model failed, falling back to 2.0');
     }
   }
   return '';
@@ -89,6 +90,12 @@ async function callGeminiWithModel(
 
       if (res.status === 503 && attempt < MAX_RETRIES) {
         logger.warn('[GeminiFallback] Model overloaded (503), retrying');
+        continue;
+      }
+
+      if (res.status === 401 && attempt < MAX_RETRIES) {
+        logger.warn('[GeminiFallback] Auth token invalid (401), refreshing and retrying');
+        invalidateAccessTokenCache();
         continue;
       }
 

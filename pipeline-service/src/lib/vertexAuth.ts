@@ -8,7 +8,8 @@
  *
  * Environment variables:
  *   VERTEX_PROJECT_ID  – GCP project ID (required)
- *   VERTEX_LOCATION    – GCP region (default: us-central1)
+ *   VERTEX_LOCATION    – GCP region (default: us-central1). Use "global" for Gemini 3
+ *                        preview models, or leave unset—gemini-3-*-preview auto-uses global.
  */
 
 import { GoogleAuth } from 'google-auth-library';
@@ -19,6 +20,15 @@ const auth = new GoogleAuth({
 });
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
+
+/**
+ * Invalidate the cached token. Call this when Vertex AI returns 401 so the next
+ * request fetches a fresh token. Fixes intermittent 401s from stale/revoked tokens.
+ */
+export function invalidateAccessTokenCache(): void {
+  cachedToken = null;
+  logger.info('[VertexAuth] Token cache invalidated (will refresh on next request)');
+}
 
 /**
  * Get a valid OAuth2 access token, caching to avoid repeated auth calls.
@@ -49,14 +59,25 @@ export async function getAccessToken(): Promise<string> {
 
 /**
  * Build the Vertex AI generateContent URL for a given model.
+ *
+ * Gemini 3 preview models (gemini-3-pro-preview, gemini-3-flash-preview, etc.)
+ * are only available on the global endpoint. Other models work on regional endpoints.
  */
 export function getVertexUrl(model: string): string {
     const projectId = process.env.VERTEX_PROJECT_ID;
-    const location = process.env.VERTEX_LOCATION || 'us-central1';
+    const configuredLocation = process.env.VERTEX_LOCATION || 'us-central1';
 
     if (!projectId) {
         throw new Error('VERTEX_PROJECT_ID environment variable is required');
     }
 
-    return `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:generateContent`;
+    // Gemini 3 preview models require the global endpoint
+    const useGlobal = configuredLocation === 'global' || /^gemini-3-.*-preview$/.test(model);
+    const location = useGlobal ? 'global' : configuredLocation;
+    const host =
+        location === 'global'
+            ? 'aiplatform.googleapis.com'
+            : `${location}-aiplatform.googleapis.com`;
+
+    return `https://${host}/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:generateContent`;
 }
