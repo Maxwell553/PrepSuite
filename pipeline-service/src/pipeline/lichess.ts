@@ -21,7 +21,7 @@ export async function fetchLichessGames(
 ): Promise<LichessGamesFetchResult> {
   if (!username) return { ndjson: '', totalFetched: 0 };
 
-  const targetGames = Math.min(limit, 5000);
+  const targetGames = Math.min(limit, 10000);
   const numRequests = Math.ceil(targetGames / GAMES_PER_REQUEST);
 
   logger.info(

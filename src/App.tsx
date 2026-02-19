@@ -221,14 +221,6 @@ const App: React.FC = () => {
     await authActions.signOut();
   };
 
-  const handleNavigateToLanding = () => {
-    setShowLandingPage(true);
-  };
-
-  const handleNavigateToApp = () => {
-    setShowLandingPage(false);
-  };
-
   if (loadingAuth) {
     return (
       <ThemeProvider>
@@ -262,7 +254,7 @@ const App: React.FC = () => {
         <LandingPage 
           onGetStarted={() => {
             if (user) {
-              handleNavigateToApp();
+              setShowLandingPage(false);
             } else {
               const el = document.getElementById('access');
               el?.scrollIntoView({ behavior: 'smooth' });
@@ -285,7 +277,7 @@ const App: React.FC = () => {
           <Sidebar 
             activeTab={activeTab} 
             setActiveTab={setActiveTab}
-            onLogoClick={handleNavigateToLanding}
+            onLogoClick={() => setShowLandingPage(true)}
           />
         )}
 

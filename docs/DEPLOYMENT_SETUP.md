@@ -72,7 +72,33 @@ You should see:
 
 ---
 
-### 2. Set Up GitHub Secrets (CRITICAL - Required for CI/CD)
+### 2. Fix Email Verification After Custom Domain Change
+
+If you changed your Supabase custom domain and verification emails are no longer arriving or links are broken:
+
+1. **Supabase Dashboard** → **Authentication** → **URL Configuration**
+   - **Site URL**: Set to your production domain (e.g. `https://yourdomain.com`), not `localhost`
+   - **Redirect URLs**: Add your production URL and any auth callback paths (e.g. `https://yourdomain.com/**`, `https://yourdomain.com/auth/callback`)
+
+2. **Authentication** → **Email Templates**
+   - Confirm the **Confirm signup** template uses `{{ .ConfirmationURL }}` (Supabase injects the correct domain)
+   - If you edited templates, ensure no syntax errors — invalid variables cause fallback to defaults
+
+3. **Custom SMTP (recommended for production)**
+   - Supabase’s default email provider has strict limits and is for testing only
+   - **Authentication** → **SMTP Settings** → Configure a provider. Best free options:
+     - **Resend** – 3,000 emails/month free, simple setup, good Supabase docs. [resend.com](https://resend.com)
+     - **Brevo** (Sendinblue) – 9,000 emails/month free (300/day), generous for low volume
+     - **SendGrid** – 100 emails/day free (60-day trial)
+   - Use a verified sender/domain that matches your custom domain
+   - Check provider logs for delivery issues and spam filters
+
+4. **Auth logs**
+   - **Authentication** → **Logs** — look for email send errors or template parsing failures
+
+---
+
+### 3. Set Up GitHub Secrets (CRITICAL - Required for CI/CD)
 
 Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions**
 
@@ -99,7 +125,7 @@ Add the following secrets:
 
 ---
 
-### 3. Create Staging Environment (Recommended)
+### 4. Create Staging Environment (Recommended)
 
 **Create a Staging Supabase Project:**
 
@@ -120,7 +146,7 @@ Staging and production both deploy to Cloud Run. Use different Supabase projects
 
 ---
 
-### 4. Test the CI/CD Pipeline
+### 5. Test the CI/CD Pipeline
 
 **Test CI (on every PR):**
 

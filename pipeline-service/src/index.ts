@@ -1,4 +1,9 @@
 import { config } from 'dotenv';
+import dns from 'node:dns';
+
+// Prefer IPv4 for outbound fetches (avoids "fetch failed" in dev when IPv6 is flaky)
+dns.setDefaultResultOrder('ipv4first');
+
 config(); // load .env
 config({ path: '.env.local' }); // override with .env.local if present
 import { serve } from '@hono/node-server';

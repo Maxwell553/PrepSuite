@@ -52,7 +52,7 @@ export const playerSearchSchema = z.object({
   gameLimit: z.number()
     .int('Game limit must be an integer')
     .min(1, 'Game limit must be at least 1')
-    .max(5000, 'Game limit cannot exceed 5000')
+    .max(10000, 'Game limit cannot exceed 10000')
     .default(1000)
     .optional(),
 });

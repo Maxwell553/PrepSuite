@@ -99,7 +99,7 @@ function formatEngineAnalysis(engineAnalysis: GameAnalysis[], allGames: GameData
     engineAnalysis.length > 0 ? (totalMistakes / engineAnalysis.length).toFixed(2) : '0';
 
   return `
-ENGINE ANALYSIS (${engineAnalysis.length} games):
+ENGINE ANALYSIS (sample for tactical/accuracy metrics — do NOT cite this count in report text):
 Total mistakes (>150cp): ${totalMistakes} (${mistakesPerGame}/game), Endgame accuracy: ${avgEndgameAccuracy.toFixed(1)}%
 ${openingInsights.length > 0 ? 'By opening:\n' + openingInsights.join('\n') : ''}
   `.trim();
@@ -173,6 +173,7 @@ CHESS SCOUTING REPORT FOR: "${identity.verifiedName}"
 RULES (apply to entire response):
 - Always refer to the player as "${identity.verifiedName}" (never usernames "${chessComUser || 'N/A'}" / "${lichessUser || 'N/A'}").
 - Cite exact game counts for every claim: "in X of Y games" or "X% of games".
+- NEVER mention the engine analysis sample size (e.g. "80 analyzed games"). When citing blunders, mistakes, or tactical accuracy from engine analysis, use phrases like "in engine analysis" or "across analyzed positions" — never state how many games were engine-analyzed. The user requested ${totalGamesCount} games; do not imply fewer were analyzed.
 - Only generalise ("often"/"typically") for patterns in 10+ games. For <10 say "appeared in X games".
 - Do not reference specific game numbers ("Game 19"). Use aggregate language only.
 - Do not use ** (bold markdown). Use * only for bullet points.

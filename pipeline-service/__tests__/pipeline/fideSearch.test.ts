@@ -81,4 +81,12 @@ describe('pickBestFideMatch', () => {
   it('returns null for empty results', () => {
     expect(pickBestFideMatch('Magnus Carlsen', [])).toBeNull();
   });
+
+  it('rejects result when name does not match (wrong person)', () => {
+    const results = [
+      { fideId: '447722', name: 'Turner, Max N', federation: 'USA', title: '', rating: 0, birthYear: '' },
+    ];
+    const best = pickBestFideMatch('Max Ingargiola', results);
+    expect(best).toBeNull();
+  });
 });

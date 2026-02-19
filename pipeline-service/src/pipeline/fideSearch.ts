@@ -1,5 +1,6 @@
 import { fetchWithRetry } from '../lib/fetchWithRetry.js';
 import { logger } from '../lib/logger.js';
+import { namesMatch } from './verification.js';
 
 export interface FideSearchResult {
   fideId: string;
@@ -147,7 +148,8 @@ export function scoreFideMatch(searchName: string, result: FideSearchResult): nu
 
 /**
  * Pick the best FIDE match from search results.
- * Returns the best match if score >= 0.5, else null.
+ * Returns the best match only if score >= 0.5 AND namesMatch(searchName, result.name).
+ * ALWAYS rejects if the result name does not match the entered name (prevents wrong person).
  */
 export function pickBestFideMatch(
   searchName: string,
@@ -160,17 +162,24 @@ export function pickBestFideMatch(
 
   for (const r of results) {
     const score = scoreFideMatch(searchName, r);
-    if (score > bestScore) {
+    if (score > bestScore && namesMatch(searchName, r.name)) {
       bestScore = score;
       best = r;
     }
   }
 
-  if (bestScore >= 0.5 && best) {
+  if (bestScore >= 0.5 && best && namesMatch(searchName, best.name)) {
     logger.info({ name: best.name, fideId: best.fideId, score: bestScore }, '[FideSearch] Best match');
     return best;
   }
 
-  logger.info({ bestScore }, '[FideSearch] No match above threshold');
+  if (best && !namesMatch(searchName, best.name)) {
+    logger.info(
+      { searchName, resultName: best.name, fideId: best.fideId },
+      '[FideSearch] Rejecting: name does not match entered name',
+    );
+  } else {
+    logger.info({ bestScore }, '[FideSearch] No match above threshold');
+  }
   return null;
 }

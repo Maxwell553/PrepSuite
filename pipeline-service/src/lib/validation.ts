@@ -49,7 +49,7 @@ export const analyzeRequestSchema = z.object({
     .regex(/^[a-zA-Z0-9_-]*$/, 'Lichess username contains invalid characters')
     .optional()
     .or(z.literal('')),
-  gameLimit: z.number().int().min(1).max(5000).default(1000).optional(),
+  gameLimit: z.number().int().min(1).max(10000).default(1000).optional(),
 });
 
 export type AnalyzeRequestInput = z.infer<typeof analyzeRequestSchema>;

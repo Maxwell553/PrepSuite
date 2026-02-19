@@ -411,7 +411,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                     <div className="mb-4 flex items-start gap-2 p-3 bg-indigo-900/10 dark:bg-indigo-900/10 bg-indigo-50 border border-indigo-500/20 dark:border-indigo-500/20 border-indigo-200 rounded-lg">
                       <Info className="w-4 h-4 text-indigo-400 dark:text-indigo-400 text-indigo-600 shrink-0 mt-0.5" />
                       <p className="text-xs text-indigo-300 dark:text-indigo-300 text-indigo-700">
-                        <span className="font-semibold">1,000 games</span> is the default number of games analyzed. You can analyze up to <span className="font-semibold">5,000 games</span> for more comprehensive analysis (may take longer).
+                        <span className="font-semibold">1,000 games</span> is the default number of games analyzed. You can analyze up to <span className="font-semibold">10,000 games</span> for more comprehensive analysis (may take longer).
                       </p>
                     </div>
 
@@ -421,14 +421,14 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         <input
                           type="range"
                           min="500"
-                          max="5000"
+                          max="10000"
                           step="500"
                           value={gameLimit}
                           onChange={(e) => setGameLimit(Number(e.target.value))}
                           disabled={loading}
                           className="w-full h-2.5 bg-slate-800 dark:bg-slate-800 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
                           style={{
-                            background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${((gameLimit - 500) / (5000 - 500)) * 100}%, rgb(30, 41, 59) ${((gameLimit - 500) / (5000 - 500)) * 100}%, rgb(30, 41, 59) 100%)`
+                            background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${((gameLimit - 500) / (10000 - 500)) * 100}%, rgb(30, 41, 59) ${((gameLimit - 500) / (10000 - 500)) * 100}%, rgb(30, 41, 59) 100%)`
                           }}
                         />
                       </div>

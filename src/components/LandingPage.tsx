@@ -140,7 +140,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             </div>
                             <h3 className="text-2xl font-bold mb-3 text-white dark:text-white text-gray-900">Multi-Platform Game Aggregation</h3>
                             <p className="text-slate-400 dark:text-slate-400 text-gray-600 leading-relaxed">
-                                Analyzes up to 5,000 games from both Chess.com and Lichess simultaneously. Get a complete picture of your opponent's playing style across all platforms.
+                                Analyzes up to 10,000 games from both Chess.com and Lichess simultaneously. Get a complete picture of your opponent's playing style across all platforms.
                             </p>
                         </div>
 
@@ -252,7 +252,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             </div>
                             <h3 className="text-xl font-bold mb-3 text-white dark:text-white text-gray-900">Deep Analysis</h3>
                             <p className="text-slate-400 dark:text-slate-400 text-gray-600">
-                                We fetch up to 5,000 games, analyze them with Stockfish depth 10, and process opening statistics. This happens automatically in the background.
+                                We fetch up to 10,000 games, analyze them with Stockfish depth 10, and process opening statistics. This happens automatically in the background.
                             </p>
                         </div>
 
@@ -316,7 +316,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                 </div>
             </section>
 
-            {/* Login/Signup Section - Full Width */}
+            {/* Login/Signup Section - Full Width (hidden when user is authenticated) */}
+            {!user && (
             <section 
                 id="access" 
                 ref={loginRef.ref}
@@ -457,6 +458,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                     </div>
                 </div>
             </section>
+            )}
 
             {/* Footer */}
             <footer className="bg-slate-950 dark:bg-slate-950 bg-white border-t border-slate-800 dark:border-slate-800 border-gray-200 py-8 px-6">

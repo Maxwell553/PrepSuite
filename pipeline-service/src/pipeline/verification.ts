@@ -25,13 +25,17 @@ export function namesMatch(searchName: string, profileName: string): boolean {
 
   if (searchParts.length === 0 || profileParts.length === 0) return false;
 
-  const matchingParts = searchParts.filter((sp) =>
-    profileParts.some((pp) => pp.includes(sp) || sp.includes(pp)),
-  );
+  // Require meaningful matches: single-letter parts (e.g. "n" from "Max N") only match exact same letter
+  const partsMatch = (sp: string, pp: string) => {
+    if (sp.length < 2 || pp.length < 2) return sp === pp;
+    return pp.includes(sp) || sp.includes(pp);
+  };
+
+  const matchingParts = searchParts.filter((sp) => profileParts.some((pp) => partsMatch(sp, pp)));
 
   return (
     matchingParts.length >= Math.min(2, searchParts.length) ||
-    (searchParts.length === 1 && profileParts.some((pp) => pp.includes(searchParts[0]) || searchParts[0].includes(pp)))
+    (searchParts.length === 1 && profileParts.some((pp) => partsMatch(searchParts[0], pp)))
   );
 }
 

@@ -109,6 +109,13 @@ analyzeRoute.post('/analyze', async (c) => {
         '[Analyze] Identity resolved',
       );
 
+      if (!identity.chessComUsername && !identity.lichessUsername) {
+        const msg = 'Could not find Chess.com or Lichess username. Please provide usernames manually.';
+        logger.warn({ name: identity.verifiedName }, '[Analyze] No platform usernames found');
+        sse.sendError({ error: msg });
+        return;
+      }
+
       // ── Phase 2: Game Fetching ─────────────────────────────
       const gameLimit = input.gameLimit || 1000;
       const gameResult = await fetchGames(

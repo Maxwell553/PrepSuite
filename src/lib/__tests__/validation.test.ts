@@ -82,11 +82,22 @@ describe('validation', () => {
     it('should reject game limit above maximum', () => {
       const invalidInput = {
         name: 'Test Player',
-        gameLimit: 10000,
+        gameLimit: 10001,
       };
 
       const result = playerSearchSchema.safeParse(invalidInput);
       expect(result.success).toBe(false);
+    });
+
+    it('should accept game limit at maximum (10000)', () => {
+      const validInput = {
+        name: 'Test Player',
+        gameLimit: 10000,
+      };
+
+      const result = playerSearchSchema.safeParse(validInput);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.gameLimit).toBe(10000);
     });
 
     it('should accept optional fields as empty strings', () => {
