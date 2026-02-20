@@ -13,6 +13,7 @@ import { corsMiddleware } from './middleware/cors.js';
 import { authMiddleware } from './middleware/auth.js';
 import { loggerMiddleware } from './middleware/logger.js';
 import { healthRoute } from './routes/health.js';
+import { proxyRoute } from './routes/proxy.js';
 import { analyzeRoute } from './routes/analyze.js';
 import { chatRoute } from './routes/chat.js';
 import { logger } from './lib/logger.js';
@@ -27,6 +28,7 @@ app.use('*', corsMiddleware);
 
 // Public routes
 app.route('/health', healthRoute);
+app.route('/proxy', proxyRoute);
 
 // Protected routes
 app.use('/api/*', authMiddleware);

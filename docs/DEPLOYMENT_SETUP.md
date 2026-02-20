@@ -297,6 +297,15 @@ If you see **"Function failed due to not having enough compute resources"** or s
 
 ---
 
+## 🔧 Troubleshooting: FIDE Request Timeout (Local Dev)
+
+If FIDE profile/search requests fail with **"Request timeout"** when running the pipeline locally (but work in production):
+
+1. **Use the proxy** – Set `PROXY_BASE_URL` in `pipeline-service/.env` to your deployed Cloud Run URL (e.g. `https://prepsuite-xxx.run.app`). FIDE requests will be routed through the deployed service, which has better connectivity to `ratings.fide.com`.
+2. **Timeouts** – Dev and production now use the same longer timeouts (45s fetch, 25s body read).
+
+---
+
 ## 📚 Additional Resources
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)

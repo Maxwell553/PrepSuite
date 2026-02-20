@@ -1,4 +1,5 @@
 import { fetchWithRetry } from '../lib/fetchWithRetry.js';
+import { getFideFetchUrl } from '../lib/fideProxy.js';
 import { logger } from '../lib/logger.js';
 import { namesMatch } from './verification.js';
 
@@ -19,12 +20,13 @@ export interface FideSearchResult {
 export async function searchFideByName(name: string): Promise<FideSearchResult[]> {
   const query = encodeURIComponent(name.trim());
   const url = `https://ratings.fide.com/incl_search_l.php?search=${query}&simple=1`;
+  const fetchUrl = getFideFetchUrl(url);
 
   logger.info({ name, url }, '[FideSearch] Searching FIDE by name');
 
   try {
-    const res = await fetchWithRetry(url, {
-      timeoutMs: 20000,
+    const res = await fetchWithRetry(fetchUrl, {
+      timeoutMs: 45_000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',

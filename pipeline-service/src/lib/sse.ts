@@ -9,22 +9,47 @@ import { logger } from './logger.js';
  *   // Then call sse.sendPhase(), sse.sendProgress(), etc.
  *   // Finally call sse.close()
  */
+/** Interval (ms) for SSE comment keepalive to prevent proxy/load balancer idle timeout */
+const KEEPALIVE_INTERVAL_MS = 15_000;
+
 export class SSEStream {
   private controller: ReadableStreamDefaultController<Uint8Array> | null = null;
   private encoder = new TextEncoder();
   private stream: ReadableStream<Uint8Array>;
   private closed = false;
+  private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     this.stream = new ReadableStream<Uint8Array>({
       start: (controller) => {
         this.controller = controller;
+        this.startKeepalive();
       },
       cancel: () => {
         logger.warn('[SSE] Stream cancelled by client');
+        this.stopKeepalive();
         this.closed = true;
+        this.controller = null;
       },
     });
+  }
+
+  private startKeepalive(): void {
+    this.keepaliveTimer = setInterval(() => {
+      if (this.closed || !this.controller) return;
+      try {
+        this.controller.enqueue(this.encoder.encode(': keepalive\n\n'));
+      } catch {
+        // Stream closed, ignore
+      }
+    }, KEEPALIVE_INTERVAL_MS);
+  }
+
+  private stopKeepalive(): void {
+    if (this.keepaliveTimer) {
+      clearInterval(this.keepaliveTimer);
+      this.keepaliveTimer = null;
+    }
   }
 
   /** Get the Response object to return to the client */
@@ -71,6 +96,7 @@ export class SSEStream {
 
   async close(): Promise<void> {
     if (this.closed || !this.controller) return;
+    this.stopKeepalive();
     // Small delay to let the transport flush the final (potentially large) chunk
     await new Promise((resolve) => setTimeout(resolve, 200));
     logger.info('[SSE] Closing stream');
@@ -80,6 +106,7 @@ export class SSEStream {
     } catch {
       // Already closed
     }
+    this.controller = null;
   }
 }
 

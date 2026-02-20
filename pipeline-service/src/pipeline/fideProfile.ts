@@ -1,5 +1,6 @@
 import https from 'node:https';
 import { fetchWithRetry } from '../lib/fetchWithRetry.js';
+import { getFideFetchUrl } from '../lib/fideProxy.js';
 import { logger } from '../lib/logger.js';
 import type { FideProfile } from '../lib/types.js';
 
@@ -143,8 +144,9 @@ export async function getFideProfile(
   };
 
   const url = `https://ratings.fide.com/profile/${cleanId}`;
-  const BODY_TIMEOUT_MS = 15000;
-  const FETCH_TIMEOUT_MS = 30000;
+  const fetchUrl = getFideFetchUrl(url);
+  const BODY_TIMEOUT_MS = 25_000;
+  const FETCH_TIMEOUT_MS = 45_000;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -152,7 +154,7 @@ export async function getFideProfile(
       let html: string;
 
       try {
-        const res = await fetchWithRetry(url, {
+        const res = await fetchWithRetry(fetchUrl, {
           timeoutMs: FETCH_TIMEOUT_MS,
           headers,
         });
