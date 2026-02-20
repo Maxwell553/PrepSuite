@@ -49,10 +49,23 @@ export const analyzeRequestSchema = z.object({
     .regex(/^[a-zA-Z0-9_-]*$/, 'Lichess username contains invalid characters')
     .optional()
     .or(z.literal('')),
-  gameLimit: z.number().int().min(1).max(10000).default(1000).optional(),
+  gameLimit: z.number().int().min(1).max(10000).default(3000).optional(),
 });
 
 export type AnalyzeRequestInput = z.infer<typeof analyzeRequestSchema>;
+
+const gameDataSchema = z.object({
+  id: z.string().optional(),
+  white: z.string(),
+  black: z.string(),
+  result: z.string(),
+  eco: z.string(),
+  pgn: z.string().optional(),
+  playedAt: z.string(),
+  source: z.string().optional(),
+  timeControl: z.string().optional(),
+  openingName: z.string().optional(),
+});
 
 export const chatRequestSchema = z.object({
   report: z.object({
@@ -80,12 +93,24 @@ export const chatRequestSchema = z.object({
       .optional(),
     preparationSummary: z.string().optional(),
     blackStrategicSummary: z.string().optional(),
+    games: z.array(gameDataSchema).optional(),
   }),
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string().max(10000),
+      }),
+    )
+    .optional(),
   question: z
     .string()
-    .min(1, 'Question is required')
-    .max(2000, 'Question must be less than 2000 characters'),
-});
+    .max(2000, 'Question must be less than 2000 characters')
+    .optional(),
+}).refine(
+  (data) => (data.messages && data.messages.length > 0) || (data.question && data.question.trim().length > 0),
+  { message: 'Either messages (with at least one message) or question is required', path: ['messages'] },
+);
 
 export type ChatRequestInput = z.infer<typeof chatRequestSchema>;
 

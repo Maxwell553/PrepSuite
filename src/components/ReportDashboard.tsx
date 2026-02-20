@@ -161,10 +161,13 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
         <div className="grid md:grid-cols-2 gap-8">
             {/* White Opening Efficiency */}
             <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg flex flex-col">
-              <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-white">
+              <h3 className="text-lg font-bold mb-1 flex items-center gap-2 text-white">
                 <TrendingUp className="w-5 h-5 text-indigo-400" />
                 White Repertoire (Primary Openings)
               </h3>
+              <p className="text-sm text-slate-400 mb-6">
+                {(whiteOpenings || []).reduce((sum, op) => sum + (op.totalGames || 0), 0).toLocaleString()} games as White
+              </p>
               <div className="h-64 mb-6">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={whiteOpenings} margin={{ bottom: 40 }}>
@@ -213,10 +216,13 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
 
             {/* Black Repertoire */}
             <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg flex flex-col">
-              <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-white">
+              <h3 className="text-lg font-bold mb-1 flex items-center gap-2 text-white">
                 <Clock className="w-5 h-5 text-indigo-400" />
                 Black Repertoire (Defensive Systems)
               </h3>
+              <p className="text-sm text-slate-400 mb-6">
+                {(blackDefenses || []).reduce((sum, op) => sum + (op.totalGames || 0), 0).toLocaleString()} games as Black
+              </p>
               <div className="h-64 mb-6">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={blackDefenses} margin={{ bottom: 40 }}>

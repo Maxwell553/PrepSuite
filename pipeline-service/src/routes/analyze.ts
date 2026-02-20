@@ -118,7 +118,7 @@ analyzeRoute.post('/analyze', async (c) => {
       }
 
       // ── Phase 2: Game Fetching ─────────────────────────────
-      const gameLimit = input.gameLimit || 1000;
+      const gameLimit = input.gameLimit || 3000;
       const gameResult = await fetchGames(
         identity.chessComUsername,
         identity.lichessUsername,

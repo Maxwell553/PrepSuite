@@ -20,6 +20,12 @@ export interface PipelineResult {
   report: ScoutingReport;
 }
 
+/** Chat message for conversation history */
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 /** Chat context sent to /api/chat */
 export interface ChatContext {
   player: PlayerMetadata;
@@ -31,6 +37,19 @@ export interface ChatContext {
   };
   preparationSummary?: string;
   blackStrategicSummary?: string;
+  /** Games for tool access (get_game, get_pgn). */
+  games?: Array<{
+    id?: string;
+    white: string;
+    black: string;
+    result: string;
+    eco: string;
+    pgn?: string;
+    playedAt: string;
+    source?: string;
+    timeControl?: string;
+    openingName?: string;
+  }>;
 }
 
 export interface PipelineCallbacks {
@@ -166,17 +185,16 @@ export async function runPipeline(
 }
 
 /**
- * Send a chat question to the pipeline service.
+ * Send a chat request to the pipeline service.
+ * Supports conversation history and tools (get_game, get_pgn, run_stockfish).
  * Returns the AI response text.
  */
 export async function chatWithPipeline(
   report: ChatContext,
-  question: string,
+  messages: ChatMessage[],
   accessToken: string,
 ): Promise<string> {
-  // Default to same-origin when served from the pipeline service
   const baseUrl = import.meta.env.VITE_PIPELINE_SERVICE_URL || '';
-
   const url = `${baseUrl}/api/chat`;
 
   const response = await fetch(url, {
@@ -185,7 +203,7 @@ export async function chatWithPipeline(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ report, question }),
+    body: JSON.stringify({ report, messages }),
   });
 
   if (!response.ok) {

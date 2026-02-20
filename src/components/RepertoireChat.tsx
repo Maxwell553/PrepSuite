@@ -51,84 +51,16 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose }) => {
     setIsLoading(true);
 
     try {
-      // Build context about the player's repertoire
-      const whiteOpenings = report.whiteOpenings?.slice(0, 10).map(op =>
-        `${op.name} (${op.totalGames} games, ${(op.winRate * 100).toFixed(1)}% win rate)`
-      ).join('\n') || 'No white openings data available';
-
-      const blackDefenses = report.blackDefenses?.slice(0, 10).map(def =>
-        `${def.name} (${def.totalGames} games, ${(def.winRate * 100).toFixed(1)}% win rate)`
-      ).join('\n') || 'No black defenses data available';
-
-      const mostPlayedWhite = report.mostPlayedLines?.white?.slice(0, 5).map(line =>
-        `${line.moves.join(' ')} (${line.games} games, ${(line.frequency * 100).toFixed(1)}% frequency)`
-      ).join('\n') || 'No white lines data available';
-
-      const mostPlayedBlack = report.mostPlayedLines?.black?.slice(0, 5).map(line =>
-        `${line.moves.join(' ')} (${line.games} games, ${(line.frequency * 100).toFixed(1)}% frequency)`
-      ).join('\n') || 'No black lines data available';
-
-      const prompt = `You are an expert chess analyst helping to understand ${report.player.name}'s repertoire.
-
-⚠️ CRITICAL: "White Openings" = what ${report.player.name} PLAYS when they have the WHITE pieces. "Black Defenses" = what they PLAY when they have the BLACK pieces. NEVER confuse these. If asked "what do they play as Black?", answer from Black Defenses only. If asked "what do they play as White?", answer from White Openings only.
-
-Player Information:
-- Name: ${report.player.name}
-- FIDE Rating: ${report.player.currentRating != null && report.player.currentRating > 0 ? report.player.currentRating : 'Not found'}
-- USCF Rating: ${report.player.uscfRating != null && report.player.uscfRating > 0 ? report.player.uscfRating : 'Not found'}
-- Country: ${report.player.country || 'Unknown'}
-
-White Openings (what ${report.player.name} plays when they have WHITE):
-${whiteOpenings}
-
-Black Defenses (what ${report.player.name} plays when they have BLACK):
-${blackDefenses}
-
-Most Played White Lines:
-${mostPlayedWhite}
-
-Most Played Black Lines:
-${mostPlayedBlack}
-
-Strategic Summary:
-${report.preparationSummary || 'No summary available'}
-
-Black Strategic Summary:
-${report.blackStrategicSummary || 'No summary available'}
-
-User Question: ${userMessage.content}
-
-Instructions:
-1. Answer the user's question about ${report.player.name}'s repertoire based on the data provided above
-2. ⚠️ CRITICAL: Provide a COMPREHENSIVE, DETAILED answer. Do NOT be brief or concise. Expand on your answer with:
-   - Specific examples from the data
-   - Detailed explanations of patterns
-   - Context about when and how the player uses certain openings/lines
-   - Comparisons between different options
-   - Strategic implications
-   - Any relevant nuances or details
-3. Be specific and cite actual openings/lines when possible
-4. ⚠️ CRITICAL STATISTICAL SIGNIFICANCE RULES:
-   - NEVER use words like "often", "typically", "usually", "frequently", "tends to", "prefers" unless the pattern appears in 10+ games. Do NOT cite lines that "appeared twice" - that is not a pattern.
-   - If a line appears in ONLY 1 game, say "played once" or "appeared in one game" - DO NOT say "often plays" or "typically plays"
-   - If a line appears in 2 games, say "played twice" or "appeared in 2 games" - DO NOT generalize
-   - Only use generalization language when a pattern appears in at least 5+ games
-   - Always cite actual game counts: "played X times in Y games" or "appears in Z% of games"
-5. If the player has played a specific line, mention the EXACT frequency and win rate (e.g., "played 8 times in 30 games, with a 62.5% win rate")
-6. If the player hasn't played a specific line, say so explicitly and suggest what they actually play instead (with game counts)
-7. Use chess notation (e.g., 1.e4 c5 2.Nf3 d6) when discussing specific lines
-8. If asked about a specific position, analyze what the player actually plays from similar positions and cite how many times it appeared
-9. Do NOT reference specific game numbers (e.g. "Game 19", "Games 4, 10, 11"). Describe aggregate patterns and trends instead.
-9. FORMATTING: DO NOT use ** (double asterisks) for bold text. ONLY use * (single asterisk) at the beginning of bullet points or list items. Write all text in plain format without markdown bold formatting.
-10. Provide a thorough, detailed response that fully addresses the user's question. Do not truncate or abbreviate your answer.
-
-Answer:`;
-
-      // Route chat through pipeline service
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         throw new Error('Authentication required. Please log in and try again.');
       }
+
+      // Build conversation history: include the new user message (state not yet updated)
+      const allMessages = [
+        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        { role: 'user' as const, content: userMessage.content },
+      ];
 
       const response = await chatWithPipeline(
         {
@@ -138,8 +70,9 @@ Answer:`;
           mostPlayedLines: report.mostPlayedLines,
           preparationSummary: report.preparationSummary,
           blackStrategicSummary: report.blackStrategicSummary,
+          games: report.games,
         },
-        userMessage.content,
+        allMessages,
         session.access_token,
       );
 

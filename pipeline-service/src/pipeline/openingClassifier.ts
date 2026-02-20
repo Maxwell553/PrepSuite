@@ -16,6 +16,7 @@ import {
   getOpeningsByEco,
 } from '@chess-openings/eco.json';
 import { logger } from '../lib/logger.js';
+import { formatMoveSequence } from './moveSequenceExtractor.js';
 
 // ── Tier 1: ECO library ───────────────────────────────────────────
 
@@ -28,7 +29,7 @@ export interface OpeningResult {
 let cachedBook: Awaited<ReturnType<typeof openingBook>> | null = null;
 let cachedPosBook: ReturnType<typeof getPositionBook> | null = null;
 
-async function getOpeningBook() {
+export async function getOpeningBook() {
   if (!cachedBook) {
     logger.info('[OpeningClassifier] Loading ECO opening book...');
     cachedBook = await openingBook();
@@ -37,6 +38,49 @@ async function getOpeningBook() {
     logger.info({ count }, '[OpeningClassifier] ECO book loaded');
   }
   return { book: cachedBook, posBook: cachedPosBook! };
+}
+
+/**
+ * Look up an opening by move sequence using the ECO library.
+ * Used by chat tools for opening breakdown and lookup.
+ */
+export async function lookupOpeningByMoves(moveSequence: string[]): Promise<OpeningResult | null> {
+  if (!moveSequence || moveSequence.length === 0) return null;
+  const pgn = formatMoveSequence(moveSequence);
+  if (!pgn) return null;
+  try {
+    const { book, posBook } = await getOpeningBook();
+    const chess = new Chess();
+    chess.loadPgn(`[White "?"]\n[Black "?"]\n\n${pgn}`);
+    const result = lookupByMoves(chess, book, {
+      positionBook: posBook,
+      maxMovesBack: 30,
+    });
+    if (!result.opening) return null;
+    return {
+      name: result.opening.name,
+      eco: result.opening.eco,
+      moves: result.opening.moves || pgn,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Look up opening(s) by ECO code using the ECO library.
+ */
+export async function lookupOpeningByEco(ecoCode: string): Promise<OpeningResult | null> {
+  const code = normalizeEco(ecoCode);
+  if (!code) return null;
+  try {
+    const { book } = await getOpeningBook();
+    const name = await lookupByEcoCode(book, code);
+    if (!name) return null;
+    return { name, eco: code, moves: '' };
+  } catch {
+    return null;
+  }
 }
 
 /** Normalize ECO code: "B20-B29" → "B20", "B20/1" → "B20", "B201" → "B20" */

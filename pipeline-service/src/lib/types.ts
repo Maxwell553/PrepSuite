@@ -174,7 +174,10 @@ export interface ScoutingReport {
 /** Chat request body for POST /api/chat */
 export interface ChatRequest {
   report: ChatContext;
-  question: string;
+  /** Conversation history. If provided, the last message should be the current user question. */
+  messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  /** Legacy: single question. Used when messages is not provided. */
+  question?: string;
 }
 
 /** Subset of ScoutingReport used for chat context */
@@ -188,6 +191,8 @@ export interface ChatContext {
   };
   preparationSummary?: string;
   blackStrategicSummary?: string;
+  /** Games for tool access (get_game, get_pgn). 1-based indexing. */
+  games?: GameData[];
 }
 
 /** SSE event: phase status */
