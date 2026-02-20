@@ -23,6 +23,7 @@ COPY pipeline-service/package.json pipeline-service/package-lock.json* ./
 RUN npm ci
 COPY pipeline-service/tsconfig.json ./
 COPY pipeline-service/src/ ./src/
+COPY pipeline-service/standard_rating_list.txt ./
 RUN npm run build
 
 # ── Stage 3: Production runtime ──────────────────────────────────────
@@ -38,6 +39,7 @@ RUN npm ci --omit=dev
 
 # Copy compiled backend
 COPY --from=backend-builder /app/pipeline-service/dist ./dist
+COPY --from=backend-builder /app/pipeline-service/standard_rating_list.txt ./
 
 # Copy built frontend to ../dist (where serveStatic expects it)
 COPY --from=frontend-builder /app/dist ../dist

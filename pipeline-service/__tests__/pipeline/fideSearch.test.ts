@@ -10,7 +10,7 @@ describe('parseFideSearchResults', () => {
     const html = readFileSync(join(fixturesDir, 'fide-search-results.html'), 'utf-8');
     const results = parseFideSearchResults(html);
     expect(results.length).toBe(2);
-    expect(results[0]).toEqual({
+    expect(results[0]).toMatchObject({
       fideId: '1503014',
       name: 'Carlsen, Magnus',
       federation: 'NOR',

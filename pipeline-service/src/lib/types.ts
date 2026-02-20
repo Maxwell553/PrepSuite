@@ -193,10 +193,12 @@ export interface ChatContext {
 /** SSE event: phase status */
 export interface PhaseEvent {
   phase: 'identity' | 'games' | 'parsing' | 'engine' | 'report';
-  status: 'started' | 'complete';
+  status: 'started' | 'complete' | 'progress';
   durationMs?: number;
   gameCount?: number;
   gamesAnalyzed?: number;
+  /** When status is 'progress', a short message for the UI */
+  message?: string;
 }
 
 /** SSE event: progress within a phase */

@@ -1,40 +1,6 @@
-import https from 'node:https';
-import { fetchWithRetry } from '../lib/fetchWithRetry.js';
-import { getFideFetchUrl } from '../lib/fideProxy.js';
+import { getFideProfileById } from '../lib/fideLocalDb.js';
 import { logger } from '../lib/logger.js';
 import type { FideProfile } from '../lib/types.js';
-
-/** Fallback: fetch via native https when global fetch fails (e.g. dev IPv6/DNS issues) */
-async function fetchViaHttps(url: string, headers: Record<string, string>, timeoutMs: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      req.destroy();
-      reject(new Error('Request timeout'));
-    }, timeoutMs);
-
-    const req = https.get(url, { headers }, (res) => {
-      if (res.statusCode && res.statusCode >= 400) {
-        clearTimeout(timer);
-        reject(new Error(`HTTP ${res.statusCode}`));
-        return;
-      }
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => {
-        clearTimeout(timer);
-        resolve(Buffer.concat(chunks).toString('utf-8'));
-      });
-      res.on('error', (e) => {
-        clearTimeout(timer);
-        reject(e);
-      });
-    });
-    req.on('error', (e) => {
-      clearTimeout(timer);
-      reject(e);
-    });
-  });
-}
 
 const VALID_TITLES = ['GM', 'IM', 'FM', 'CM', 'WGM', 'WIM', 'WFM', 'WCM', 'NM', 'WNM'];
 
@@ -124,92 +90,17 @@ export function parseFideProfileHtml(html: string, fideId: string): FideProfile 
 }
 
 /**
- * Fetch a FIDE profile by ID with retry.
- * Direct URL: https://ratings.fide.com/profile/{id}
+ * Get FIDE profile by ID from local rating list.
  */
-export async function getFideProfile(
-  fideId: string,
-  retries = 3,
-): Promise<FideProfile | null> {
+export async function getFideProfile(fideId: string): Promise<FideProfile | null> {
   if (!fideId?.trim()) return null;
 
   const cleanId = fideId.trim();
+  logger.info({ fideId: cleanId }, '[FideProfile] Looking up (local DB)');
 
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Referer': 'https://ratings.fide.com/',
-    'Connection': 'keep-alive',
-  };
-
-  const url = `https://ratings.fide.com/profile/${cleanId}`;
-  const fetchUrl = getFideFetchUrl(url);
-  const BODY_TIMEOUT_MS = 25_000;
-  const FETCH_TIMEOUT_MS = 45_000;
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      logger.info({ fideId: cleanId, attempt: attempt + 1 }, '[FideProfile] Fetching');
-      let html: string;
-
-      try {
-        const res = await fetchWithRetry(fetchUrl, {
-          timeoutMs: FETCH_TIMEOUT_MS,
-          headers,
-        });
-        if (!res.ok) {
-          logger.warn({ fideId: cleanId, status: res.status }, '[FideProfile] Fetch failed');
-          if (attempt < retries) {
-            await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-            continue;
-          }
-          return null;
-        }
-        html = await Promise.race([
-          res.text(),
-          new Promise<string>((_, reject) =>
-            setTimeout(() => reject(new Error('Body read timeout')), BODY_TIMEOUT_MS),
-          ),
-        ]);
-      } catch (fetchErr) {
-        const cause = fetchErr instanceof Error ? fetchErr.cause : undefined;
-        const causeCode = cause && typeof cause === 'object' && 'code' in cause ? (cause as { code?: string }).code : undefined;
-        logger.warn(
-          {
-            errMsg: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
-            causeCode,
-            fideId: cleanId,
-            attempt: attempt + 1,
-          },
-          '[FideProfile] Fetch failed, trying https fallback',
-        );
-        html = await fetchViaHttps(url, headers, FETCH_TIMEOUT_MS);
-      }
-
-      const profile = parseFideProfileHtml(html, cleanId);
-      if (profile) {
-        logger.info({ fideId: cleanId, name: profile.name }, '[FideProfile] Success');
-        return profile;
-      }
-
-      if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-      }
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      const errName = err instanceof Error ? err.name : undefined;
-      const cause = err instanceof Error ? err.cause : undefined;
-      const causeCode = cause && typeof cause === 'object' && 'code' in cause ? (cause as { code?: string }).code : undefined;
-      logger.error(
-        { errMsg, errName, causeCode, fideId: cleanId, attempt: attempt + 1 },
-        '[FideProfile] Error',
-      );
-      if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-      }
-    }
+  const profile = getFideProfileById(cleanId);
+  if (profile) {
+    logger.info({ fideId: cleanId, name: profile.name }, '[FideProfile] Success');
   }
-
-  return null;
+  return profile;
 }

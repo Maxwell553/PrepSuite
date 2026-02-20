@@ -90,6 +90,7 @@ analyzeRoute.post('/analyze', async (c) => {
         input.uscfId || '',
         input.chessComUsername || undefined,
         input.lichessUsername || undefined,
+        (message) => sse.sendPhase({ phase: 'identity', status: 'progress', message }),
       );
 
       sse.sendPhase({

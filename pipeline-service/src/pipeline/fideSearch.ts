@@ -1,5 +1,4 @@
-import { fetchWithRetry } from '../lib/fetchWithRetry.js';
-import { getFideFetchUrl } from '../lib/fideProxy.js';
+import { searchFideByName as searchLocal } from '../lib/fideLocalDb.js';
 import { logger } from '../lib/logger.js';
 import { namesMatch } from './verification.js';
 
@@ -14,37 +13,11 @@ export interface FideSearchResult {
 
 /**
  * Search FIDE ratings database by player name.
- * Uses the AJAX search endpoint that FIDE's own UI calls.
- * Returns candidate matches sorted by relevance.
+ * Uses local FIDE rating list (standard_rating_list.txt).
  */
 export async function searchFideByName(name: string): Promise<FideSearchResult[]> {
-  const query = encodeURIComponent(name.trim());
-  const url = `https://ratings.fide.com/incl_search_l.php?search=${query}&simple=1`;
-  const fetchUrl = getFideFetchUrl(url);
-
-  logger.info({ name, url }, '[FideSearch] Searching FIDE by name');
-
-  try {
-    const res = await fetchWithRetry(fetchUrl, {
-      timeoutMs: 45_000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'https://ratings.fide.com/',
-      },
-    });
-    if (!res.ok) {
-      logger.warn({ status: res.status }, '[FideSearch] Search request failed');
-      return [];
-    }
-
-    const html = await res.text();
-    return parseFideSearchResults(html);
-  } catch (err) {
-    logger.warn({ err, name }, '[FideSearch] Search failed');
-    return [];
-  }
+  logger.info({ name }, '[FideSearch] Searching FIDE by name (local DB)');
+  return searchLocal(name);
 }
 
 /**
@@ -73,27 +46,36 @@ export function parseFideSearchResults(html: string): FideSearchResult[] {
 
     const fideId = idMatch[1];
 
-    // Extract name from profile link
-    const nameMatch = row.match(/class="found_name"[^>]*>([^<]+)</);
+    // Extract name from profile link (FIDE uses class="found_name", fixtures may use plain <a href="/profile/ID">Name</a>)
+    const nameMatch =
+      row.match(/class="found_name"[^>]*>([^<]+)</) || row.match(/href="?\/profile\/\d+"?[^>]*>([^<]+)</);
     const name = nameMatch ? nameMatch[1].trim() : '';
     if (!name) continue;
 
-    // Extract federation from flag image alt or text
-    const fedMatch = row.match(/<img[^>]*alt="([A-Z]{3})"/) || row.match(/>([A-Z]{3})<\/td>/);
+    // Extract federation from flag image alt or text, or plain <td>FED</td>
+    const fedMatch =
+      row.match(/<img[^>]*alt="([A-Z]{3})"/) ||
+      row.match(/data-label="Fed"[^>]*>([A-Z]{3})</i) ||
+      row.match(/<td[^>]*>([A-Z]{3})<\/td>/);
     const federation = fedMatch ? fedMatch[1] : '';
 
-    // Extract title (GM, IM, FM, etc.) from data-label="title" cell
-    const titleMatch = row.match(
-      /data-label="title"[^>]*>\s*(?:<[^>]*>)?\s*(GM|IM|FM|CM|WGM|WIM|WFM|WCM|NM|WNM)\s*(?:<|$)/i,
-    );
+    // Extract title (GM, IM, FM, etc.) from data-label="title" cell or plain <td>GM</td>
+    const titleMatch =
+      row.match(
+        /data-label="title"[^>]*>\s*(?:<[^>]*>)?\s*(GM|IM|FM|CM|WGM|WIM|WFM|WCM|NM|WNM)\s*(?:<|$)/i,
+      ) || row.match(/<td[^>]*>\s*(GM|IM|FM|CM|WGM|WIM|WFM|WCM|NM|WNM)\s*<\/td>/i);
     const title = titleMatch ? titleMatch[1].toUpperCase() : '';
 
-    // Extract standard rating
-    const ratingCells = row.match(/data-label="Rtg"[^>]*>(\d*)</g) || [];
+    // Extract standard rating from data-label="Rtg" or plain <td>2830</td>
+    const ratingCells = row.match(/data-label="Rtg"[^>]*>(\d*)</gi) || [];
     let rating = 0;
     if (ratingCells.length > 0 && ratingCells[0]) {
       const ratingMatch = ratingCells[0].match(/(\d+)/);
       if (ratingMatch) rating = parseInt(ratingMatch[1]);
+    }
+    if (rating === 0) {
+      const plainRating = row.match(/<td[^>]*>\s*(\d{4})\s*<\/td>/);
+      if (plainRating) rating = parseInt(plainRating[1]);
     }
 
     // Extract birth year

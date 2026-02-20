@@ -57,6 +57,7 @@ export async function resolveIdentity(
   uscfId: string,
   providedChessComUsername?: string,
   providedLichessUsername?: string,
+  onProgress?: (message: string) => void,
 ): Promise<ResolvedIdentity> {
   let officialName = inputName;
   let fideProfile: FideProfile | null = null;
@@ -67,7 +68,7 @@ export async function resolveIdentity(
   const hasChessCom = !!providedChessComUsername?.trim();
   const hasLichess = !!providedLichessUsername?.trim();
 
-  // Cache lookup (server-side DB)
+  onProgress?.('Looking up cache...');
   const cached = await getCachedIdentity(
     inputName,
     fideId,
@@ -77,8 +78,8 @@ export async function resolveIdentity(
   );
   if (cached) return cached;
 
-  // Fast path: user provided all IDs and usernames — skip search and Gemini
   if (hasFideId && hasUscfId && hasChessCom && hasLichess) {
+    onProgress?.('Fetching FIDE & USCF profiles...');
     logger.info({ name: inputName }, '[Identity] Fast path: all IDs provided, skipping search');
     const [fideProfileFetched, uscfProfileFetched] = await Promise.all([
       getFideProfile(fideId.trim()),
@@ -120,6 +121,7 @@ export async function resolveIdentity(
 
     for (let geminiAttempt = 0; geminiAttempt < MAX_GEMINI_ID_RETRIES; geminiAttempt++) {
       if (geminiAttempt === 0 && inputName.trim() && (!fideId || !uscfId || needsChessCom || needsLichess)) {
+        onProgress?.('Searching FIDE, USCF & usernames...');
         logger.info(
           { name: inputName },
           '[Identity] Steps 1+2: FIDE + USCF + Gemini IDs + Gemini usernames (parallel)',
@@ -181,7 +183,7 @@ export async function resolveIdentity(
         }
       }
 
-      // ── Step 3: Fetch FIDE/USCF profiles and validate names ────────
+      onProgress?.('Fetching FIDE & USCF profiles...');
       logger.info({ fideId: finalFideId, uscfId: finalUscfId }, '[Identity] Step 3: Fetching profiles');
       const [fideProfileFetched, uscfProfileFetched] = await Promise.all([
         finalFideId ? getFideProfile(finalFideId) : Promise.resolve(null),
@@ -280,6 +282,7 @@ export async function resolveIdentity(
     const stillNeedsLichess = !verifiedLichess;
 
     if (stillNeedsChessCom || stillNeedsLichess) {
+      onProgress?.('Verifying Chess.com & Lichess usernames...');
       const geminiUsernames = geminiUsernamesEarly;
 
       // Fetch all profiles in parallel
@@ -323,6 +326,7 @@ export async function resolveIdentity(
       }
     }
 
+    onProgress?.('Saving identity...');
     const result: ResolvedIdentity = {
       verifiedName: capitalizeName(officialName),
       fideProfile,

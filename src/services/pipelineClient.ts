@@ -34,7 +34,12 @@ export interface ChatContext {
 }
 
 export interface PipelineCallbacks {
-  onPhase?: (phase: string, status: string, durationMs?: number, extra?: { gameCount?: number; gamesAnalyzed?: number }) => void;
+  onPhase?: (
+    phase: string,
+    status: string,
+    durationMs?: number,
+    extra?: { gameCount?: number; gamesAnalyzed?: number; message?: string },
+  ) => void;
   onProgress?: (phase: string, current: number, total: number) => void;
   onError?: (error: string, phase?: string) => void;
 }
@@ -108,6 +113,7 @@ export async function runPipeline(
             {
               gameCount: data.gameCount as number | undefined,
               gamesAnalyzed: data.gamesAnalyzed as number | undefined,
+              message: data.message as string | undefined,
             },
           );
           break;

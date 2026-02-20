@@ -155,6 +155,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
             if (phase === 'identity' && status === 'started') {
               setScanningStatus('Step 1: Resolving player identity...');
               setLoadingStage('identity');
+            } else if (phase === 'identity' && status === 'progress' && extra?.message) {
+              setScanningStatus(`Step 1: ${extra.message}`);
             } else if (phase === 'identity' && status === 'complete') {
               setScanningStatus(`Step 1 complete (${durationMs ? Math.round(durationMs / 1000) : '?'}s)`);
             } else if (phase === 'games' && status === 'started') {
