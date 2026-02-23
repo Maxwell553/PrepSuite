@@ -2,7 +2,9 @@ import { fetchWithRetry } from '../lib/fetchWithRetry.js';
 import { logger } from '../lib/logger.js';
 
 const BASE_URL = 'https://lichess.org/api';
+const EXPORT_URL = 'https://lichess.org/games/export/_ids';
 const GAMES_PER_REQUEST = 500;
+const EXPORT_BATCH_SIZE = 300;
 
 export interface LichessGamesFetchResult {
   /** Raw NDJSON string of all games */
@@ -95,4 +97,74 @@ export async function fetchLichessGames(
     const finalLines = allLines.slice(0, targetGames);
     return { ndjson: finalLines.join('\n'), totalFetched: finalLines.length };
   }
+}
+
+/**
+ * Parse multi-game PGN from Lichess export API.
+ * Returns a map of gameId -> full PGN string.
+ */
+function parseMultiGamePgn(pgnText: string): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!pgnText || !pgnText.trim()) return map;
+
+  // Games are separated by blank line(s). Each game has [GameId "xxx"] header.
+  const gameBlocks = pgnText.split(/\n\n(?=\[Event )/);
+  for (const block of gameBlocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+    const gameIdMatch = trimmed.match(/\[GameId\s+"([^"]+)"\]/);
+    if (gameIdMatch) {
+      map.set(gameIdMatch[1], trimmed);
+    }
+  }
+  return map;
+}
+
+/**
+ * Fetch PGN for Lichess games via the export API.
+ * Returns standard PGN format (same as Chess.com) for reliable board display.
+ * Batches up to 300 IDs per request.
+ */
+export async function fetchLichessPgnBatch(
+  gameIds: string[],
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (gameIds.length === 0) return result;
+
+  const batches: string[][] = [];
+  for (let i = 0; i < gameIds.length; i += EXPORT_BATCH_SIZE) {
+    batches.push(gameIds.slice(i, i + EXPORT_BATCH_SIZE));
+  }
+
+  for (let b = 0; b < batches.length; b++) {
+    const ids = batches[b];
+    const body = ids.join(',');
+    try {
+      const res = await fetchWithRetry(EXPORT_URL, {
+        method: 'POST',
+        body,
+        headers: { Accept: 'application/x-chess-pgn' },
+        timeoutMs: 60000,
+      });
+      if (!res.ok) {
+        logger.warn({ status: res.status, batch: b + 1 }, '[Lichess] PGN export batch failed');
+        continue;
+      }
+      const text = await res.text();
+      const parsed = parseMultiGamePgn(text);
+      for (const [id, pgn] of parsed) {
+        result.set(id, pgn);
+      }
+      logger.info(
+        { batch: b + 1, requested: ids.length, received: parsed.size },
+        '[Lichess] PGN export batch complete',
+      );
+      if (b < batches.length - 1) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    } catch (err) {
+      logger.error({ err, batch: b + 1 }, '[Lichess] PGN export error');
+    }
+  }
+  return result;
 }

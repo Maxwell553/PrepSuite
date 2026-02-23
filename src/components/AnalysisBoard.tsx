@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw, Database, Filter, Fa
 import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
 import { GameData } from '../types';
-import { sanitizePgn } from '../lib/pgnUtils';
+import { loadPgn } from '../lib/pgnUtils';
 
 interface AnalysisBoardProps {
   games: GameData[];
@@ -20,6 +20,7 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
   const [gamePosition, setGamePosition] = useState<string>('start');
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
   const [fetchedPgns, setFetchedPgns] = useState<Record<string, string>>({});
+  const [isFetchingPgn, setIsFetchingPgn] = useState(false);
 
   // Early returns for empty games
   if (!games || games.length === 0) {
@@ -196,29 +197,42 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     return 'text-yellow-400';
   };
   
-  // Effective PGN: use inline or fetched PGN for Lichess games missing data
+  // Effective PGN: use inline or fetched Lichess PGN when missing
   const effectivePgn = currentGame.pgn && currentGame.pgn.trim().length > 10
     ? currentGame.pgn
     : (currentGame.id && currentGame.source === 'lichess' ? fetchedPgns[currentGame.id] : null) || currentGame.pgn;
 
-  // Fetch PGN from Lichess when game has no PGN but has id (for playback)
+  // Fetch PGN from Lichess when game has no PGN but has id (fallback for saved reports)
   useEffect(() => {
     const g = currentGame;
-    if (!g || g.source !== 'lichess' || !g.id) return;
-    if (g.pgn && g.pgn.trim().length > 10) return;
+    if (!g || g.source !== 'lichess' || !g.id) {
+      setIsFetchingPgn(false);
+      return;
+    }
+    if (g.pgn && g.pgn.trim().length > 10) {
+      setIsFetchingPgn(false);
+      return;
+    }
+    if (fetchedPgns[g.id]) {
+      setIsFetchingPgn(false);
+      return;
+    }
     let cancelled = false;
+    setIsFetchingPgn(true);
     (async () => {
       try {
-        const res = await fetch(`/lichess-export/game/export/${g.id}.pgn`);
+        const res = await fetch(`/lichess-export/game/export/${g.id}`);
         if (!res.ok || cancelled) return;
         const text = await res.text();
         if (cancelled || !text.trim()) return;
         setFetchedPgns(prev => ({ ...prev, [g.id!]: text }));
       } catch {
         // ignore
+      } finally {
+        if (!cancelled) setIsFetchingPgn(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; setIsFetchingPgn(false); };
   }, [currentGameIndex, currentGame?.id, currentGame?.source, currentGame?.pgn]);
 
   // Load game when currentGameIndex or effective PGN changes
@@ -231,20 +245,13 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
       return;
     }
 
-    try {
-      const chess = new Chess();
-      chess.loadPgn(sanitizePgn(effectivePgn));
+    const chess = loadPgn(effectivePgn, Chess);
+    if (chess) {
       setGame(chess);
-      
-      // Get move history
-      const history = chess.history();
-      setMoveHistory(history);
-      
-      // Reset to starting position
+      setMoveHistory(chess.history());
       setCurrentMoveIndex(-1);
       setGamePosition('start');
-    } catch (error) {
-      console.error('Failed to load PGN:', error);
+    } else {
       setGame(null);
       setMoveHistory([]);
       setCurrentMoveIndex(-1);
@@ -260,23 +267,20 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     }
 
     try {
+      const history = game.history({ verbose: true });
       const chess = new Chess();
-      chess.loadPgn(sanitizePgn(effectivePgn || ''));
-      
-      // Replay moves up to currentMoveIndex
-      const history = chess.history({ verbose: true });
       chess.reset();
-      
+
       for (let i = 0; i <= currentMoveIndex && i < history.length; i++) {
         const move = history[i];
         chess.move({ from: move.from, to: move.to, promotion: move.promotion });
       }
-      
+
       setGamePosition(chess.fen());
     } catch (error) {
       console.error('Error updating position:', error);
     }
-  }, [currentMoveIndex, game, effectivePgn]);
+  }, [currentMoveIndex, game]);
 
   // Auto-play moves
   useEffect(() => {
@@ -500,7 +504,9 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
                 <div className="aspect-square flex-1 flex items-center justify-center bg-slate-800/40 rounded-xl border border-dashed border-slate-600">
                   <div className="text-center text-slate-500">
                     <Database className="w-14 h-14 mx-auto mb-2 opacity-50" />
-                    <div className="text-sm">No valid PGN available</div>
+                    <div className="text-sm">
+                      {isFetchingPgn ? 'Loading PGN...' : 'No valid PGN available'}
+                    </div>
                   </div>
                 </div>
               )}
@@ -526,14 +532,19 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
             </div>
 
             {/* Game summary - 5% wider than max-w-2xl (42rem * 1.05 ≈ 44rem) */}
-            <div className="w-full max-w-[44rem] text-sm text-center">
-              <span className={`font-semibold ${getResultColor(currentGame.result, isPlayerWhite, isPlayerBlack)}`}>{getGameResult(currentGame.result)}</span>
-              <span className="text-slate-500"> · </span>
-              <span className="font-semibold text-slate-200">{currentGame.white}</span>
-              <span className="text-slate-500"> vs </span>
-              <span className="font-semibold text-slate-200">{currentGame.black}</span>
-              <span className="text-slate-500"> · {currentGame.result} · {currentGame.eco || currentGame.openingName || 'Unknown'} · </span>
-              <span className="text-slate-500">{new Date(currentGame.playedAt).toLocaleDateString()}</span>
+            <div className="w-full max-w-[44rem] text-sm text-center space-y-1">
+              <div>
+                <span className={`font-semibold ${getResultColor(currentGame.result, isPlayerWhite, isPlayerBlack)}`}>{getGameResult(currentGame.result)}</span>
+                <span className="text-slate-500"> · </span>
+                <span className="font-semibold text-slate-200">{currentGame.white}</span>
+                <span className="text-slate-500"> vs </span>
+                <span className="font-semibold text-slate-200">{currentGame.black}</span>
+                <span className="text-slate-500"> · {currentGame.result} · {currentGame.eco || currentGame.openingName || 'Unknown'} · </span>
+                <span className="text-slate-500">{new Date(currentGame.playedAt).toLocaleDateString()}</span>
+              </div>
+              <div className="text-slate-500 text-xs">
+                {currentGame.source === 'lichess' ? 'Lichess.org' : currentGame.source === 'chess.com' ? 'Chess.com' : currentGame.source || 'Unknown'}
+              </div>
             </div>
           </div>
         </div>

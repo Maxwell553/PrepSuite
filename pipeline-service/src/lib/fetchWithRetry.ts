@@ -5,6 +5,8 @@ export interface FetchWithRetryOptions {
   delayMs?: number;
   timeoutMs?: number;
   headers?: Record<string, string>;
+  method?: string;
+  body?: string;
 }
 
 /**
@@ -21,6 +23,8 @@ export async function fetchWithRetry(
       const res = await fetch(url, {
         headers,
         signal: AbortSignal.timeout(timeoutMs),
+        ...(options.method && { method: options.method }),
+        ...(options.body !== undefined && { body: options.body }),
       });
 
       if (res.status === 429) {
