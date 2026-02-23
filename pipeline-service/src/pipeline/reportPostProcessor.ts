@@ -85,9 +85,7 @@ export function postProcessReport(
   reportData.player.platforms.lichess = identity.lichessUsername || '';
   reportData.player.currentRating = identity.fideProfile?.rating;
   reportData.player.uscfRating = identity.uscfProfile?.rating;
-  reportData.player.fideId = identity.fideProfile ? String(identity.fideProfile.rating ? '' : '') : '';
-  // Use the FIDE profile's name to extract fideId — we don't have the raw ID here,
-  // so keep whatever Gemini returned or leave it
+  reportData.player.fideId = identity.fideId || '';
   reportData.player.country =
     identity.fideProfile?.federation ||
     identity.uscfProfile?.name?.split(',')?.pop()?.trim() ||

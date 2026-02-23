@@ -55,7 +55,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
 
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [gameLimit, setGameLimit] = useState(3000);
+  const [gameLimit, setGameLimit] = useState(1000);
   const [formData, setFormData] = useState({
     name: '',
     fideId: '',
@@ -413,7 +413,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                     <div className="mb-4 flex items-start gap-2 p-3 bg-indigo-900/10 dark:bg-indigo-900/10 bg-indigo-50 border border-indigo-500/20 dark:border-indigo-500/20 border-indigo-200 rounded-lg">
                       <Info className="w-4 h-4 text-indigo-400 dark:text-indigo-400 text-indigo-600 shrink-0 mt-0.5" />
                       <p className="text-xs text-indigo-300 dark:text-indigo-300 text-indigo-700">
-                        <span className="font-semibold">3,000 games</span> is the default number of games analyzed. You can analyze up to <span className="font-semibold">10,000 games</span> for more comprehensive analysis (may take longer).
+                        <span className="font-semibold">1,000 games</span> is the default number of games analyzed. You can analyze up to <span className="font-semibold">10,000 games</span> for more comprehensive analysis (may take longer).
                       </p>
                     </div>
 

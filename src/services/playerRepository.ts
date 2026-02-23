@@ -250,6 +250,24 @@ export const playerRepository = {
     },
 
     /**
+     * Deletes multiple scouting reports by IDs.
+     */
+    async deleteReports(reportIds: string[]) {
+        if (reportIds.length === 0) return;
+        console.log(`[Repository] Deleting ${reportIds.length} reports`);
+        const { error } = await supabase
+            .from('scouting_reports')
+            .delete()
+            .in('id', reportIds);
+
+        if (error) {
+            console.error('[Repository] Error bulk deleting reports:', error);
+            throw error;
+        }
+        console.log(`[Repository] Bulk delete completed for ${reportIds.length} reports`);
+    },
+
+    /**
      * Fetches the complete report history for a specific user.
      */
     async getUserHistory(userId: string) {

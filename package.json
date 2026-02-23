@@ -28,7 +28,6 @@
     "react-chessboard": "^4.4.0",
     "react-dom": "^19.2.3",
     "recharts": "^3.6.0",
-    "stockfish.js": "^10.0.2",
     "supabase": "^2.72.6",
     "zod": "^3.23.8"
   },

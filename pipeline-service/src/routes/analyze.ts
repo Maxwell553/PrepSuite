@@ -6,6 +6,7 @@ import type { ResolvedIdentity } from '../lib/types.js';
 import type { GameData } from '../lib/types.js';
 import { resolveIdentity } from '../pipeline/identity.js';
 import { fetchGames } from '../pipeline/gameFetcher.js';
+import { fetchOtbGames } from '../pipeline/otbGameFetcher.js';
 import { parseChessComGames, parseLichessGames } from '../pipeline/gameParser.js';
 import { identifyOpeningsBatch } from '../pipeline/openingClassifier.js';
 import { generateStats } from '../pipeline/statsAggregator.js';
@@ -24,6 +25,7 @@ function resolveTargetUsername(games: GameData[], identity: ResolvedIdentity): s
     identity.chessComUsername,
     identity.lichessUsername,
     identity.verifiedName,
+    identity.fideProfile?.name, // OTB games often use "Last, First" format
   ].filter(Boolean) as string[];
 
   if (candidates.length === 0) return '';
@@ -110,21 +112,24 @@ analyzeRoute.post('/analyze', async (c) => {
         '[Analyze] Identity resolved',
       );
 
-      if (!identity.chessComUsername && !identity.lichessUsername) {
-        const msg = 'Could not find Chess.com or Lichess username. Please provide usernames manually.';
-        logger.warn({ name: identity.verifiedName }, '[Analyze] No platform usernames found');
+      if (!identity.chessComUsername && !identity.lichessUsername && !identity.fideId) {
+        const msg = 'Could not find Chess.com, Lichess, or FIDE ID. Please provide usernames or FIDE ID manually.';
+        logger.warn({ name: identity.verifiedName }, '[Analyze] No platform usernames or FIDE ID found');
         sse.sendError({ error: msg });
         return;
       }
 
       // ── Phase 2: Game Fetching ─────────────────────────────
-      const gameLimit = input.gameLimit || 3000;
-      const gameResult = await fetchGames(
-        identity.chessComUsername,
-        identity.lichessUsername,
-        gameLimit,
-        sse,
-      );
+      const gameLimit = input.gameLimit || 1000;
+      const [gameResult, otbGames] = await Promise.all([
+        fetchGames(
+          identity.chessComUsername,
+          identity.lichessUsername,
+          gameLimit,
+          sse,
+        ),
+        identity.fideId ? fetchOtbGames(identity.fideId, Math.min(gameLimit, 500)) : Promise.resolve([]),
+      ]);
 
       logger.info(
         {
@@ -132,6 +137,7 @@ analyzeRoute.post('/analyze', async (c) => {
           lichessGames: gameResult.lichessGamesNdjson
             ? gameResult.lichessGamesNdjson.split('\n').filter((l) => l.trim()).length
             : 0,
+          otbGames: otbGames.length,
           durationMs: gameResult.durationMs,
         },
         '[Analyze] Games fetched',
@@ -150,24 +156,31 @@ analyzeRoute.post('/analyze', async (c) => {
         gameResult.lichessGamesNdjson,
         identity.lichessUsername,
       );
-      // Merge, sort by most recent, trim to gameLimit (parallel fetch can return up to 2*gameLimit)
-      const merged = [...chessComGames, ...lichessGames].sort(
+      // Merge online + OTB, sort by most recent, trim to gameLimit
+      const merged = [...chessComGames, ...lichessGames, ...otbGames].sort(
         (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
       );
       const allGames = merged.slice(0, gameLimit);
 
       logger.info(
-        { chessCom: chessComGames.length, lichess: lichessGames.length, merged: merged.length, trimmed: allGames.length },
+        {
+          chessCom: chessComGames.length,
+          lichess: lichessGames.length,
+          otb: otbGames.length,
+          merged: merged.length,
+          trimmed: allGames.length,
+        },
         '[Analyze] Games parsed',
       );
 
-      // Enrich with ECO library opening names
+      // Enrich with ECO library opening names and codes
       const openingResults = await identifyOpeningsBatch(
         allGames.map((g) => ({ pgn: g.pgn, eco: g.eco })),
       );
       for (const [idx, result] of openingResults) {
         if (result && allGames[idx]) {
           allGames[idx].openingName = result.name;
+          allGames[idx].eco = result.eco || allGames[idx].eco;
         }
       }
 

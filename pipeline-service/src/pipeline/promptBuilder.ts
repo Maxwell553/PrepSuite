@@ -149,6 +149,7 @@ export function buildReportPrompt(opts: BuildReportPromptOpts): string {
 
   const chessComGames = allGames.filter((g) => g.source === 'chess.com');
   const lichessGames = allGames.filter((g) => g.source === 'lichess');
+  const otbGames = allGames.filter((g) => g.source === 'otb');
 
   const dateRange =
     allGames.length > 0
@@ -177,14 +178,14 @@ RULES (apply to entire response):
 - Only generalise ("often"/"typically") for patterns in 10+ games. For <10 say "appeared in X games".
 - Do not reference specific game numbers ("Game 19"). Use aggregate language only.
 - Do not use ** (bold markdown). Use * only for bullet points.
-- whiteOpenings = what ${identity.verifiedName} PLAYS as White. blackDefenses = what they PLAY as Black. Never confuse.
+- whiteOpenings = openings ${identity.verifiedName} FACES when they have White (the opponent's defense, e.g. Sicilian Defense). Phrase as "faces [opening] as White with X% win rate" — never say they "play" the Sicilian or Queen's Gambit when they have White; the opponent plays the defense. blackDefenses = what they PLAY as Black. Phrase as "plays [opening] as Black with X% win rate". Never confuse.
 - Use human opening names only (e.g. "Sicilian Defense", "Queen's Gambit"). Never use ECO codes (A05, B20, etc.) in narrative text — readers expect names like "King's Pawn Game", not "B00".
 - Weight all games equally regardless of date.
 - winRate/frequency are decimals 0.0-1.0. totalGames must = wins+draws+losses. Never return NaN/null.
 - Response MUST be complete, valid JSON. Every { must close with }.
 
 DATA SUMMARY (${totalGamesCount} games):
-Chess.com: ${chessComGames.length} | Lichess: ${lichessGames.length}
+Chess.com: ${chessComGames.length} | Lichess: ${lichessGames.length} | OTB: ${otbGames.length}
 Decisive: ${allGames.filter((g) => g.result === '1-0' || g.result === '0-1').length} | Draws: ${allGames.filter((g) => g.result === '1/2-1/2').length}
 ${dateRange ? `Date range: ${dateRangeStr}` : ''}
 

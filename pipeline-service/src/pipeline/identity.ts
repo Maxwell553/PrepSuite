@@ -87,6 +87,7 @@ export async function resolveIdentity(
     ]);
     const fastResult: ResolvedIdentity = {
       verifiedName: capitalizeName(inputName.trim()),
+      fideId: fideId.trim(),
       fideProfile: fideProfileFetched,
       uscfProfile: uscfProfileFetched,
       chessComUsername: providedChessComUsername!.trim(),
@@ -329,6 +330,7 @@ export async function resolveIdentity(
     onProgress?.('Saving identity...');
     const result: ResolvedIdentity = {
       verifiedName: capitalizeName(officialName),
+      fideId: finalFideId?.trim() || '',
       fideProfile,
       uscfProfile,
       chessComUsername: verifiedChessCom,
@@ -349,6 +351,7 @@ export async function resolveIdentity(
     logger.error({ err, name: inputName }, '[Identity] Fatal discovery failure');
     return {
       verifiedName: capitalizeName(officialName),
+      fideId: '',
       fideProfile: null,
       uscfProfile: null,
       chessComUsername: '',

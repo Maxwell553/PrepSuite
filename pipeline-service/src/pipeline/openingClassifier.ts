@@ -146,9 +146,18 @@ export async function identifyOpeningsBatch(
   const results = new Map<number, OpeningResult | null>();
   const CHUNK_SIZE = 50;
 
-  async function processChunk(indices: number[]): Promise<{ pgnMatch: number; ecoMatch: number; noMatch: number; parseFail: number }> {
+  function tryMoveBasedFallback(pgn: string): OpeningResult | null {
+    const name = identifyOpeningFromMoves(pgn, 'white');
+    if (!name || name === 'Unknown') return null;
+    const eco = NAME_TO_ECO[name];
+    if (!eco) return null;
+    return { name, eco, moves: '' };
+  }
+
+  async function processChunk(indices: number[]): Promise<{ pgnMatch: number; ecoMatch: number; moveFallback: number; noMatch: number; parseFail: number }> {
     let pgnMatch = 0;
     let ecoMatch = 0;
+    let moveFallback = 0;
     let noMatch = 0;
     let parseFail = 0;
     for (const i of indices) {
@@ -193,12 +202,24 @@ export async function identifyOpeningsBatch(
               ecoMatch++;
               results.set(i, { name, eco: ecoCode, moves: '' });
             } else {
+              const fallback = tryMoveBasedFallback(g.pgn);
+              if (fallback) {
+                moveFallback++;
+                results.set(i, fallback);
+              } else {
+                noMatch++;
+                results.set(i, null);
+              }
+            }
+          } else {
+            const fallback = tryMoveBasedFallback(g.pgn);
+            if (fallback) {
+              moveFallback++;
+              results.set(i, fallback);
+            } else {
               noMatch++;
               results.set(i, null);
             }
-          } else {
-            noMatch++;
-            results.set(i, null);
           }
         }
       } catch {
@@ -206,7 +227,7 @@ export async function identifyOpeningsBatch(
         results.set(i, null);
       }
     }
-    return { pgnMatch, ecoMatch, noMatch, parseFail };
+    return { pgnMatch, ecoMatch, moveFallback, noMatch, parseFail };
   }
 
   const chunks: number[][] = [];
@@ -217,11 +238,12 @@ export async function identifyOpeningsBatch(
   const chunkResults = await Promise.all(chunks.map(processChunk));
   const pgnMatchCount = chunkResults.reduce((s, r) => s + r.pgnMatch, 0);
   const ecoMatchCount = chunkResults.reduce((s, r) => s + r.ecoMatch, 0);
+  const moveFallbackCount = chunkResults.reduce((s, r) => s + r.moveFallback, 0);
   const noMatchCount = chunkResults.reduce((s, r) => s + r.noMatch, 0);
   const parseFailCount = chunkResults.reduce((s, r) => s + r.parseFail, 0);
 
   logger.info(
-    { total: games.length, pgnMatch: pgnMatchCount, ecoMatch: ecoMatchCount, noMatch: noMatchCount, parseFail: parseFailCount },
+    { total: games.length, pgnMatch: pgnMatchCount, ecoMatch: ecoMatchCount, moveFallback: moveFallbackCount, noMatch: noMatchCount, parseFail: parseFailCount },
     '[OpeningClassifier] Batch complete',
   );
 
@@ -229,6 +251,45 @@ export async function identifyOpeningsBatch(
 }
 
 // ── Tier 2: Hardcoded fallback ────────────────────────────────────
+
+/** Map opening names (from identifyOpeningFromMoves) to ECO codes for fallback when ECO library has no match */
+const NAME_TO_ECO: Record<string, string> = {
+  'Sicilian Defense': 'B20',
+  'Caro-Kann Defense': 'B12',
+  'French Defense': 'C00',
+  'Pirc Defense': 'B07',
+  'Scandinavian Defense': 'B01',
+  'Modern Defense': 'B06',
+  'Alekhine Defense': 'B02',
+  "Ruy Lopez": 'C60',
+  'Italian Game': 'C50',
+  'Scotch Game': 'C45',
+  'Three Knights Game': 'C46',
+  "Petrov Defense": 'C42',
+  'Philidor Defense': 'C41',
+  "King's Knight Opening": 'C40',
+  "Bishop's Opening": 'C23',
+  'Vienna Game': 'C25',
+  "King's Gambit": 'C30',
+  "King's Pawn Game": 'C20',
+  "Queen's Gambit Declined": 'D30',
+  "Queen's Gambit Accepted": 'D20',
+  'Slav Defense': 'D10',
+  "Queen's Pawn Game": 'D02',
+  "Queen's Pawn Opening": 'D00',
+  "King's Indian Defense": 'E60',
+  'Nimzo-Indian Defense': 'E20',
+  "Queen's Indian Defense": 'E12',
+  'Indian Defense': 'E10',
+  'Benoni Defense': 'A43',
+  'Dutch Defense': 'A80',
+  'English Opening': 'A10',
+  'Reti Opening': 'A04',
+  "Bird's Opening": 'A02',
+  'Nimzo-Larsen Attack': 'A01',
+  "King's Indian Attack": 'A07',
+  'Polish Opening': 'A00',
+};
 
 const ECO_MAP: Record<string, string> = {
   B01: 'Scandinavian Defense',

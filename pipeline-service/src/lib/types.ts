@@ -56,6 +56,7 @@ export interface LichessProfile {
 /** Resolved identity from the pipeline */
 export interface ResolvedIdentity {
   verifiedName: string;
+  fideId: string;
   fideProfile: FideProfile | null;
   uscfProfile: UscfProfile | null;
   chessComUsername: string;
@@ -63,10 +64,10 @@ export interface ResolvedIdentity {
   confidence: number;
 }
 
-/** Normalized game data from Chess.com or Lichess */
+/** Normalized game data from Chess.com, Lichess, or OTB */
 export interface GameData {
   id: string;
-  source: 'chess.com' | 'lichess';
+  source: 'chess.com' | 'lichess' | 'otb';
   white: string;
   black: string;
   result: string; // '1-0', '0-1', '1/2-1/2'

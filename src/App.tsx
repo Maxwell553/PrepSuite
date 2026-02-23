@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, History, Shield, Database, LayoutDashboard, ChevronRight, User, Loader2, Trash2 } from 'lucide-react';
+import { Search, History, Shield, Database, LayoutDashboard, ChevronRight, User, Loader2, Trash2, Square, CheckSquare } from 'lucide-react';
 import SearchScreen from './components/SearchScreen';
 import ReportDashboard from './components/ReportDashboard';
 import Sidebar from './components/Sidebar';
@@ -24,7 +24,8 @@ const App: React.FC = () => {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
-  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; reportId: string | null }>({ isOpen: false, reportId: null });
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; reportIds: string[] }>({ isOpen: false, reportIds: [] });
+  const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
   const [showUserSettings, setShowUserSettings] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
@@ -162,32 +163,62 @@ const App: React.FC = () => {
 
   const handleDeleteClick = (reportId: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    setConfirmModal({ isOpen: true, reportId });
+    setConfirmModal({ isOpen: true, reportIds: [reportId] });
+  };
+
+  const handleBulkDeleteClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (selectedReportIds.size === 0) return;
+    setConfirmModal({ isOpen: true, reportIds: Array.from(selectedReportIds) });
+  };
+
+  const toggleReportSelection = (reportId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSelectedReportIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(reportId)) next.delete(reportId);
+      else next.add(reportId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedReportIds.size === history.length) {
+      setSelectedReportIds(new Set());
+    } else {
+      setSelectedReportIds(new Set(history.map((h) => h.id!).filter(Boolean)));
+    }
   };
 
   const handleConfirmDelete = async () => {
-    if (!user || !confirmModal.reportId) return;
+    if (!user || confirmModal.reportIds.length === 0) return;
 
     try {
-      await playerRepository.deleteReport(confirmModal.reportId);
+      await playerRepository.deleteReports(confirmModal.reportIds);
 
       // Update local history
       const updatedHistory = await playerRepository.getUserHistory(user.id);
       setHistory(updatedHistory);
 
-      // If the deleted report was currently selected, clear it
-      if (selectedReport?.id === confirmModal.reportId) {
+      // Clear selection and deselect if deleted
+      setSelectedReportIds(new Set());
+      if (selectedReport && confirmModal.reportIds.includes(selectedReport.id!)) {
         setSelectedReport(null);
         setActiveTab('search');
       }
 
-      showToast('Dossier deleted successfully!', 'success');
+      showToast(
+        confirmModal.reportIds.length === 1
+          ? 'Dossier deleted successfully!'
+          : `${confirmModal.reportIds.length} dossiers deleted successfully!`,
+        'success'
+      );
     } catch (error) {
       logError(error, { operation: 'delete report', source: 'App' });
       const errorMessage = getUserFriendlyError(error, { operation: 'delete dossier' });
       showToast(errorMessage, 'error');
     } finally {
-      setConfirmModal({ isOpen: false, reportId: null });
+      setConfirmModal({ isOpen: false, reportIds: [] });
     }
   };
 
@@ -357,7 +388,22 @@ const App: React.FC = () => {
 
                 {activeTab === 'history' && (
                   <div className="space-y-4">
-                    <h2 className="text-2xl font-bold mb-6 text-white dark:text-white text-gray-900">Search History</h2>
+                    <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                      <h2 className="text-2xl font-bold text-white dark:text-white text-gray-900">Search History</h2>
+                      {history.length > 0 && (
+                        <div className="flex items-center gap-3">
+                          <button onClick={toggleSelectAll} className="text-sm text-slate-400 hover:text-indigo-400 transition-colors">
+                            {selectedReportIds.size === history.length ? 'Clear selection' : 'Select all'}
+                          </button>
+                          {selectedReportIds.size > 0 && (
+                            <button onClick={handleBulkDeleteClick} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all">
+                              <Trash2 className="w-4 h-4" />
+                              Delete selected ({selectedReportIds.size})
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     {history.length === 0 ? (
                       <p className="text-slate-500 dark:text-slate-500 text-gray-600 italic">No historical searches available.</p>
                     ) : (
@@ -366,13 +412,20 @@ const App: React.FC = () => {
                           <div
                             key={h.id}
                             onClick={() => selectFromHistory(h)}
-                            className="group bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 p-4 rounded-xl hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:border-indigo-600 cursor-pointer transition-all flex justify-between items-center"
+                            className={`group bg-slate-900 dark:bg-slate-900 bg-white border p-4 rounded-xl cursor-pointer transition-all flex justify-between items-center gap-4 ${
+                              selectedReportIds.has(h.id!) ? 'border-indigo-500/70 ring-1 ring-indigo-500/30' : 'border-slate-800 dark:border-slate-800 border-gray-200 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:border-indigo-600'
+                            }`}
                           >
-                            <div>
-                              <h3 className="text-lg font-semibold group-hover:text-indigo-400 dark:group-hover:text-indigo-400 group-hover:text-indigo-600 transition-colors text-white dark:text-white text-gray-900">{h.player.name}</h3>
-                              <p className="text-sm text-slate-400 dark:text-slate-400 text-gray-600">{h.player.country} • Rating: {h.player.currentRating || 'Unrated'}</p>
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <button onClick={(e) => toggleReportSelection(h.id!, e)} className="flex-shrink-0 p-1 text-slate-500 hover:text-indigo-400 transition-colors" title={selectedReportIds.has(h.id!) ? 'Deselect' : 'Select'}>
+                                {selectedReportIds.has(h.id!) ? <CheckSquare className="w-5 h-5 text-indigo-400" /> : <Square className="w-5 h-5" />}
+                              </button>
+                              <div className="min-w-0">
+                                <h3 className="text-lg font-semibold group-hover:text-indigo-400 dark:group-hover:text-indigo-400 group-hover:text-indigo-600 transition-colors text-white dark:text-white text-gray-900 truncate">{h.player.name}</h3>
+                                <p className="text-sm text-slate-400 dark:text-slate-400 text-gray-600">{h.player.country} • Rating: {h.player.currentRating || 'Unrated'}</p>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-4 flex-shrink-0">
                               <span className="text-xs text-slate-500 dark:text-slate-500 text-gray-600">Report: {new Date(h.lastUpdated).toLocaleDateString()}</span>
                               <button
                                 onClick={(e) => handleDeleteClick(h.id!, e)}
@@ -396,10 +449,12 @@ const App: React.FC = () => {
 
         <ConfirmationModal
           isOpen={confirmModal.isOpen}
-          onClose={() => setConfirmModal({ isOpen: false, reportId: null })}
+          onClose={() => setConfirmModal({ isOpen: false, reportIds: [] })}
           onConfirm={handleConfirmDelete}
           title="Delete Dossier"
-          message="Are you sure you want to delete this player dossier? This action removes it from your history permanently and cannot be undone."
+          message={confirmModal.reportIds.length === 1
+            ? 'Are you sure you want to delete this player dossier? This action removes it from your history permanently and cannot be undone.'
+            : `Are you sure you want to delete ${confirmModal.reportIds.length} dossiers? This action removes them from your history permanently and cannot be undone.`}
           confirmText="Delete Dossier"
           type="danger"
         />

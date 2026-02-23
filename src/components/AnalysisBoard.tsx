@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw, Database, Filter, Fa
 import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
 import { GameData } from '../types';
+import { sanitizePgn } from '../lib/pgnUtils';
 
 interface AnalysisBoardProps {
   games: GameData[];
@@ -195,21 +196,6 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     return 'text-yellow-400';
   };
   
-  // Debug logging (can be removed in production)
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[AnalysisBoard] Player matching:', {
-      playerName: playerName,
-      actualUsername: actualUsername,
-      white: currentGame.white,
-      black: currentGame.black,
-      result: currentGame.result,
-      isPlayerWhite,
-      isPlayerBlack,
-      boardOrientation,
-      gameResult: getGameResult(currentGame.result)
-    });
-  }
-
   // Effective PGN: use inline or fetched PGN for Lichess games missing data
   const effectivePgn = currentGame.pgn && currentGame.pgn.trim().length > 10
     ? currentGame.pgn
@@ -247,7 +233,7 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
 
     try {
       const chess = new Chess();
-      chess.loadPgn(effectivePgn);
+      chess.loadPgn(sanitizePgn(effectivePgn));
       setGame(chess);
       
       // Get move history
@@ -275,7 +261,7 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
 
     try {
       const chess = new Chess();
-      chess.loadPgn(effectivePgn || '');
+      chess.loadPgn(sanitizePgn(effectivePgn || ''));
       
       // Replay moves up to currentMoveIndex
       const history = chess.history({ verbose: true });
@@ -359,20 +345,6 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentMoveIndex, currentGameIndex, moveHistory.length, filteredGames.length]);
 
-  const handlePreviousGame = () => {
-    if (currentGameIndex > 0) {
-      setCurrentGameIndex(currentGameIndex - 1);
-      setIsPlaying(false);
-    }
-  };
-
-  const handleNextGame = () => {
-    if (currentGameIndex < filteredGames.length - 1) {
-      setCurrentGameIndex(currentGameIndex + 1);
-      setIsPlaying(false);
-    }
-  };
-
   const handlePreviousMove = () => {
     if (currentMoveIndex > -1) {
       setCurrentMoveIndex(currentMoveIndex - 1);
@@ -421,116 +393,169 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
 
   const formattedMoves = formatMovesForDisplay();
 
+  // Result dot color for game list
+  const getResultDotColor = (r: string, isW: boolean, isB: boolean) => {
+    const t = r.trim();
+    if (isW && t === '1-0') return 'bg-green-500';
+    if (isB && t === '0-1') return 'bg-green-500';
+    if (isW && t === '0-1') return 'bg-red-500';
+    if (isB && t === '1-0') return 'bg-red-500';
+    return 'bg-slate-500';
+  };
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
+    <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-6 lg:p-8 shadow-xl">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-2xl font-bold flex items-center gap-2 text-white">
           <Database className="w-6 h-6 text-indigo-400" />
           Game Analysis Board
         </h3>
-        <div className="flex items-center gap-2">
-          <select
-            value={filter}
-            onChange={(e) => {
-              setFilter(e.target.value as any);
-              setCurrentGameIndex(0);
-              setIsPlaying(false);
-            }}
-            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1 text-sm text-white"
-          >
-            <option value="all">All Games ({games.length})</option>
-            <option value="white">As White ({games.filter(g => namesMatch(g.white, actualUsername)).length})</option>
-            <option value="black">As Black ({games.filter(g => namesMatch(g.black, actualUsername)).length})</option>
-            <option value="wins">Wins ({games.filter(g => {
-              const isW = namesMatch(g.white, actualUsername);
-              const isB = namesMatch(g.black, actualUsername);
-              return (isW && g.result.trim() === '1-0') || (isB && g.result.trim() === '0-1');
-            }).length})</option>
-            <option value="losses">Losses ({games.filter(g => {
-              const isW = namesMatch(g.white, actualUsername);
-              const isB = namesMatch(g.black, actualUsername);
-              return (isW && g.result.trim() === '0-1') || (isB && g.result.trim() === '1-0');
-            }).length})</option>
-            <option value="draws">Draws ({games.filter(g => g.result.trim() === '1/2-1/2').length})</option>
-          </select>
-        </div>
+        <select
+          value={filter}
+          onChange={(e) => {
+            setFilter(e.target.value as any);
+            setCurrentGameIndex(0);
+            setIsPlaying(false);
+          }}
+          className="bg-slate-800/80 border border-slate-600 rounded-xl px-4 py-2 text-sm text-white"
+        >
+          <option value="all">All Games ({games.length})</option>
+          <option value="white">As White ({games.filter(g => namesMatch(g.white, actualUsername)).length})</option>
+          <option value="black">As Black ({games.filter(g => namesMatch(g.black, actualUsername)).length})</option>
+          <option value="wins">Wins ({games.filter(g => {
+            const isW = namesMatch(g.white, actualUsername);
+            const isB = namesMatch(g.black, actualUsername);
+            return (isW && g.result.trim() === '1-0') || (isB && g.result.trim() === '0-1');
+          }).length})</option>
+          <option value="losses">Losses ({games.filter(g => {
+            const isW = namesMatch(g.white, actualUsername);
+            const isB = namesMatch(g.black, actualUsername);
+            return (isW && g.result.trim() === '0-1') || (isB && g.result.trim() === '1-0');
+          }).length})</option>
+          <option value="draws">Draws ({games.filter(g => g.result.trim() === '1/2-1/2').length})</option>
+        </select>
       </div>
 
-      {/* Main Content: Side-by-side layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
-        {/* Left Side: Game Info */}
-        <div className="lg:col-span-1">
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 sticky top-4">
-            <div className="text-sm text-slate-400 mb-4">
-              Game {currentGameIndex + 1} of {filteredGames.length}
-            </div>
-            <div className={`text-lg font-semibold mb-4 ${getResultColor(currentGame.result, isPlayerWhite, isPlayerBlack)}`}>
-              {getGameResult(currentGame.result)}
-            </div>
-            <div className="text-xs text-slate-500 space-y-2">
-              <div><strong>White:</strong> {currentGame.white}</div>
-              <div><strong>Black:</strong> {currentGame.black}</div>
-              <div><strong>Result:</strong> {currentGame.result}</div>
-              <div><strong>ECO:</strong> {currentGame.eco || 'Unknown'}</div>
-              <div><strong>Source:</strong> {currentGame.source}</div>
-              <div><strong>Date:</strong> {new Date(currentGame.playedAt).toLocaleDateString()}</div>
+      {/* Main: Left list (5% wider), Center board, Right moves (same width as left) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[2.1fr_7fr_2fr] gap-4 lg:gap-6 items-start">
+        {/* Left: Game list */}
+        <div className="order-2 lg:order-1 min-w-0">
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl overflow-hidden flex flex-col max-h-[560px] shadow-inner">
+            <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
+              <table className="w-full text-xs border-collapse">
+                <thead className="sticky top-0 bg-slate-800 z-10">
+                  <tr className="text-slate-400 text-left">
+                    <th className="px-1.5 py-2 font-semibold w-6"></th>
+                    <th className="px-1.5 py-2 font-semibold">Year</th>
+                    <th className="px-1.5 py-2 font-semibold">White</th>
+                    <th className="px-1.5 py-2 font-semibold">Black</th>
+                    <th className="px-1.5 py-2 font-semibold">Res.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredGames.map((g, idx) => {
+                    const isSelected = idx === currentGameIndex;
+                    const rowResult = g.result.trim();
+                    const isW = namesMatch(g.white, actualUsername);
+                    const isB = namesMatch(g.black, actualUsername);
+                    return (
+                      <tr
+                        key={idx}
+                        onClick={() => { setCurrentGameIndex(idx); setIsPlaying(false); }}
+                        className={`border-t border-slate-700/50 cursor-pointer transition-all duration-200 ${
+                          isSelected ? 'bg-indigo-600/30 ring-1 ring-indigo-500/50 text-white' : 'hover:bg-slate-700/40 text-slate-300'
+                        }`}
+                      >
+                        <td className="px-1.5 py-1.5">
+                          <span className={`inline-block w-1.5 h-1.5 rounded-full ${getResultDotColor(rowResult, isW, isB)}`} />
+                        </td>
+                        <td className="px-1.5 py-1.5">{new Date(g.playedAt).getFullYear()}</td>
+                        <td className="px-1.5 py-1.5 truncate max-w-[70px]" title={g.white}>{g.white}</td>
+                        <td className="px-1.5 py-1.5 truncate max-w-[70px]" title={g.black}>{g.black}</td>
+                        <td className="px-1.5 py-1.5">{rowResult}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
 
-        {/* Center: Chess Board (smaller) */}
-        <div className="lg:col-span-2">
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
-            {game ? (
-              <div className="aspect-square max-w-lg mx-auto">
-                <Chessboard
-                  position={gamePosition}
-                  boardOrientation={boardOrientation}
-                  customBoardStyle={{
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)'
-                  }}
-                  customDarkSquareStyle={{ backgroundColor: '#769656' }}
-                  customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
-                />
-              </div>
-            ) : (
-              <div className="aspect-square flex items-center justify-center text-slate-500 max-w-lg mx-auto">
-                <div className="text-center">
-                  <Database className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <div className="text-sm">No valid PGN available</div>
+        {/* Center: Board - top aligns with column headers, board fills container */}
+        <div className="order-1 lg:order-2 min-w-0">
+          <div className="flex flex-col items-stretch gap-4 pt-0 px-4 pb-4 lg:px-6 lg:pb-6 bg-slate-900/50 rounded-2xl border border-slate-700/30 min-h-[560px]">
+            <div className="flex-1 min-h-0 flex items-stretch justify-center">
+              {game ? (
+                <div className="aspect-square w-full max-w-2xl min-w-0">
+                  <Chessboard
+                    position={gamePosition}
+                    boardOrientation={boardOrientation}
+                    customBoardStyle={{ borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}
+                    customDarkSquareStyle={{ backgroundColor: '#769656' }}
+                    customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
+                  />
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="aspect-square flex-1 flex items-center justify-center bg-slate-800/40 rounded-xl border border-dashed border-slate-600">
+                  <div className="text-center text-slate-500">
+                    <Database className="w-14 h-14 mx-auto mb-2 opacity-50" />
+                    <div className="text-sm">No valid PGN available</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Controls: move nav centered with play under d-e files */}
+            <div className="flex items-center justify-center w-full max-w-2xl gap-2">
+              <button onClick={handlePreviousMove} disabled={currentMoveIndex === -1} className="p-2 bg-slate-700/80 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-white" title="Previous move (←)">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button onClick={handleReset} className="p-2 bg-slate-700/80 hover:bg-slate-600 rounded-lg text-white" title="Jump to start (Home)">
+                <RotateCcw className="w-4 h-4" />
+              </button>
+              <button onClick={handlePlayPause} className="p-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white shadow-lg shadow-indigo-900/30" title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}>
+                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+              </button>
+              <button onClick={handleMoveToEnd} disabled={currentMoveIndex >= moveHistory.length - 1} className="p-2 bg-slate-700/80 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-white" title="Jump to end (End)">
+                <FastForward className="w-4 h-4" />
+              </button>
+              <button onClick={handleNextMove} disabled={currentMoveIndex >= moveHistory.length - 1} className="p-2 bg-slate-700/80 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-white" title="Next move (→)">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Game summary - 5% wider than max-w-2xl (42rem * 1.05 ≈ 44rem) */}
+            <div className="w-full max-w-[44rem] text-sm text-center">
+              <span className={`font-semibold ${getResultColor(currentGame.result, isPlayerWhite, isPlayerBlack)}`}>{getGameResult(currentGame.result)}</span>
+              <span className="text-slate-500"> · </span>
+              <span className="font-semibold text-slate-200">{currentGame.white}</span>
+              <span className="text-slate-500"> vs </span>
+              <span className="font-semibold text-slate-200">{currentGame.black}</span>
+              <span className="text-slate-500"> · {currentGame.result} · {currentGame.eco || currentGame.openingName || 'Unknown'} · </span>
+              <span className="text-slate-500">{new Date(currentGame.playedAt).toLocaleDateString()}</span>
+            </div>
           </div>
         </div>
 
-        {/* Right Side: Move Notation and Controls */}
-        <div className="lg:col-span-1">
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 max-h-[600px] flex flex-col">
-            <div className="text-xs text-slate-400 mb-2">Move Notation</div>
-            <div className="font-mono text-sm text-slate-300 flex-1 overflow-y-auto">
+        {/* Right: Move list - same width as left, reduced white space */}
+        <div className="order-3 min-w-0">
+          <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 max-h-[560px] flex flex-col shadow-inner">
+            <div className="text-xs font-semibold text-slate-400 mb-3">Move Notation</div>
+            <div className="font-mono text-sm flex-1 overflow-y-auto space-y-1">
               {formattedMoves.length > 0 ? (
                 formattedMoves.map(({ moveNumber, whiteMove, blackMove, index }) => (
-                  <div key={index} className="mb-1">
-                    <span className="text-slate-500 mr-2">{moveNumber}.</span>
+                  <div key={index} className="flex items-baseline gap-2 py-0.5">
+                    <span className="text-slate-500 w-6 text-right shrink-0">{moveNumber}.</span>
                     <span
-                      className={`px-2 py-1 rounded cursor-pointer transition-colors ${
-                        index <= currentMoveIndex
-                          ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-500/50'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
+                      className={`cursor-pointer transition-colors ${index <= currentMoveIndex ? 'text-indigo-200 bg-indigo-500/20' : 'text-slate-400 hover:text-slate-200'}`}
                       onClick={() => handleMoveClick(index)}
                     >
                       {whiteMove}
                     </span>
                     {blackMove && (
                       <span
-                        className={`ml-2 px-2 py-1 rounded cursor-pointer transition-colors ${
-                          index + 1 <= currentMoveIndex
-                            ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-500/50'
-                            : 'text-slate-400 hover:text-slate-200'
-                        }`}
+                        className={`cursor-pointer transition-colors ${index + 1 <= currentMoveIndex ? 'text-indigo-200 bg-indigo-500/20' : 'text-slate-400 hover:text-slate-200'}`}
                         onClick={() => handleMoveClick(index + 1)}
                       >
                         {blackMove}
@@ -542,95 +567,22 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
                 <div className="text-slate-500 text-sm italic">No moves available</div>
               )}
             </div>
-            <div className="mt-4 pt-4 border-t border-slate-700">
-              <div className="text-xs text-slate-500 mb-2">Keyboard Shortcuts</div>
-              <div className="text-xs text-slate-600 space-y-1">
-                <div>← → Navigate moves</div>
-                <div>↑ ↓ Navigate games</div>
+            <div className="mt-4 pt-4 border-t border-slate-600/50">
+              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Shortcuts</div>
+              <div className="text-xs text-slate-500 space-y-0.5">
+                <div>← → Moves</div>
+                <div>↑ ↓ Games</div>
                 <div>Space Play/Pause</div>
-                <div>Home Reset</div>
-                <div>End Go to end</div>
+                <div>Home/End Start/End</div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePreviousGame}
-            disabled={currentGameIndex === 0}
-            className="p-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
-            title="Previous game"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <span className="text-sm text-slate-400 px-2">
-            {currentGameIndex + 1} / {filteredGames.length}
-          </span>
-          <button
-            onClick={handleNextGame}
-            disabled={currentGameIndex >= filteredGames.length - 1}
-            className="p-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
-            title="Next game"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePreviousMove}
-            disabled={currentMoveIndex === -1}
-            className="p-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
-            title="Previous move"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleReset}
-            className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-white transition-colors"
-            title="Reset to start"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handlePlayPause}
-            className="p-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white transition-colors"
-            title={isPlaying ? 'Pause' : 'Auto-play'}
-          >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-          </button>
-          <button
-            onClick={handleMoveToEnd}
-            disabled={currentMoveIndex >= moveHistory.length - 1}
-            className="p-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
-            title="Go to end"
-          >
-            <FastForward className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleNextMove}
-            disabled={currentMoveIndex >= moveHistory.length - 1}
-            className="p-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
-            title="Next move"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between text-xs text-slate-500">
-        <div>
-          {currentMoveIndex === -1 
-            ? 'Starting position' 
-            : `Move ${currentMoveIndex + 1} of ${moveHistory.length}`}
-        </div>
-        <div className="text-slate-600">
-          Board orientation: {boardOrientation === 'white' ? 'White (bottom)' : 'Black (bottom)'}
-        </div>
+      <div className="mt-4 flex justify-between text-xs text-slate-500">
+        <span>{currentMoveIndex === -1 ? 'Starting position' : `Move ${currentMoveIndex + 1} of ${moveHistory.length}`}</span>
+        <span>Board: {boardOrientation === 'white' ? 'White bottom' : 'Black bottom'}</span>
       </div>
     </div>
   );

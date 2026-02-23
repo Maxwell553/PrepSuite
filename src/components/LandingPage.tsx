@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
-import { Shield, Mail, ChevronRight, Search, Database, Target, Zap, TrendingUp, Cpu, Users, Globe, BarChart3, Brain, CheckCircle, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Shield, Mail, ChevronRight, Search, Database, Target, Zap, TrendingUp, Cpu, Users, Globe, BarChart3, Brain, CheckCircle, ArrowRight, X } from 'lucide-react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
+import generationImg from '@/assets/landing/generation.png';
+import tacticalRecommendationImg from '@/assets/landing/tactical_recommendation.png';
+import repertoireChartsImg from '@/assets/landing/repertoire_charts.png';
+import repertoireChatImg from '@/assets/landing/repertoire_chat.png';
+import gameAnalysisBoardImg from '@/assets/landing/game-analysis-board.png';
 
 interface LandingPageProps {
     onGetStarted: () => void;
@@ -15,11 +21,20 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [view, setView] = useState<'login' | 'signup' | 'success'>('login');
+    const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
     const featuresRef = useScrollAnimation();
     const howItWorksRef = useScrollAnimation();
     const benefitsRef = useScrollAnimation();
     const loginRef = useScrollAnimation();
+
+    const previewImages = [
+        { src: generationImg, caption: 'Search any opponent and watch the analysis run.' },
+        { src: tacticalRecommendationImg, caption: 'Get a verified tournament profile with strategic insights.' },
+        { src: repertoireChartsImg, caption: 'Look at every opening—win rates, draws, and losses at a glance.' },
+        { src: repertoireChatImg, caption: 'Chat with AI to explore openings and player repertoires.' },
+        { src: gameAnalysisBoardImg, caption: 'Explore every game on the board with full move notation.' },
+    ] as const;
 
     const handleEmailPasswordSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -35,6 +50,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
             setView('success');
         }
     };
+
+    useEffect(() => {
+        if (lightboxIndex !== null) {
+            const prev = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            return () => { document.body.style.overflow = prev; };
+        }
+    }, [lightboxIndex]);
 
     return (
         <div className="min-h-screen bg-slate-950 dark:bg-slate-950 bg-white text-slate-100 dark:text-slate-100 text-slate-900 selection:bg-indigo-500/30 overflow-x-hidden">
@@ -108,9 +131,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                         <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-400 dark:from-white dark:to-slate-400 from-gray-900 to-gray-600">
                             What Makes PrepSuite Unique
                         </h2>
-                        <p className="text-xl text-slate-400 dark:text-slate-400 text-gray-600 max-w-2xl mx-auto">
-                            The only platform that seamlessly connects tournament identities with online game data
-                        </p>
                     </div>
 
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -125,7 +145,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             </div>
                             <h3 className="text-2xl font-bold mb-3 text-white dark:text-white text-gray-900">AI-Powered Identity Resolution</h3>
                             <p className="text-slate-400 dark:text-slate-400 text-gray-600 leading-relaxed">
-                                Automatically discovers Chess.com and Lichess usernames from FIDE or USCF IDs using advanced AI search and biometric matching. No manual username hunting required.
+                                Discovers Chess.com and Lichess usernames from FIDE and USCF IDs using AI search and biometric matching, with only minimal username hunting required.
                             </p>
                         </div>
 
@@ -210,7 +230,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
             {/* How It Works Section */}
             <section 
                 ref={howItWorksRef.ref}
-                className={`py-12 px-6 bg-slate-900/30 dark:bg-slate-900/30 bg-slate-50 relative overflow-hidden ${
+                className={`py-[4.5rem] px-6 bg-slate-900/30 dark:bg-slate-900/30 bg-slate-50 relative overflow-hidden ${
                     howItWorksRef.isVisible ? 'animate-fade-in-up' : ''
                 }`}
                 style={howItWorksRef.isVisible ? {} : { opacity: 0 }}
@@ -218,58 +238,70 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[1000px] bg-indigo-600/5 blur-[150px] rounded-full" />
                 
                 <div className="max-w-7xl mx-auto relative z-10">
-                    <div className="text-center mb-16">
+                    <div className="text-center mb-[4.5rem]">
                         <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-400 dark:from-white dark:to-slate-400 from-gray-900 to-gray-600">
                             How It Works
                         </h2>
-                        <p className="text-xl text-slate-400 dark:text-slate-400 text-gray-600 max-w-2xl mx-auto">
-                            Three simple steps to comprehensive opponent analysis
-                        </p>
                     </div>
 
-                    <div className="grid md:grid-cols-3 gap-8">
-                        <div className={`text-center ${
-                            howItWorksRef.isVisible ? 'animate-fade-in-left' : ''
-                        }`}
-                        style={howItWorksRef.isVisible ? { animationDelay: '0.2s', animationFillMode: 'both' } : {}}
-                        >
-                            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-900/40">
-                                <span className="text-2xl font-bold text-white">1</span>
-                            </div>
-                            <h3 className="text-xl font-bold mb-3 text-white dark:text-white text-gray-900">Enter Tournament ID</h3>
-                            <p className="text-slate-400 dark:text-slate-400 text-gray-600">
-                                Provide your opponent's FIDE ID or USCF ID along with their name. Our AI automatically finds their Chess.com and Lichess accounts.
-                            </p>
-                        </div>
-
-                        <div className={`text-center ${
-                            howItWorksRef.isVisible ? 'animate-fade-in-up' : ''
-                        }`}
-                        style={howItWorksRef.isVisible ? { animationDelay: '0.3s', animationFillMode: 'both' } : {}}
-                        >
-                            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-900/40">
-                                <span className="text-2xl font-bold text-white">2</span>
-                            </div>
-                            <h3 className="text-xl font-bold mb-3 text-white dark:text-white text-gray-900">Deep Analysis</h3>
-                            <p className="text-slate-400 dark:text-slate-400 text-gray-600">
-                                We fetch up to 10,000 games, analyze them with Stockfish depth 10, and process opening statistics. This happens automatically in the background.
-                            </p>
-                        </div>
-
-                        <div className={`text-center ${
-                            howItWorksRef.isVisible ? 'animate-fade-in-right' : ''
-                        }`}
-                        style={howItWorksRef.isVisible ? { animationDelay: '0.4s', animationFillMode: 'both' } : {}}
-                        >
-                            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-900/40">
-                                <span className="text-2xl font-bold text-white">3</span>
-                            </div>
-                            <h3 className="text-xl font-bold mb-3 text-white dark:text-white text-gray-900">Get Your Report</h3>
-                            <p className="text-slate-400 dark:text-slate-400 text-gray-600">
-                                Receive a comprehensive scouting report with opening preferences, strengths, weaknesses, tactical recommendations, and specific preparation lines.
-                            </p>
+                    <div className="overflow-x-auto overflow-y-hidden pb-2 -mx-6 px-6 snap-x snap-mandatory">
+                        <div className="flex min-w-max" style={{ gap: '1.8rem' }}>
+                            {previewImages.map((item, i) => (
+                                <figure key={i} className="flex-shrink-0 w-[min(90vw,640px)] snap-center flex flex-col">
+                                    <figcaption className="mb-3 text-slate-400 dark:text-slate-400 text-gray-600 text-base text-center whitespace-nowrap">
+                                        {item.caption}
+                                    </figcaption>
+                                    <button
+                                        type="button"
+                                        onClick={() => setLightboxIndex(i)}
+                                        className="w-full aspect-[16/10] rounded-xl overflow-hidden border border-slate-800 dark:border-slate-800 border-gray-200 shadow-xl flex items-center justify-center bg-slate-900/30 dark:bg-slate-900/30 bg-slate-100 cursor-pointer hover:ring-2 hover:ring-indigo-500/50 transition-shadow focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    >
+                                        <img
+                                            src={item.src}
+                                            alt={item.caption}
+                                            className="w-full h-full object-contain pointer-events-none"
+                                            loading="lazy"
+                                        />
+                                    </button>
+                                </figure>
+                            ))}
                         </div>
                     </div>
+
+                    {/* Lightbox modal - rendered via portal to avoid ancestor overflow clipping */}
+                    {lightboxIndex !== null && createPortal(
+                        <div
+                            className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm overflow-y-auto overflow-x-hidden"
+                            onClick={() => setLightboxIndex(null)}
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="View full size image"
+                        >
+                            <button
+                                type="button"
+                                onClick={() => setLightboxIndex(null)}
+                                className="fixed top-4 right-4 p-2 rounded-full bg-slate-800/80 text-white hover:bg-slate-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 z-[10000]"
+                                aria-label="Close"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
+                            <div
+                                className="min-h-screen flex flex-col items-center justify-center py-20 px-4"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <img
+                                    src={previewImages[lightboxIndex].src}
+                                    alt={previewImages[lightboxIndex].caption}
+                                    className="max-w-[95vw] w-auto max-h-none object-contain rounded-lg shadow-2xl"
+                                    style={{ height: 'auto' }}
+                                />
+                                <p className="mt-6 text-slate-300 text-sm text-center max-w-xl">
+                                    {previewImages[lightboxIndex].caption}
+                                </p>
+                            </div>
+                        </div>,
+                        document.body
+                    )}
                 </div>
             </section>
 
@@ -296,7 +328,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             "AI generates actionable preparation recommendations",
                             "Save and manage multiple scouting reports",
                             "Works with both FIDE and USCF tournament data",
-                            "No manual username searching required"
+                            "Minimal username searching required"
                         ].map((benefit, i) => {
                             const delays = ['0.05s', '0.1s', '0.15s', '0.2s', '0.25s', '0.3s', '0.35s', '0.4s'];
                             return (

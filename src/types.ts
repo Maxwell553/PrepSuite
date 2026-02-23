@@ -46,6 +46,7 @@ export interface GameData {
   playedAt: string;
   source: string;
   timeControl?: string;
+  openingName?: string;
 }
 
 export interface ScoutingReport {
