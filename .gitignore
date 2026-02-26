@@ -41,6 +41,9 @@ test-results
 # Build outputs
 *.tsbuildinfo
 
+# OTB PGN data (large files, never commit)
+data/*.pgn
+
 # Pipeline service
 pipeline-service/node_modules
 pipeline-service/dist

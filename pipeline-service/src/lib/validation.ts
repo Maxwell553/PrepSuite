@@ -50,7 +50,17 @@ export const analyzeRequestSchema = z.object({
     .optional()
     .or(z.literal('')),
   gameLimit: z.number().int().min(1).max(10000).default(1000).optional(),
-});
+  onlineLimit: z.number().int().min(0).max(10000).optional(),
+  otbLimit: z.number().int().min(0).max(10000).optional(),
+}).refine(
+  (data) => {
+    const total = data.gameLimit ?? 1000;
+    const online = data.onlineLimit ?? total;
+    const otb = data.otbLimit ?? 0;
+    return online + otb === total;
+  },
+  { message: 'onlineLimit + otbLimit must equal gameLimit', path: ['onlineLimit'] },
+);
 
 export type AnalyzeRequestInput = z.infer<typeof analyzeRequestSchema>;
 

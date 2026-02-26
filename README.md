@@ -14,19 +14,19 @@ PrepSuite is a comprehensive chess scouting platform that aggregates player data
 - 🎯 **Strategic Insights**: Get tactical recommendations and vulnerability analysis
 - 📈 **Performance Tracking**: Track opponent performance across different time controls
 - 💾 **Report History**: Save and manage your scouting reports
-- 🔐 **Secure**: All API keys stored server-side via Supabase Edge Functions
+- 🔐 **Secure**: All API keys stored server-side (pipeline service + Supabase)
 
 ---
 
 ## Tech Stack
 
 - **Frontend**: React 19, TypeScript, Vite, Tailwind CSS 4
-- **Backend**: Supabase (Database, Auth, Edge Functions)
-- **AI**: Google Gemini 3 Flash Preview
-- **Chess Engine**: Stockfish.js for position analysis
+- **Backend**: Pipeline service (Node/Hono on Cloud Run) + Supabase (Database, Auth)
+- **AI**: Google Gemini (via pipeline service)
+- **Chess Engine**: Native Stockfish (in pipeline service)
 - **Testing**: Vitest (unit tests), Playwright (E2E tests)
 - **Error Tracking**: Sentry
-- **Deployment**: Vercel/Netlify compatible
+- **Deployment**: Vercel/Netlify (frontend), Cloud Run (pipeline)
 
 ---
 
@@ -34,7 +34,7 @@ PrepSuite is a comprehensive chess scouting platform that aggregates player data
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - npm or yarn
 - Supabase account
 - Google Gemini API key
@@ -64,27 +64,29 @@ PrepSuite is a comprehensive chess scouting platform that aggregates player data
 4. **Set up Supabase**
    
    ```bash
-   # Link to your Supabase project
    supabase link --project-ref your-project-ref
-   
-   # Set Gemini API key as a secret
-   supabase secrets set GEMINI_API_KEY=your-gemini-api-key
-   
-   # Deploy edge functions
-   supabase functions deploy gemini-identity
-   supabase functions deploy gemini-report
-   supabase functions deploy health
-   
-   # Apply database migrations
    supabase db push
+   supabase functions deploy delete-user
+   supabase functions deploy health
    ```
 
-5. **Run the development server**
+5. **Set up and run the Pipeline Service** (required for analysis)
+   
+   ```bash
+   cd pipeline-service
+   cp .env.example .env
+   # Edit .env: set SUPABASE_JWT_SECRET, SUPABASE_URL, GEMINI_API_KEY
+   npm install && npm run dev
+   ```
+   The pipeline runs on port 8080.
+
+6. **Run the frontend**
+   
+   In another terminal, from the project root:
    ```bash
    npm run dev
    ```
-
-   The app will be available at `http://localhost:3000`
+   The app will be available at `http://localhost:3000`. Vite proxies `/api/*` to the pipeline service.
 
 ---
 
@@ -92,41 +94,31 @@ PrepSuite is a comprehensive chess scouting platform that aggregates player data
 
 ```
 prepsuite/
-├── src/                 # Application source code
+├── src/                 # Frontend application
 │   ├── App.tsx          # Main app component
 │   ├── index.tsx        # Entry point
-│   ├── index.css        # Global styles
 │   ├── types.ts         # TypeScript type definitions
 │   ├── components/      # React components
 │   │   ├── SearchScreen.tsx
 │   │   ├── ReportDashboard.tsx
-│   │   ├── ErrorBoundary.tsx
+│   │   ├── RepertoireChat.tsx
 │   │   └── ...
-│   ├── services/        # Business logic services
-│   │   ├── chessCom.ts  # Chess.com API integration
-│   │   ├── lichess.ts   # Lichess API integration
-│   │   ├── fide.ts      # FIDE profile scraping
-│   │   ├── uscf.ts      # USCF profile scraping
-│   │   ├── geminiService.ts # AI report generation
-│   │   ├── gameAnalysis.ts  # Game parsing and analysis
-│   │   └── ...
-│   ├── lib/             # Utilities and configuration
-│   │   ├── supabase.ts  # Supabase client
-│   │   ├── env.ts       # Environment validation
-│   │   ├── validation.ts # Input validation schemas
-│   │   ├── errorUtils.ts # Error handling utilities
-│   │   └── sentry.ts    # Sentry error tracking
+│   ├── services/        # Business logic
+│   │   ├── pipelineClient.ts  # Pipeline service client
+│   │   └── playerRepository.ts # Supabase CRUD
+│   ├── lib/             # Utilities
 │   └── hooks/           # Custom React hooks
-├── docs/                # Current documentation
-│   └── bak/             # Historical/archived docs
+├── pipeline-service/    # Backend analysis pipeline (Node/Hono)
+│   ├── src/
+│   │   ├── pipeline/    # Identity, games, parsing, engine, report
+│   │   ├── routes/      # /api/analyze, /api/chat
+│   │   └── lib/         # Shared utilities
+│   └── __tests__/
 ├── supabase/
-│   ├── functions/       # Edge functions
-│   │   ├── gemini-identity/
-│   │   ├── gemini-report/
-│   │   └── health/
+│   ├── functions/       # Edge functions (delete-user, health)
 │   └── migrations/      # Database migrations
 ├── e2e/                 # E2E tests (Playwright)
-└── __tests__/           # Shared test utilities
+└── docs/                # Documentation
 ```
 
 ---
@@ -143,37 +135,34 @@ prepsuite/
 - `npm run test:run` - Run unit tests once (for CI)
 - `npm run test:coverage` - Run tests with coverage report
 - `npm run test:ui` - Run tests with Vitest UI
-- `npm run test:e2e` - Run E2E tests with Playwright
-- `npm run test:e2e:ui` - Run E2E tests with Playwright UI
+- `npm run test:e2e` - E2E tests with Playwright
+- `npm run test:e2e:headed` - E2E tests in headed browser
 - `npm run test:all` - Run all tests (unit + E2E)
 
 ---
 
 ## Environment Variables
 
-### Required
-- `VITE_SUPABASE_URL` - Your Supabase project URL
-- `VITE_SUPABASE_ANON_KEY` - Your Supabase anonymous key
+### Frontend (.env.local)
+- `VITE_SUPABASE_URL` - Supabase project URL
+- `VITE_SUPABASE_ANON_KEY` - Supabase anonymous key
+- `VITE_PIPELINE_SERVICE_URL` - Optional; pipeline service URL (default: proxied in dev)
+- `VITE_SENTRY_DSN` - Optional; Sentry DSN
+- `VITE_SENTRY_ENABLE_DEV` - Optional; enable Sentry in dev ("true")
 
-### Optional
-- `VITE_SENTRY_DSN` - Sentry DSN for error tracking (production)
-- `VITE_SENTRY_ENABLE_DEV` - Enable Sentry in development (set to "true")
-
-### Supabase Secrets (set via `supabase secrets set`)
-- `GEMINI_API_KEY` - Google Gemini API key (required)
-- `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins (optional)
+### Pipeline Service (pipeline-service/.env)
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_JWT_SECRET` - JWT secret for verifying auth tokens
+- `GEMINI_API_KEY` - Google Gemini API key
 
 ---
 
 ## Testing
 
-The project includes comprehensive test coverage:
-
-- **Unit Tests**: 72+ tests covering services, utilities, and components
+- **Unit Tests**: Vitest tests for services, utilities, and components
 - **E2E Tests**: Playwright tests for critical user flows
 - **Coverage Target**: 70%+ code coverage
 
-Run tests:
 ```bash
 npm run test:all
 ```
@@ -182,82 +171,34 @@ npm run test:all
 
 ## Security
 
-- ✅ API keys stored server-side only (Supabase Edge Functions)
-- ✅ JWT verification enabled for edge functions
+- ✅ API keys stored server-side only (pipeline service, Supabase)
+- ✅ JWT verification for pipeline service and edge functions
 - ✅ Input validation with Zod schemas
-- ✅ CORS restricted to allowed origins
 - ✅ Row Level Security (RLS) policies enforced
 
-See `SECURITY_AUDIT.md` for detailed security analysis.
+See `docs/SECURITY_AUDIT.md` for detailed security analysis.
 
 ---
 
 ## Deployment
 
-### Production Checklist
+1. Deploy pipeline service to Cloud Run
+2. Deploy frontend to Vercel/Netlify with `VITE_PIPELINE_SERVICE_URL` pointing to Cloud Run
+3. Configure Supabase (auth, migrations, edge functions)
+4. Set production secrets
 
-1. ✅ Set up Supabase project and deploy edge functions
-2. ✅ Configure environment variables
-3. ✅ Set production secrets (`GEMINI_API_KEY`, `ALLOWED_ORIGINS`)
-4. ✅ Build production bundle: `npm run build`
-5. ✅ Deploy to hosting (Vercel, Netlify, etc.)
-6. ✅ Verify health check endpoint: `/health`
-
-### Health Check
-
-The app includes a health check endpoint:
-```
-GET https://your-project.supabase.co/functions/v1/health
-```
-
-Returns:
-```json
-{
-  "status": "healthy",
-  "timestamp": "2026-02-03T...",
-  "checks": {
-    "database": "ok",
-    "edgeFunctions": "ok"
-  }
-}
-```
+See `docs/DEPLOYMENT_SETUP.md` for full deployment guide.
 
 ---
 
 ## Documentation
 
-Current documentation lives in `docs/`:
-
-- `docs/DEPLOYMENT_SETUP.md` - Deployment and CI/CD setup guide
+- `docs/DEPLOYMENT_SETUP.md` - Deployment and CI/CD setup
 - `docs/SECURITY_AUDIT.md` - Security audit results
-- `docs/EDGE_FUNCTIONS_SETUP.md` - Edge functions setup guide
+- `docs/ARCHITECTURE.md` - System architecture
 - `docs/SETUP_CHECKLIST.md` - Initial setup checklist
+- `docs/SUPABASE_MIGRATION.md` - Supabase changes (removed gemini-identity, gemini-report)
 - `docs/OAUTH_SETUP.md` - OAuth configuration
-- `docs/ALTERNATIVE_DATABASES.md` - Alternative chess data sources
-
-Historical analysis docs are archived in `docs/bak/`.
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## License
-
-[Your License Here]
-
----
-
-## Support
-
-For issues, questions, or contributions, please open an issue on GitHub.
 
 ---
 

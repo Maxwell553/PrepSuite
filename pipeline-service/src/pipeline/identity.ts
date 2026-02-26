@@ -51,6 +51,11 @@ async function getLichessProfile(username: string): Promise<LichessProfile | nul
 
 // ─── Main orchestrator ──────────────────────────────────────────────
 
+export interface ResolveIdentityOptions {
+  /** When true, skip Chess.com/Lichess lookup (for OTB-only analysis) */
+  skipOnlinePlatforms?: boolean;
+}
+
 export async function resolveIdentity(
   inputName: string,
   fideId: string,
@@ -58,6 +63,7 @@ export async function resolveIdentity(
   providedChessComUsername?: string,
   providedLichessUsername?: string,
   onProgress?: (message: string) => void,
+  options?: ResolveIdentityOptions,
 ): Promise<ResolvedIdentity> {
   let officialName = inputName;
   let fideProfile: FideProfile | null = null;
@@ -67,6 +73,7 @@ export async function resolveIdentity(
   const hasUscfId = !!uscfId?.trim();
   const hasChessCom = !!providedChessComUsername?.trim();
   const hasLichess = !!providedLichessUsername?.trim();
+  const skipOnline = options?.skipOnlinePlatforms ?? false;
 
   onProgress?.('Looking up cache...');
   const cached = await getCachedIdentity(
@@ -117,8 +124,8 @@ export async function resolveIdentity(
       lichessCandidates: [],
     };
 
-    const needsChessCom = !hasChessCom;
-    const needsLichess = !hasLichess;
+    const needsChessCom = skipOnline ? false : !hasChessCom;
+    const needsLichess = skipOnline ? false : !hasLichess;
 
     for (let geminiAttempt = 0; geminiAttempt < MAX_GEMINI_ID_RETRIES; geminiAttempt++) {
       if (geminiAttempt === 0 && inputName.trim() && (!fideId || !uscfId || needsChessCom || needsLichess)) {
@@ -279,8 +286,8 @@ export async function resolveIdentity(
     }
 
     // Discover missing usernames via Vertex AI (already fetched in parallel with FIDE/USCF in Step 1+2)
-    const stillNeedsChessCom = !verifiedChessCom;
-    const stillNeedsLichess = !verifiedLichess;
+    const stillNeedsChessCom = !skipOnline && !verifiedChessCom;
+    const stillNeedsLichess = !skipOnline && !verifiedLichess;
 
     if (stillNeedsChessCom || stillNeedsLichess) {
       onProgress?.('Verifying Chess.com & Lichess usernames...');

@@ -60,13 +60,13 @@ export function getEnvConfig(): EnvConfig {
 }
 
 /**
- * DEPRECATED: Gemini API key is now server-side only (via Supabase Edge Functions)
+ * DEPRECATED: Gemini API key is server-side only (pipeline service).
  * This function is kept for backward compatibility but should not be used.
- * All Gemini API calls should go through geminiService which uses edge functions.
+ * All Gemini API calls go through the pipeline service.
  */
 export function getGeminiApiKey(): string {
   throw new EnvValidationError(
-    'Gemini API key is server-side only. Use geminiService instead, which calls Supabase Edge Functions.'
+    'Gemini API key is server-side only. The pipeline service handles all AI calls.'
   );
 }
 

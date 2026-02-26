@@ -1,9 +1,10 @@
 /**
  * Browser client for the Cloud Run Pipeline Service.
  * Opens a fetch to the pipeline, reads SSE events, calls callbacks.
- * Feature-flagged via VITE_USE_PIPELINE_SERVICE.
+ * Adds Sentry breadcrumbs for pipeline phase transitions.
  */
 
+import * as Sentry from '@sentry/react';
 import type { ScoutingReport, PlayerMetadata, OpeningStat, MoveSequence } from '../types';
 
 export interface PipelineParams {
@@ -13,6 +14,8 @@ export interface PipelineParams {
   chessComUsername?: string;
   lichessUsername?: string;
   gameLimit?: number;
+  onlineLimit?: number;
+  otbLimit?: number;
 }
 
 /** The pipeline now returns a complete ScoutingReport */
@@ -124,18 +127,23 @@ export async function runPipeline(
 
     function handleEvent(event: string, data: Record<string, unknown>) {
       switch (event) {
-        case 'phase':
-          callbacks.onPhase?.(
-            data.phase as string,
-            data.status as string,
-            data.durationMs as number | undefined,
-            {
-              gameCount: data.gameCount as number | undefined,
-              gamesAnalyzed: data.gamesAnalyzed as number | undefined,
-              message: data.message as string | undefined,
-            },
-          );
+        case 'phase': {
+          const phase = data.phase as string;
+          const status = data.status as string;
+          const durationMs = data.durationMs as number | undefined;
+          const extra = {
+            gameCount: data.gameCount as number | undefined,
+            gamesAnalyzed: data.gamesAnalyzed as number | undefined,
+            message: data.message as string | undefined,
+          };
+          Sentry.addBreadcrumb({
+            category: 'pipeline',
+            message: `Pipeline ${phase}: ${status}`,
+            data: { phase, status, durationMs, ...extra },
+          });
+          callbacks.onPhase?.(phase, status, durationMs, extra);
           break;
+        }
         case 'progress':
           callbacks.onProgress?.(
             data.phase as string,

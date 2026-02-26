@@ -347,7 +347,7 @@ allow_dynamic_registration = false
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
 # `oneshot` — spawns fresh process per request; avoids WORKER_LIMIT (546) when report payload is large.
-# `per_worker` — enables hot reload; can hit "not enough compute resources" with heavy gemini-report requests.
+# `per_worker` — enables hot reload.
 policy = "oneshot"
 # Port to attach the Chrome inspector for debugging edge functions.
 inspector_port = 8083
@@ -355,14 +355,6 @@ inspector_port = 8083
 deno_version = 2
 
 # Edge Function configurations - JWT verification enabled for production security
-# gemini-identity: Public function for identity resolution (no auth required)
-[functions.gemini-identity]
-verify_jwt = false
-
-# gemini-report: JWT verification off by default (enable for production if needed)
-[functions.gemini-report]
-verify_jwt = false
-
 # delete-user: Requires authentication (user account deletion)
 [functions.delete-user]
 verify_jwt = true

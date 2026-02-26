@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
-import { Search, ShieldAlert, Database, AlertCircle, Loader2, Play, Cpu, User, Info } from 'lucide-react';
-import { ScoutingReport, PlayerMetadata } from '../types';
+import { Search, Database, AlertCircle, Loader2, Play, Cpu, User, Info } from 'lucide-react';
+import { ScoutingReport } from '../types';
 import { playerRepository } from '../services/playerRepository';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { getUserFriendlyError, logError } from '../lib/errorUtils';
@@ -9,6 +8,8 @@ import { useTheme } from '../lib/themeContext';
 import { validatePlayerSearch } from '../lib/validation';
 import { runPipeline } from '../services/pipelineClient';
 import { supabase } from '../lib/supabase';
+import { usePipelineProgressCallbacks } from '../hooks/usePipelineProgress';
+import { logger } from '../lib/logger';
 
 
 
@@ -56,6 +57,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [gameLimit, setGameLimit] = useState(1000);
+  const [onlineLimit, setOnlineLimit] = useState(1000);
+  const [otbLimit, setOtbLimit] = useState(0);
   const [formData, setFormData] = useState({
     name: '',
     fideId: '',
@@ -64,7 +67,12 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
     lichessUsername: ''
   });
 
-
+  const pipelineCallbacks = usePipelineProgressCallbacks({
+    gameLimit,
+    setScanningStatus,
+    setLoadingStage,
+    setLoadingProgress,
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,7 +85,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
         uscfId: formData.uscfId,
         chessComUsername: formData.chessComUsername,
         lichessUsername: formData.lichessUsername,
-        gameLimit: gameLimit,
+        gameLimit,
+        onlineLimit,
+        otbLimit,
       });
 
       // Update form data with validated/sanitized values
@@ -89,9 +99,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
         lichessUsername: validatedInput.lichessUsername || '',
       });
 
-      if (validatedInput.gameLimit) {
-        setGameLimit(validatedInput.gameLimit);
-      }
+      if (validatedInput.gameLimit != null) setGameLimit(validatedInput.gameLimit);
+      if (validatedInput.onlineLimit != null) setOnlineLimit(validatedInput.onlineLimit);
+      if (validatedInput.otbLimit != null) setOtbLimit(validatedInput.otbLimit);
     } catch (validationError: any) {
       // Handle validation errors
       const errorMessage = validationError.errors?.[0]?.message || validationError.message || 'Invalid input. Please check your entries.';
@@ -112,7 +122,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
         if (existingPlayer) {
           const cachedReport = await playerRepository.getLatestReport(existingPlayer.id);
           if (cachedReport) {
-            console.log("Serving cached report from Supabase");
+            logger.info('Search', 'cache_hit', { message: 'Serving cached report from Supabase' });
             onReportGenerated(cachedReport, { fromCache: true });
             setLoading(false);
             // Clear form data after successful search
@@ -131,7 +141,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
       const targetUsername = formData.name;
 
       // ── Pipeline Service (sole execution path) ──────────────────
-      console.log('[Search] Using Pipeline Service for full analysis pipeline');
+      logger.info('Search', 'pipeline_start', { message: 'Using Pipeline Service for full analysis pipeline' });
       setScanningStatus('Step 1: Resolving player identity...');
       setLoadingStage('identity');
 
@@ -148,55 +158,11 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
           chessComUsername: formData.chessComUsername || undefined,
           lichessUsername: formData.lichessUsername || undefined,
           gameLimit,
+          onlineLimit,
+          otbLimit,
         },
         session.access_token,
-        {
-          onPhase: (phase, status, durationMs, extra) => {
-            if (phase === 'identity' && status === 'started') {
-              setScanningStatus('Step 1: Resolving player identity...');
-              setLoadingStage('identity');
-            } else if (phase === 'identity' && status === 'progress' && extra?.message) {
-              setScanningStatus(`Step 1: ${extra.message}`);
-            } else if (phase === 'identity' && status === 'complete') {
-              setScanningStatus(`Step 1 complete (${durationMs ? Math.round(durationMs / 1000) : '?'}s)`);
-            } else if (phase === 'games' && status === 'started') {
-              setScanningStatus('Step 2: Fetching games...');
-              setLoadingStage('fetching');
-            } else if (phase === 'games' && status === 'complete') {
-              setScanningStatus(`Step 2 complete: ${extra?.gameCount ?? 0} games fetched`);
-            } else if (phase === 'parsing' && status === 'started') {
-              setScanningStatus('Step 3: Parsing games & analyzing openings...');
-              setLoadingStage('analyzing');
-            } else if (phase === 'parsing' && status === 'complete') {
-              setScanningStatus(`Step 3 complete: ${extra?.gameCount ?? 0} games parsed`);
-            } else if (phase === 'engine' && status === 'started') {
-              setScanningStatus('Step 4: Running Stockfish engine analysis...');
-            } else if (phase === 'engine' && status === 'complete') {
-              setScanningStatus(`Step 4 complete: ${gameLimit.toLocaleString()} games analyzed`);
-            } else if (phase === 'report' && status === 'started') {
-              setScanningStatus('Step 5: Generating AI analysis report...');
-              setLoadingStage('generating');
-              setLoadingProgress(85);
-            } else if (phase === 'report' && status === 'complete') {
-              setScanningStatus('Step 5 complete: AI report generated');
-              setLoadingProgress(95);
-            }
-          },
-          onProgress: (phase, current, total) => {
-            if (phase === 'games') {
-              setLoadingProgress(Math.round((current / total) * 30));
-            } else if (phase === 'engine') {
-              setLoadingProgress(Math.round(50 + (current / total) * 30));
-              // Show user-requested game count (gameLimit) instead of actual sampled count
-              const displayedCurrent = total > 0 ? Math.round((current / total) * gameLimit) : 0;
-              const displayedTotal = gameLimit;
-              setScanningStatus(`Step 4: Stockfish analyzing ${displayedCurrent.toLocaleString()}/${displayedTotal.toLocaleString()} games...`);
-            }
-          },
-          onError: (error) => {
-            console.error('[Search] Pipeline error:', error);
-          },
-        },
+        pipelineCallbacks,
       );
 
       // Pipeline must return a complete report
@@ -205,7 +171,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
       }
 
       const reportData = pipelineResult.report;
-      console.log('[Search] Pipeline provided complete report:', reportData.id);
+      logger.info('Search', 'pipeline_complete', { metadata: { reportId: reportData.id } });
 
       try {
         const player = await playerRepository.createVerifiedPlayer({
@@ -220,13 +186,13 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
         });
 
         if (player && user) {
-          console.log("Persisted new report to Supabase");
+          logger.info('Search', 'persist_success', { message: 'Persisted new report to Supabase' });
         }
       } catch (dbErr) {
         console.warn("Failed to persist report to DB (Demo Mode?):", dbErr);
       }
 
-      console.log('[Analysis] Pipeline report ready, calling onReportGenerated');
+      logger.info('Search', 'report_ready', { message: 'Pipeline report ready, calling onReportGenerated' });
       onReportGenerated(reportData);
       setScanningStatus('Report generated successfully!');
 
@@ -246,7 +212,10 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
     } catch (err: unknown) {
       logError(err, { operation: 'player analysis', source: 'SearchScreen' });
       const errorMessage = getUserFriendlyError(err, { operation: 'player analysis' });
-      console.error('[Analysis] Error during analysis:', err);
+      logger.error('Search', 'pipeline_error', {
+        message: errorMessage,
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : undefined,
+      });
 
       // Provide more specific guidance for rate limit errors
       if (err instanceof Error && (err.message.includes('429') || err.message.includes('Resource exhausted') || err.message.includes('resource_exhausted'))) {
@@ -406,46 +375,102 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                     )}
                   </div>
 
-                  <div className="relative group">
+                  <div className="relative group space-y-6">
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-3 uppercase tracking-widest">Number of Games to Analyze</label>
 
                     {/* Info Bar */}
-                    <div className="mb-4 flex items-start gap-2 p-3 bg-indigo-900/10 dark:bg-indigo-900/10 bg-indigo-50 border border-indigo-500/20 dark:border-indigo-500/20 border-indigo-200 rounded-lg">
+                    <div className="flex items-start gap-2 p-3 bg-indigo-900/10 dark:bg-indigo-900/10 bg-indigo-50 border border-indigo-500/20 dark:border-indigo-500/20 border-indigo-200 rounded-lg">
                       <Info className="w-4 h-4 text-indigo-400 dark:text-indigo-400 text-indigo-600 shrink-0 mt-0.5" />
                       <p className="text-xs text-indigo-300 dark:text-indigo-300 text-indigo-700">
-                        <span className="font-semibold">1,000 games</span> is the default number of games analyzed. You can analyze up to <span className="font-semibold">10,000 games</span> for more comprehensive analysis (may take longer).
+                        Split games between <span className="font-semibold">online</span> (Chess.com, Lichess) and <span className="font-semibold">OTB</span> (over-the-board). Total must equal online + OTB.
                       </p>
                     </div>
 
-                    {/* Range Slider */}
-                    <div className="space-y-3">
-                      <div className="relative">
-                        <input
-                          type="range"
-                          min="500"
-                          max="10000"
-                          step="500"
-                          value={gameLimit}
-                          onChange={(e) => setGameLimit(Number(e.target.value))}
-                          disabled={loading}
-                          className="w-full h-2.5 bg-slate-800 dark:bg-slate-800 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{
-                            background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${((gameLimit - 500) / (10000 - 500)) * 100}%, rgb(30, 41, 59) ${((gameLimit - 500) / (10000 - 500)) * 100}%, rgb(30, 41, 59) 100%)`
-                          }}
-                        />
+                    {/* Total Games Slider */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-400 dark:text-slate-400 text-gray-600">Total games</span>
+                        <span className="font-bold text-indigo-400 dark:text-indigo-400 text-indigo-600">{gameLimit.toLocaleString()}</span>
                       </div>
+                      <input
+                        type="range"
+                        min={500}
+                        max={10000}
+                        step={500}
+                        value={gameLimit}
+                        onChange={(e) => {
+                          const newTotal = Number(e.target.value);
+                          const ratio = gameLimit > 0 ? onlineLimit / gameLimit : 1;
+                          setGameLimit(newTotal);
+                          setOnlineLimit(Math.round(ratio * newTotal));
+                          setOtbLimit(newTotal - Math.round(ratio * newTotal));
+                        }}
+                        disabled={loading}
+                        className="w-full h-2.5 bg-slate-800 dark:bg-slate-800 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{
+                          background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${((gameLimit - 500) / (10000 - 500)) * 100}%, rgb(30, 41, 59) ${((gameLimit - 500) / (10000 - 500)) * 100}%, rgb(30, 41, 59) 100%)`
+                        }}
+                      />
+                    </div>
 
-                      {/* Value Display */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 dark:bg-slate-800/50 bg-gray-100 rounded-lg border border-indigo-500/20 dark:border-indigo-500/20 border-indigo-200">
-                          <span className="text-lg font-bold text-indigo-400 dark:text-indigo-400 text-indigo-600">
-                            {gameLimit.toLocaleString()}
-                          </span>
-                          <span className="text-xs text-slate-400 dark:text-slate-400 text-gray-600">
-                            games
-                          </span>
-                        </div>
+                    {/* Online Games Slider */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-400 dark:text-slate-400 text-gray-600">Online (Chess.com, Lichess)</span>
+                        <span className="font-bold text-emerald-400 dark:text-emerald-400 text-emerald-600">{onlineLimit.toLocaleString()}</span>
                       </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={gameLimit}
+                        step={50}
+                        value={onlineLimit}
+                        onChange={(e) => {
+                          const newOnline = Math.min(Number(e.target.value), gameLimit);
+                          setOnlineLimit(newOnline);
+                          setOtbLimit(gameLimit - newOnline);
+                        }}
+                        disabled={loading}
+                        className="w-full h-2.5 bg-slate-800 dark:bg-slate-800 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{
+                          background: `linear-gradient(to right, rgb(16, 185, 129) 0%, rgb(16, 185, 129) ${gameLimit > 0 ? (onlineLimit / gameLimit) * 100 : 0}%, rgb(30, 41, 59) ${gameLimit > 0 ? (onlineLimit / gameLimit) * 100 : 0}%, rgb(30, 41, 59) 100%)`
+                        }}
+                      />
+                    </div>
+
+                    {/* OTB Games Slider */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-400 dark:text-slate-400 text-gray-600">OTB (over-the-board)</span>
+                        <span className="font-bold text-amber-400 dark:text-amber-400 text-amber-600">{otbLimit.toLocaleString()}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={gameLimit}
+                        step={50}
+                        value={otbLimit}
+                        onChange={(e) => {
+                          const newOtb = Math.min(Number(e.target.value), gameLimit);
+                          setOtbLimit(newOtb);
+                          setOnlineLimit(gameLimit - newOtb);
+                        }}
+                        disabled={loading}
+                        className="w-full h-2.5 bg-slate-800 dark:bg-slate-800 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{
+                          background: `linear-gradient(to right, rgb(245, 158, 11) 0%, rgb(245, 158, 11) ${gameLimit > 0 ? (otbLimit / gameLimit) * 100 : 0}%, rgb(30, 41, 59) ${gameLimit > 0 ? (otbLimit / gameLimit) * 100 : 0}%, rgb(30, 41, 59) 100%)`
+                        }}
+                      />
+                    </div>
+
+                    {/* Summary */}
+                    <div className="flex items-center justify-between px-3 py-2 bg-slate-800/50 dark:bg-slate-800/50 bg-gray-100 rounded-lg border border-indigo-500/20 dark:border-indigo-500/20 border-indigo-200">
+                      <span className="text-xs text-slate-400 dark:text-slate-400 text-gray-600">
+                        {onlineLimit.toLocaleString()} online + {otbLimit.toLocaleString()} OTB =
+                      </span>
+                      <span className="text-sm font-bold text-indigo-400 dark:text-indigo-400 text-indigo-600">
+                        {gameLimit.toLocaleString()} total
+                      </span>
                     </div>
                   </div>
                 </div>

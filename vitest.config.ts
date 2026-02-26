@@ -25,6 +25,7 @@ export default defineConfig({
         '**/types.ts',
         '**/index.tsx',
         '**/index.ts',
+        'pipeline-service/**',
       ],
       thresholds: {
         lines: 70,

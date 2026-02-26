@@ -55,7 +55,25 @@ export const playerSearchSchema = z.object({
     .max(10000, 'Game limit cannot exceed 10000')
     .default(1000)
     .optional(),
-});
+  onlineLimit: z.number()
+    .int('Online limit must be an integer')
+    .min(0, 'Online limit cannot be negative')
+    .max(10000, 'Online limit cannot exceed 10000')
+    .optional(),
+  otbLimit: z.number()
+    .int('OTB limit must be an integer')
+    .min(0, 'OTB limit cannot be negative')
+    .max(10000, 'OTB limit cannot exceed 10000')
+    .optional(),
+}).refine(
+  (data) => {
+    const total = data.gameLimit ?? 1000;
+    const online = data.onlineLimit ?? total;
+    const otb = data.otbLimit ?? 0;
+    return online + otb === total;
+  },
+  { message: 'Online + OTB must equal total games', path: ['gameLimit'] },
+);
 
 export type PlayerSearchInput = z.infer<typeof playerSearchSchema>;
 

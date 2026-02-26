@@ -473,7 +473,11 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
                         <td className="px-1.5 py-1.5">
                           <span className={`inline-block w-1.5 h-1.5 rounded-full ${getResultDotColor(rowResult, isW, isB)}`} />
                         </td>
-                        <td className="px-1.5 py-1.5">{new Date(g.playedAt).getFullYear()}</td>
+                        <td className="px-1.5 py-1.5">
+                          {g.playedAt && g.playedAt !== '1970-01-01T00:00:00.000Z'
+                            ? new Date(g.playedAt).getFullYear()
+                            : '—'}
+                        </td>
                         <td className="px-1.5 py-1.5 truncate max-w-[70px]" title={g.white}>{g.white}</td>
                         <td className="px-1.5 py-1.5 truncate max-w-[70px]" title={g.black}>{g.black}</td>
                         <td className="px-1.5 py-1.5">{rowResult}</td>
@@ -536,14 +540,32 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
               <div>
                 <span className={`font-semibold ${getResultColor(currentGame.result, isPlayerWhite, isPlayerBlack)}`}>{getGameResult(currentGame.result)}</span>
                 <span className="text-slate-500"> · </span>
-                <span className="font-semibold text-slate-200">{currentGame.white}</span>
+                <span className="font-semibold text-slate-200">
+                  {currentGame.whiteTitle && <span className="text-amber-400/90">{currentGame.whiteTitle} </span>}
+                  {currentGame.white}
+                  {currentGame.whiteElo != null && <span className="text-slate-400 font-normal"> ({currentGame.whiteElo})</span>}
+                </span>
                 <span className="text-slate-500"> vs </span>
-                <span className="font-semibold text-slate-200">{currentGame.black}</span>
+                <span className="font-semibold text-slate-200">
+                  {currentGame.blackTitle && <span className="text-amber-400/90">{currentGame.blackTitle} </span>}
+                  {currentGame.black}
+                  {currentGame.blackElo != null && <span className="text-slate-400 font-normal"> ({currentGame.blackElo})</span>}
+                </span>
                 <span className="text-slate-500"> · {currentGame.result} · {currentGame.eco || currentGame.openingName || 'Unknown'} · </span>
-                <span className="text-slate-500">{new Date(currentGame.playedAt).toLocaleDateString()}</span>
+                <span className="text-slate-500">
+                  {currentGame.playedAt && currentGame.playedAt !== '1970-01-01T00:00:00.000Z'
+                    ? new Date(currentGame.playedAt).toLocaleDateString()
+                    : 'Date unknown'}
+                </span>
               </div>
               <div className="text-slate-500 text-xs">
-                {currentGame.source === 'lichess' ? 'Lichess.org' : currentGame.source === 'chess.com' ? 'Chess.com' : currentGame.source || 'Unknown'}
+                {currentGame.source === 'otb' && currentGame.event
+                  ? currentGame.event
+                  : currentGame.source === 'lichess'
+                    ? 'Lichess.org'
+                    : currentGame.source === 'chess.com'
+                      ? 'Chess.com'
+                      : currentGame.source || 'Unknown'}
               </div>
             </div>
           </div>

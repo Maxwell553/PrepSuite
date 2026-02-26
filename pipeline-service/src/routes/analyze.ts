@@ -6,6 +6,7 @@ import type { ResolvedIdentity } from '../lib/types.js';
 import type { GameData } from '../lib/types.js';
 import { resolveIdentity } from '../pipeline/identity.js';
 import { fetchGames } from '../pipeline/gameFetcher.js';
+import { fetchOtbGames } from '../pipeline/otbGames.js';
 import { parseChessComGames, parseLichessGames, standardizePgnForBoard } from '../pipeline/gameParser.js';
 import { fetchLichessPgnBatch } from '../pipeline/lichess.js';
 import { identifyOpeningsBatch } from '../pipeline/openingClassifier.js';
@@ -82,6 +83,10 @@ analyzeRoute.post('/analyze', async (c) => {
   // we must keep the async pipeline referenced so the stream stays open.
   const pipelinePromise = (async () => {
     try {
+      const gameLimit = input.gameLimit || 1000;
+      const onlineLimit = input.onlineLimit ?? gameLimit;
+      const otbLimit = input.otbLimit ?? 0;
+
       // ── Phase 1: Identity ──────────────────────────────────
       const identityStart = Date.now();
       sse.sendPhase({ phase: 'identity', status: 'started' });
@@ -93,6 +98,7 @@ analyzeRoute.post('/analyze', async (c) => {
         input.chessComUsername || undefined,
         input.lichessUsername || undefined,
         (message) => sse.sendPhase({ phase: 'identity', status: 'progress', message }),
+        { skipOnlinePlatforms: onlineLimit === 0 },
       );
 
       sse.sendPhase({
@@ -112,21 +118,37 @@ analyzeRoute.post('/analyze', async (c) => {
         '[Analyze] Identity resolved',
       );
 
-      if (!identity.chessComUsername && !identity.lichessUsername) {
-        const msg = 'Could not find Chess.com or Lichess username. Please provide usernames manually.';
+      const hasOnline = !!(identity.chessComUsername || identity.lichessUsername);
+      const hasOtb = otbLimit > 0 && !!identity.fideId;
+
+      if (!hasOnline && !hasOtb) {
+        const msg = 'Could not find Chess.com, Lichess username, or FIDE ID. Please provide at least one.';
         logger.warn({ name: identity.verifiedName }, '[Analyze] No platform usernames or FIDE ID found');
         sse.sendError({ error: msg });
         return;
       }
 
       // ── Phase 2: Game Fetching ─────────────────────────────
-      const gameLimit = input.gameLimit || 1000;
-      const gameResult = await fetchGames(
-        identity.chessComUsername,
-        identity.lichessUsername,
-        gameLimit,
-        sse,
-      );
+      let gameResult: Awaited<ReturnType<typeof fetchGames>> = {
+        chessComGames: [],
+        lichessGamesNdjson: '',
+        totalGames: 0,
+        durationMs: 0,
+      };
+
+      if (onlineLimit > 0 && hasOnline) {
+        gameResult = await fetchGames(
+          identity.chessComUsername || '',
+          identity.lichessUsername || '',
+          onlineLimit,
+          sse,
+        );
+      }
+
+      let otbGames: import('../lib/types.js').GameData[] = [];
+      if (otbLimit > 0 && identity.fideId) {
+        otbGames = await fetchOtbGames(identity.fideId, otbLimit);
+      }
 
       logger.info(
         {
@@ -169,8 +191,8 @@ analyzeRoute.post('/analyze', async (c) => {
         );
       }
 
-      // Merge online games, sort by most recent, trim to gameLimit
-      const merged = [...chessComGames, ...lichessGames].sort(
+      // Merge online + OTB games, sort by most recent, trim to gameLimit
+      const merged = [...chessComGames, ...lichessGames, ...otbGames].sort(
         (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
       );
       const allGames = merged.slice(0, gameLimit);
@@ -179,6 +201,7 @@ analyzeRoute.post('/analyze', async (c) => {
         {
           chessCom: chessComGames.length,
           lichess: lichessGames.length,
+          otb: otbGames.length,
           merged: merged.length,
           trimmed: allGames.length,
         },

@@ -78,6 +78,14 @@ export interface GameData {
   weight?: number;
   /** Opening name from ECO library when available */
   openingName?: string;
+  /** OTB: event name (e.g. tournament) */
+  event?: string;
+  /** OTB: white/black Elo at time of game */
+  whiteElo?: number;
+  blackElo?: number;
+  /** OTB: chess titles (GM, IM, etc.) */
+  whiteTitle?: string;
+  blackTitle?: string;
 }
 
 /** Opening statistics per side */

@@ -27,9 +27,9 @@ A comprehensive security audit was conducted to identify any potential API key e
   - These are public keys and safe to expose
 
 - **Services**: ✅ No direct API key usage
-  - `geminiService.ts` calls Supabase Edge Functions (server-side)
+  - `pipelineClient.ts` calls the pipeline service (server-side Node service)
   - No direct Gemini API calls from client code
-  - All external API calls use proxy paths or public endpoints
+  - All AI and analysis runs in the pipeline service
 
 ### ✅ 2. Hardcoded Keys Search
 
@@ -51,11 +51,13 @@ A comprehensive security audit was conducted to identify any potential API key e
 
 **Status:** SECURE
 
+- **Pipeline Service**: ✅ Properly configured
+  - Gets `GEMINI_API_KEY` from `pipeline-service/.env` (not committed)
+  - API keys never sent to the client
+  - JWT verification for `/api/analyze` and `/api/chat`
 - **Supabase Edge Functions**: ✅ Properly configured
-  - `gemini-identity/index.ts`: Gets API key from `Deno.env.get('GEMINI_API_KEY')`
-  - `gemini-report/index.ts`: Gets API key from `Deno.env.get('GEMINI_API_KEY')`
-  - API keys stored as Supabase secrets (server-side only)
-  - No API keys in function source code
+  - `delete-user`, `health` — no API keys
+  - JWT verification enabled for delete-user
 
 ### ✅ 5. Build Output Analysis
 
