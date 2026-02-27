@@ -1,7 +1,7 @@
 
 import React from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip
 } from 'recharts';
 import { Shield, Target, Zap, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, Crosshair, BookOpen, Search, MessageSquare } from 'lucide-react';
 import { ScoutingReport } from '../types';
@@ -48,9 +48,9 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
             </div>
           </div>
         </div>
-        <div className="py-8 px-10 grid grid-cols-2 gap-8 bg-slate-950/30 dark:bg-slate-950/30 bg-gray-50 border-t border-slate-800 dark:border-slate-800 border-gray-200">
+        <div className="py-8 px-10 grid grid-cols-2 md:grid-cols-4 gap-8 bg-slate-950/30 dark:bg-slate-950/30 bg-gray-50 border-t border-slate-800 dark:border-slate-800 border-gray-200">
           <div className="space-y-1">
-            <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Chess.com Handle</div>
+            <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Chess.com</div>
             <div className="text-sm font-semibold text-emerald-400 dark:text-emerald-400 text-emerald-600">
               {player.platforms.chessCom ? (
                 <a
@@ -62,11 +62,11 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
                   {player.platforms.chessCom}
                   <Share2 className="w-3 h-3" />
                 </a>
-              ) : 'Not Found'}
+              ) : '—'}
             </div>
           </div>
           <div className="space-y-1">
-            <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Lichess Handle</div>
+            <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Lichess</div>
             <div className="text-sm font-semibold text-indigo-400 dark:text-indigo-400 text-indigo-600">
               {player.platforms.lichess ? (
                 <a
@@ -78,7 +78,31 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
                   {player.platforms.lichess}
                   <Share2 className="w-3 h-3" />
                 </a>
-              ) : 'Not Found'}
+              ) : '—'}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Game Sources</div>
+            <div className="text-sm text-slate-300 dark:text-slate-300 text-gray-700">
+              {report.games && report.games.length > 0 ? (() => {
+                const bySource = (report.games as { source?: string }[]).reduce((acc, g) => {
+                  const s = (g.source || 'unknown').toLowerCase();
+                  acc[s] = (acc[s] || 0) + 1;
+                  return acc;
+                }, {} as Record<string, number>);
+                const parts = [
+                  bySource.chesscom && `${bySource.chesscom} Chess.com`,
+                  bySource.lichess && `${bySource.lichess} Lichess`,
+                  bySource.otb && `${bySource.otb} OTB`,
+                ].filter(Boolean);
+                return parts.length ? parts.join(' · ') : `${report.games.length} games`;
+              })() : '—'}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Total Games</div>
+            <div className="text-sm font-semibold text-indigo-400 dark:text-indigo-400 text-indigo-600">
+              {report.games?.length ?? (((whiteOpenings || []).reduce((s, o) => s + (o.totalGames || 0), 0) + (blackDefenses || []).reduce((s, o) => s + (o.totalGames || 0), 0)) || 0)}
             </div>
           </div>
         </div>
@@ -168,31 +192,36 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
               <p className="text-sm text-slate-400 mb-6">
                 {(whiteOpenings || []).reduce((sum, op) => sum + (op.totalGames || 0), 0).toLocaleString()} games as White
               </p>
-              <div className="h-64 mb-6">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={whiteOpenings} margin={{ bottom: 40 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                    <XAxis
-                      dataKey="name"
-                      stroke="#94a3b8"
-                      fontSize={10}
-                      angle={-45}
-                      textAnchor="end"
-                      height={60}
-                    />
-                    <YAxis stroke="#475569" fontSize={10} />
-                    <Tooltip
-                      cursor={{ fill: '#ffffff08' }}
-                      contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }}
-                    />
-                    <Bar dataKey="wins" name="Wins" fill="#10b981" stackId="a" />
-                    <Bar dataKey="draws" name="Draws" fill="#64748b" stackId="a" />
-                    <Bar dataKey="losses" name="Losses" fill="#ef4444" stackId="a" />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="h-64 mb-6 overflow-x-auto overflow-y-hidden w-full">
+                <BarChart
+                  data={whiteOpenings || []}
+                  width={Math.max(400, (whiteOpenings?.length || 0) * 30)}
+                  height={256}
+                  margin={{ bottom: 40 }}
+                  barSize={20}
+                  barCategoryGap={10}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    stroke="#94a3b8"
+                    fontSize={10}
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis stroke="#475569" fontSize={10} />
+                  <Tooltip
+                    cursor={{ fill: '#ffffff08' }}
+                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }}
+                  />
+                  <Bar dataKey="wins" name="Wins" fill="#10b981" stackId="a" barSize={20} />
+                  <Bar dataKey="draws" name="Draws" fill="#64748b" stackId="a" barSize={20} />
+                  <Bar dataKey="losses" name="Losses" fill="#ef4444" stackId="a" barSize={20} />
+                </BarChart>
               </div>
               <div className="space-y-3">
-                {whiteOpenings.slice(0, 10).map((op, idx) => {
+                {(whiteOpenings || []).map((op, idx) => {
                   // Safely calculate win rate, handling NaN/undefined cases
                   const winRate = typeof op.winRate === 'number' && !isNaN(op.winRate) ? op.winRate : 0;
                   const winPercent = (winRate * 100).toFixed(0);
@@ -223,31 +252,36 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
               <p className="text-sm text-slate-400 mb-6">
                 {(blackDefenses || []).reduce((sum, op) => sum + (op.totalGames || 0), 0).toLocaleString()} games as Black
               </p>
-              <div className="h-64 mb-6">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={blackDefenses} margin={{ bottom: 40 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                    <XAxis
-                      dataKey="name"
-                      stroke="#94a3b8"
-                      fontSize={10}
-                      angle={-45}
-                      textAnchor="end"
-                      height={60}
-                    />
-                    <YAxis stroke="#475569" fontSize={10} />
-                    <Tooltip
-                      cursor={{ fill: '#ffffff08' }}
-                      contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }}
-                    />
-                    <Bar dataKey="wins" name="Wins" fill="#10b981" stackId="a" />
-                    <Bar dataKey="draws" name="Draws" fill="#64748b" stackId="a" />
-                    <Bar dataKey="losses" name="Losses" fill="#ef4444" stackId="a" />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="h-64 mb-6 overflow-x-auto overflow-y-hidden">
+                <BarChart
+                  data={blackDefenses || []}
+                  width={Math.max(400, (blackDefenses?.length || 0) * 30)}
+                  height={256}
+                  margin={{ bottom: 40 }}
+                  barSize={20}
+                  barCategoryGap={10}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    stroke="#94a3b8"
+                    fontSize={10}
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis stroke="#475569" fontSize={10} />
+                  <Tooltip
+                    cursor={{ fill: '#ffffff08' }}
+                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }}
+                  />
+                  <Bar dataKey="wins" name="Wins" fill="#10b981" stackId="a" barSize={20} />
+                  <Bar dataKey="draws" name="Draws" fill="#64748b" stackId="a" barSize={20} />
+                  <Bar dataKey="losses" name="Losses" fill="#ef4444" stackId="a" barSize={20} />
+                </BarChart>
               </div>
               <div className="space-y-3">
-                {blackDefenses.slice(0, 10).map((op, idx) => {
+                {(blackDefenses || []).map((op, idx) => {
                   // Safely calculate win rate, handling NaN/undefined cases
                   const winRate = typeof op.winRate === 'number' && !isNaN(op.winRate) ? op.winRate : 0;
                   const winPercent = (winRate * 100).toFixed(0);

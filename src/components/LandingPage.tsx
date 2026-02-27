@@ -105,7 +105,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                         Master Your Opponent Analysis
                     </h1>
                     <p className="text-xl text-slate-400 dark:text-slate-400 text-gray-600 max-w-2xl mx-auto mb-12 leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300">
-                        Bridge the gap between tournament data and online play. Get comprehensive scouting reports that combine FIDE/USCF ratings with Chess.com and Lichess game analysis.
+                        Bridge the gap between tournament and online play. Get comprehensive scouting reports from Chess.com, Lichess, and OTB tournament databases.
                     </p>
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-400">
                         <button
@@ -145,7 +145,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             </div>
                             <h3 className="text-2xl font-bold mb-3 text-white dark:text-white text-gray-900">AI-Powered Identity Resolution</h3>
                             <p className="text-slate-400 dark:text-slate-400 text-gray-600 leading-relaxed">
-                                Discovers Chess.com and Lichess usernames from FIDE and USCF IDs using AI search and biometric matching, with only minimal username hunting required.
+                                Discovers Chess.com and Lichess usernames from FIDE and USCF IDs using AI search. Works with online platforms and OTB tournament data for complete coverage.
                             </p>
                         </div>
 
@@ -158,9 +158,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             <div className="w-14 h-14 bg-emerald-600/10 dark:bg-emerald-600/10 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-500 dark:text-emerald-500 text-emerald-600 mb-6 group-hover:scale-110 transition-transform">
                                 <Database className="w-8 h-8" />
                             </div>
-                            <h3 className="text-2xl font-bold mb-3 text-white dark:text-white text-gray-900">Multi-Platform Game Aggregation</h3>
+                            <h3 className="text-2xl font-bold mb-3 text-white dark:text-white text-gray-900">Multi-Source Game Aggregation</h3>
                             <p className="text-slate-400 dark:text-slate-400 text-gray-600 leading-relaxed">
-                                Analyzes up to 10,000 games from both Chess.com and Lichess simultaneously. Get a complete picture of your opponent's playing style across all platforms.
+                                Analyzes up to 5,000 games from Chess.com, Lichess, and OTB tournament databases. Get a complete picture of your opponent's playing style across online and over-the-board play.
                             </p>
                         </div>
 
@@ -322,13 +322,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                     <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
                         {[
                             "Automatically links tournament identities to online accounts",
-                            "Analyzes games from both Chess.com and Lichess simultaneously",
+                            "Analyzes games from Chess.com, Lichess, and OTB databases",
                             "Stockfish engine analysis identifies tactical weaknesses",
                             "Visual charts show opening performance at a glance",
                             "AI generates actionable preparation recommendations",
                             "Save and manage multiple scouting reports",
                             "Works with both FIDE and USCF tournament data",
-                            "Minimal username searching required"
+                            "Choose your mix of online and OTB games to analyze"
                         ].map((benefit, i) => {
                             const delays = ['0.05s', '0.1s', '0.15s', '0.2s', '0.25s', '0.3s', '0.35s', '0.4s'];
                             return (

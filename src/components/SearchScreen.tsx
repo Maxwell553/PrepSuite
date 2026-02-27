@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { Search, Database, AlertCircle, Loader2, Play, Cpu, User, Info } from 'lucide-react';
+import { AlertCircle, Loader2, Play, Cpu, User, Info } from 'lucide-react';
 import { ScoutingReport } from '../types';
 import { playerRepository } from '../services/playerRepository';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { getUserFriendlyError, logError } from '../lib/errorUtils';
-import { useTheme } from '../lib/themeContext';
 import { validatePlayerSearch } from '../lib/validation';
 import { runPipeline } from '../services/pipelineClient';
 import { supabase } from '../lib/supabase';
@@ -38,7 +37,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   scanningStatus: externalScanningStatus,
   setScanningStatus: externalSetScanningStatus
 }) => {
-  const { defaultFederation } = useTheme();
   // Use external state if provided, otherwise use local state
   const [localLoading, setLocalLoading] = useState(false);
   const [localLoadingProgress, setLocalLoadingProgress] = useState<number>(0);
@@ -55,14 +53,11 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   const setScanningStatus = externalSetScanningStatus ? (value: string) => externalSetScanningStatus(value) : setLocalScanningStatus;
 
   const [error, setError] = useState<string | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [gameLimit, setGameLimit] = useState(1000);
-  const [onlineLimit, setOnlineLimit] = useState(1000);
-  const [otbLimit, setOtbLimit] = useState(0);
+  const [onlineLimit, setOnlineLimit] = useState(500);
+  const [otbLimit, setOtbLimit] = useState(500);
   const [formData, setFormData] = useState({
     name: '',
-    fideId: '',
-    uscfId: '',
     chessComUsername: '',
     lichessUsername: ''
   });
@@ -81,8 +76,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
     try {
       const validatedInput = validatePlayerSearch({
         name: formData.name,
-        fideId: formData.fideId,
-        uscfId: formData.uscfId,
+        fideId: '',
+        uscfId: '',
         chessComUsername: formData.chessComUsername,
         lichessUsername: formData.lichessUsername,
         gameLimit,
@@ -90,11 +85,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
         otbLimit,
       });
 
-      // Update form data with validated/sanitized values
       setFormData({
         name: validatedInput.name,
-        fideId: validatedInput.fideId || '',
-        uscfId: validatedInput.uscfId || '',
         chessComUsername: validatedInput.chessComUsername || '',
         lichessUsername: validatedInput.lichessUsername || '',
       });
@@ -113,36 +105,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
     setError(null);
 
     try {
-      let fideId = formData.fideId.trim();
-      let uscfId = formData.uscfId.trim();
-
-      // 0. Persistence Check (Supabase)
-      if (fideId || uscfId) {
-        const existingPlayer = await playerRepository.findVerifiedPlayer(fideId, uscfId);
-        if (existingPlayer) {
-          const cachedReport = await playerRepository.getLatestReport(existingPlayer.id);
-          if (cachedReport) {
-            logger.info('Search', 'cache_hit', { message: 'Serving cached report from Supabase' });
-            onReportGenerated(cachedReport, { fromCache: true });
-            setLoading(false);
-            // Clear form data after successful search
-            setFormData({
-              name: '',
-              fideId: '',
-              uscfId: '',
-              chessComUsername: '',
-              lichessUsername: ''
-            });
-            return;
-          }
-        }
-      }
-
-      const targetUsername = formData.name;
-
-      // ── Pipeline Service (sole execution path) ──────────────────
+      // ── Pipeline Service ──────────────────
       logger.info('Search', 'pipeline_start', { message: 'Using Pipeline Service for full analysis pipeline' });
-      setScanningStatus('Step 1: Resolving player identity...');
+      setScanningStatus('Step 1: Identifying Player...');
       setLoadingStage('identity');
 
       const { data: { session } } = await supabase.auth.getSession();
@@ -153,8 +118,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
       const pipelineResult = await runPipeline(
         {
           name: formData.name,
-          fideId: fideId || undefined,
-          uscfId: uscfId || undefined,
           chessComUsername: formData.chessComUsername || undefined,
           lichessUsername: formData.lichessUsername || undefined,
           gameLimit,
@@ -176,8 +139,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
       try {
         const player = await playerRepository.createVerifiedPlayer({
           full_name: reportData.player.name,
-          fide_id: fideId,
-          uscf_id: uscfId,
+          fide_id: reportData.player.fideId || '',
+          uscf_id: reportData.player.uscfId || '',
           chess_com_username: reportData.player.platforms?.chessCom || '',
           lichess_username: reportData.player.platforms?.lichess || '',
           metadata: {
@@ -203,8 +166,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
 
       setFormData({
         name: '',
-        fideId: '',
-        uscfId: '',
         chessComUsername: '',
         lichessUsername: ''
       });
@@ -235,7 +196,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
     <div className="max-w-4xl mx-auto py-8">
       <div className="text-center mb-12">
         <h2 className="text-4xl font-serif mb-4 text-white dark:text-white text-gray-900">Opponent Analysis</h2>
-        <p className="text-slate-400 dark:text-slate-400 text-gray-600 text-lg italic">Verified search across Chess.com and Lichess repositories.</p>
+        <p className="text-slate-400 dark:text-slate-400 text-gray-600 text-lg italic">Verified search across online platforms and OTB tournament databases.</p>
       </div>
 
       <div className="grid md:grid-cols-3 gap-8">
@@ -291,100 +252,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                 </div>
               </div>
 
-              {/* Advanced Settings Toggle */}
-              <div className="mt-4 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="showAdvanced"
-                  checked={showAdvanced}
-                  onChange={(e) => setShowAdvanced(e.target.checked)}
-                  disabled={loading}
-                  className="w-4 h-4 rounded border-slate-800 dark:border-slate-800 border-gray-300 bg-slate-950 dark:bg-slate-950 bg-gray-50 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-                <label htmlFor="showAdvanced" className="text-xs font-semibold text-slate-400 dark:text-slate-400 text-gray-600 cursor-pointer hover:text-slate-300 dark:hover:text-slate-300 hover:text-gray-900 transition-colors">
-                  Advanced Settings
-                </label>
-              </div>
-
-              {/* Advanced Settings Fields */}
-              {showAdvanced && (
-                <div className="space-y-4 pt-4 border-t border-slate-800 dark:border-slate-800 border-gray-200">
-                  <div className="grid grid-cols-2 gap-4">
-                    {defaultFederation === 'FIDE' ? (
-                      <>
-                        <div className="relative group">
-                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-2 uppercase tracking-widest">
-                            FIDE ID</label>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={formData.fideId}
-                              onChange={e => setFormData({ ...formData, fideId: e.target.value })}
-                              disabled={loading}
-                              placeholder="123456789"
-                              className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:border-indigo-500/50 dark:focus:border-indigo-500/50 focus:border-indigo-600 text-slate-300 dark:text-slate-300 text-gray-900 text-sm transition-colors placeholder:text-slate-700 dark:placeholder:text-slate-700 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                            />
-                          </div>
-                        </div>
-                        <div className="relative group">
-                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-2 uppercase tracking-widest">
-                            USCF ID</label>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={formData.uscfId}
-                              onChange={e => setFormData({ ...formData, uscfId: e.target.value })}
-                              disabled={loading}
-                              placeholder="123456789"
-                              className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:border-indigo-500/50 dark:focus:border-indigo-500/50 focus:border-indigo-600 text-slate-300 dark:text-slate-300 text-gray-900 text-sm transition-colors placeholder:text-slate-700 dark:placeholder:text-slate-700 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                            />
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="relative group">
-                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-2 uppercase tracking-widest">
-                            USCF ID</label>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={formData.uscfId}
-                              onChange={e => setFormData({ ...formData, uscfId: e.target.value })}
-                              disabled={loading}
-                              placeholder="123456789"
-                              className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:border-indigo-500/50 dark:focus:border-indigo-500/50 focus:border-indigo-600 text-slate-300 dark:text-slate-300 text-gray-900 text-sm transition-colors placeholder:text-slate-700 dark:placeholder:text-slate-700 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                            />
-                          </div>
-                        </div>
-                        <div className="relative group">
-                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-2 uppercase tracking-widest">
-                            FIDE ID</label>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={formData.fideId}
-                              onChange={e => setFormData({ ...formData, fideId: e.target.value })}
-                              disabled={loading}
-                              placeholder="123456789"
-                              className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:border-indigo-500/50 dark:focus:border-indigo-500/50 focus:border-indigo-600 text-slate-300 dark:text-slate-300 text-gray-900 text-sm transition-colors placeholder:text-slate-700 dark:placeholder:text-slate-700 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="relative group space-y-6">
+              {/* Game sliders - always visible */}
+              <div className="relative group space-y-6 pt-4">
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-3 uppercase tracking-widest">Number of Games to Analyze</label>
-
-                    {/* Info Bar */}
-                    <div className="flex items-start gap-2 p-3 bg-indigo-900/10 dark:bg-indigo-900/10 bg-indigo-50 border border-indigo-500/20 dark:border-indigo-500/20 border-indigo-200 rounded-lg">
-                      <Info className="w-4 h-4 text-indigo-400 dark:text-indigo-400 text-indigo-600 shrink-0 mt-0.5" />
-                      <p className="text-xs text-indigo-300 dark:text-indigo-300 text-indigo-700">
-                        Split games between <span className="font-semibold">online</span> (Chess.com, Lichess) and <span className="font-semibold">OTB</span> (over-the-board). Total must equal online + OTB.
-                      </p>
-                    </div>
 
                     {/* Total Games Slider */}
                     <div className="space-y-2">
@@ -395,12 +265,12 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                       <input
                         type="range"
                         min={500}
-                        max={10000}
-                        step={500}
+                        max={5000}
+                        step={250}
                         value={gameLimit}
                         onChange={(e) => {
                           const newTotal = Number(e.target.value);
-                          const ratio = gameLimit > 0 ? onlineLimit / gameLimit : 1;
+                          const ratio = gameLimit > 0 ? onlineLimit / gameLimit : 0.5;
                           setGameLimit(newTotal);
                           setOnlineLimit(Math.round(ratio * newTotal));
                           setOtbLimit(newTotal - Math.round(ratio * newTotal));
@@ -408,7 +278,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         disabled={loading}
                         className="w-full h-2.5 bg-slate-800 dark:bg-slate-800 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{
-                          background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${((gameLimit - 500) / (10000 - 500)) * 100}%, rgb(30, 41, 59) ${((gameLimit - 500) / (10000 - 500)) * 100}%, rgb(30, 41, 59) 100%)`
+                          background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${((gameLimit - 500) / (5000 - 500)) * 100}%, rgb(30, 41, 59) ${((gameLimit - 500) / (5000 - 500)) * 100}%, rgb(30, 41, 59) 100%)`
                         }}
                       />
                     </div>
@@ -462,19 +332,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         }}
                       />
                     </div>
-
-                    {/* Summary */}
-                    <div className="flex items-center justify-between px-3 py-2 bg-slate-800/50 dark:bg-slate-800/50 bg-gray-100 rounded-lg border border-indigo-500/20 dark:border-indigo-500/20 border-indigo-200">
-                      <span className="text-xs text-slate-400 dark:text-slate-400 text-gray-600">
-                        {onlineLimit.toLocaleString()} online + {otbLimit.toLocaleString()} OTB =
-                      </span>
-                      <span className="text-sm font-bold text-indigo-400 dark:text-indigo-400 text-indigo-600">
-                        {gameLimit.toLocaleString()} total
-                      </span>
-                    </div>
                   </div>
-                </div>
-              )}
             </div>
 
             {error && (
@@ -509,19 +367,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
               </button>
             </div>
           </form>
-
-          <div className="mt-8 grid grid-cols-2 gap-4">
-            <div className="bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 p-4 rounded-xl text-center backdrop-blur-sm">
-              <Database className="w-5 h-5 text-indigo-400 dark:text-indigo-400 text-indigo-600 mx-auto mb-2" />
-              <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-600 uppercase tracking-widest font-bold">Chess.com API</div>
-              <div className="text-xs font-semibold text-emerald-500 dark:text-emerald-500 text-emerald-600">Live Connection</div>
-            </div>
-            <div className="bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 p-4 rounded-xl text-center backdrop-blur-sm">
-              <Search className="w-5 h-5 text-indigo-400 dark:text-indigo-400 text-indigo-600 mx-auto mb-2" />
-              <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-600 uppercase tracking-widest font-bold">Lichess DB</div>
-              <div className="text-xs font-semibold text-emerald-500 dark:text-emerald-500 text-emerald-600">Ready</div>
-            </div>
-          </div>
         </div>
 
         <div className="space-y-6">

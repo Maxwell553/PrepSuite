@@ -211,14 +211,12 @@ describe('generateStats', () => {
     expect(result[0].losses).toBe(6);
   });
 
-  it('filters out openings below MIN_GAMES (10) threshold', () => {
-    // 15 games of Sicilian (above threshold)
+  it('includes all openings with at least 1 game (no minimum threshold)', () => {
     const sicilian = makeGamesForOpening(15, {
       side: 'white',
       target: 'player1',
       openingName: 'Sicilian Defense',
     });
-    // 5 games of Ruy Lopez (below threshold)
     const ruyLopez = makeGamesForOpening(5, {
       side: 'white',
       target: 'player1',
@@ -228,13 +226,12 @@ describe('generateStats', () => {
     const games = [...sicilian, ...ruyLopez];
     const result = generateStats(games, 'player1', 'white');
 
-    expect(result.length).toBe(1);
-    expect(result[0].name).toBe('Sicilian Defense');
-    // Ruy Lopez should be filtered out
-    expect(result.find((s) => s.name === 'Ruy Lopez')).toBeUndefined();
+    expect(result.length).toBe(2);
+    expect(result.find((s) => s.name === 'Sicilian Defense')).toBeDefined();
+    expect(result.find((s) => s.name === 'Ruy Lopez')).toBeDefined();
   });
 
-  it('passes exactly MIN_GAMES (10) through the filter', () => {
+  it('includes openings with 10 games', () => {
     const games = makeGamesForOpening(10, {
       side: 'white',
       target: 'player1',

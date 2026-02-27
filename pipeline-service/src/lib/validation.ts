@@ -49,9 +49,9 @@ export const analyzeRequestSchema = z.object({
     .regex(/^[a-zA-Z0-9_-]*$/, 'Lichess username contains invalid characters')
     .optional()
     .or(z.literal('')),
-  gameLimit: z.number().int().min(1).max(10000).default(1000).optional(),
-  onlineLimit: z.number().int().min(0).max(10000).optional(),
-  otbLimit: z.number().int().min(0).max(10000).optional(),
+  gameLimit: z.number().int().min(1).max(5000).default(1000).optional(),
+  onlineLimit: z.number().int().min(0).max(5000).optional(),
+  otbLimit: z.number().int().min(0).max(5000).optional(),
 }).refine(
   (data) => {
     const total = data.gameLimit ?? 1000;

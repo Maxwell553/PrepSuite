@@ -7,7 +7,7 @@ import type { GameData, OpeningStat } from '../lib/types.js';
 import { aggregateECO } from './openingClassifier.js';
 import { logger } from '../lib/logger.js';
 
-const MIN_GAMES = 10;
+const MIN_GAMES = 1;
 
 /**
  * Canonical opening names: map aliases to a single canonical form
