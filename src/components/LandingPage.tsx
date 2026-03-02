@@ -32,6 +32,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
         });
     }, []);
 
+    const featuredRef = useScrollAnimation();
     const featuresRef = useScrollAnimation();
     const howItWorksRef = useScrollAnimation();
     const benefitsRef = useScrollAnimation();
@@ -105,6 +106,15 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
             <section className="relative pt-32 pb-12 px-6 overflow-hidden bg-slate-950 dark:bg-slate-950 bg-white">
                 <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-indigo-600/10 dark:bg-indigo-600/10 bg-indigo-100/50 blur-[120px] rounded-full -translate-y-1/2 translate-x-1/2" />
                 <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-blue-600/5 dark:bg-blue-600/5 bg-blue-100/30 blur-[100px] rounded-full translate-y-1/2 -translate-x-1/2" />
+                {/* Faded report screenshot for depth */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <img
+                        src={repertoireChartsImg}
+                        alt=""
+                        className="w-full max-w-4xl h-auto opacity-[0.06] object-contain scale-90"
+                        aria-hidden
+                    />
+                </div>
 
                 <div className="max-w-7xl mx-auto text-center relative z-10">
                     <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/50 dark:bg-slate-900/50 bg-indigo-50 border border-indigo-500/20 dark:border-indigo-500/20 border-indigo-200 text-indigo-400 dark:text-indigo-400 text-indigo-600 text-xs font-bold uppercase tracking-widest mb-8 animate-in fade-in slide-in-from-top-4 duration-1000">
@@ -119,10 +129,89 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-400">
                         <button
                             onClick={onGetStarted}
-                            className="w-full sm:w-auto px-10 py-5 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-bold text-lg transition-all shadow-2xl shadow-indigo-900/40 flex items-center justify-center gap-2 group"
+                            className="w-full sm:w-auto px-10 py-5 bg-white text-slate-950 hover:bg-slate-100 rounded-2xl font-bold text-lg transition-all shadow-2xl shadow-white/10 flex items-center justify-center gap-2 group"
                         >
                             {user ? 'Go to Dashboard' : 'Start Analyzing'} <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                         </button>
+                    </div>
+                </div>
+            </section>
+
+            {/* Featured Reports - "The Hook" - moved up for conversion */}
+            <section
+                ref={featuredRef.ref}
+                className={`py-24 px-6 relative overflow-hidden ${
+                    featuredRef.isVisible ? 'animate-fade-in-up' : ''
+                }`}
+                style={featuredRef.isVisible ? {} : { opacity: 0 }}
+            >
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_0%,rgba(99,102,241,0.08),transparent_50%)] pointer-events-none" />
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_100%,rgba(30,41,59,0.6),transparent)] pointer-events-none" />
+                <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+                <div className="max-w-5xl mx-auto relative">
+                    <div className="flex flex-col items-center mb-14">
+                        <Crown className="w-8 h-8 text-amber-400 mb-4" />
+                        <h2 className="text-4xl md:text-5xl font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-400 dark:from-white dark:to-slate-400 from-gray-900 to-gray-600 text-center">
+                            Featured Reports
+                        </h2>
+                        <p className="text-slate-500 dark:text-slate-500 text-gray-500 text-base mt-3 text-center max-w-xl">
+                            Explore sample scouting reports of top players. No sign-in required.
+                        </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+                        {featuredList.map((item) => {
+                            const handleClick = async () => {
+                                if (!onViewFeaturedReport) return;
+                                setLoadingFeatured(item.slug);
+                                try {
+                                    const { getFeaturedReport } = await import('../services/featuredReports');
+                                    const report = await getFeaturedReport(item.slug);
+                                    if (report) await onViewFeaturedReport(item.slug);
+                                } finally {
+                                    setLoadingFeatured(null);
+                                }
+                            };
+                            return (
+                                <div
+                                    key={item.slug}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={handleClick}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+                                    className="group relative w-full bg-slate-800/80 dark:bg-slate-800/80 border border-slate-700/60 dark:border-slate-700/60 rounded-2xl p-6 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-500/40 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 flex flex-col min-h-[120px]"
+                                    style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.05) inset, 0 0 20px rgba(251,191,36,0.08)' }}
+                                >
+                                    <div className="flex items-stretch gap-4 flex-1">
+                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                            <div className="text-white dark:text-white font-bold text-lg">{item.name}</div>
+                                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                                                {item.title && (
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-400/25 text-amber-300 border border-amber-400/40 shadow-[0_0_12px_rgba(251,191,36,0.2)]">
+                                                        {item.title}
+                                                    </span>
+                                                )}
+                                                {item.rating != null && (
+                                                    <span className="text-slate-300 text-sm font-medium">{item.rating}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleClick(); }}
+                                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-sm font-semibold transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-indigo-500/25 disabled:opacity-50 shrink-0"
+                                            disabled={!onViewFeaturedReport || loadingFeatured !== null}
+                                        >
+                                            {loadingFeatured === item.slug ? 'Loading...' : (
+                                                <>
+                                                    View
+                                                    <ArrowRight className="w-4 h-4" />
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </section>
@@ -144,7 +233,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
 
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
                         {/* Feature 1: Identity Resolution */}
-                        <div className={`bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-8 hover:border-indigo-500/30 dark:hover:border-indigo-500/30 hover:border-indigo-600 transition-all group ${
+                        <div className={`bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-700/80 dark:border-slate-700/80 border-gray-200 rounded-2xl p-8 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:border-indigo-600 transition-all group shadow-[0_0_0_1px_rgba(255,255,255,0.04)] ${
                             featuresRef.isVisible ? 'animate-fade-in-up' : ''
                         }`}
                         style={featuresRef.isVisible ? { animationDelay: '0.1s', animationFillMode: 'both' } : {}}
@@ -159,7 +248,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                         </div>
 
                         {/* Feature 2: Cross-Platform Aggregation */}
-                        <div className={`bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-8 hover:border-indigo-500/30 dark:hover:border-indigo-500/30 hover:border-indigo-600 transition-all group ${
+                        <div className={`bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-700/80 dark:border-slate-700/80 border-gray-200 rounded-2xl p-8 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:border-indigo-600 transition-all group shadow-[0_0_0_1px_rgba(255,255,255,0.04)] ${
                             featuresRef.isVisible ? 'animate-fade-in-up' : ''
                         }`}
                         style={featuresRef.isVisible ? { animationDelay: '0.2s', animationFillMode: 'both' } : {}}
@@ -174,7 +263,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                         </div>
 
                         {/* Feature 3: Stockfish Engine Analysis */}
-                        <div className={`bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-8 hover:border-indigo-500/30 dark:hover:border-indigo-500/30 hover:border-indigo-600 transition-all group ${
+                        <div className={`bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-700/80 dark:border-slate-700/80 border-gray-200 rounded-2xl p-8 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:border-indigo-600 transition-all group shadow-[0_0_0_1px_rgba(255,255,255,0.04)] ${
                             featuresRef.isVisible ? 'animate-fade-in-up' : ''
                         }`}
                         style={featuresRef.isVisible ? { animationDelay: '0.3s', animationFillMode: 'both' } : {}}
@@ -189,7 +278,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                         </div>
 
                         {/* Feature 4: Opening Repertoire Analysis */}
-                        <div className={`bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-8 hover:border-indigo-500/30 dark:hover:border-indigo-500/30 hover:border-indigo-600 transition-all group ${
+                        <div className={`bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-700/80 dark:border-slate-700/80 border-gray-200 rounded-2xl p-8 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:border-indigo-600 transition-all group shadow-[0_0_0_1px_rgba(255,255,255,0.04)] ${
                             featuresRef.isVisible ? 'animate-fade-in-up' : ''
                         }`}
                         style={featuresRef.isVisible ? { animationDelay: '0.4s', animationFillMode: 'both' } : {}}
@@ -204,7 +293,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                         </div>
 
                         {/* Feature 5: AI Strategic Insights */}
-                        <div className={`bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-8 hover:border-indigo-500/30 dark:hover:border-indigo-500/30 hover:border-indigo-600 transition-all group ${
+                        <div className={`bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-700/80 dark:border-slate-700/80 border-gray-200 rounded-2xl p-8 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:border-indigo-600 transition-all group shadow-[0_0_0_1px_rgba(255,255,255,0.04)] ${
                             featuresRef.isVisible ? 'animate-fade-in-up' : ''
                         }`}
                         style={featuresRef.isVisible ? { animationDelay: '0.5s', animationFillMode: 'both' } : {}}
@@ -219,7 +308,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                         </div>
 
                         {/* Feature 6: FIDE & USCF Integration */}
-                        <div className={`bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-8 hover:border-indigo-500/30 dark:hover:border-indigo-500/30 hover:border-indigo-600 transition-all group ${
+                        <div className={`bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-700/80 dark:border-slate-700/80 border-gray-200 rounded-2xl p-8 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:border-indigo-600 transition-all group shadow-[0_0_0_1px_rgba(255,255,255,0.04)] ${
                             featuresRef.isVisible ? 'animate-fade-in-up' : ''
                         }`}
                         style={featuresRef.isVisible ? { animationDelay: '0.6s', animationFillMode: 'both' } : {}}
@@ -263,7 +352,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                     <button
                                         type="button"
                                         onClick={() => setLightboxIndex(i)}
-                                        className="w-full aspect-[16/10] rounded-xl overflow-hidden border border-slate-800 dark:border-slate-800 border-gray-200 shadow-xl flex items-center justify-center bg-slate-900/30 dark:bg-slate-900/30 bg-slate-100 cursor-pointer hover:ring-2 hover:ring-indigo-500/50 transition-shadow focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        className="w-full aspect-[16/10] rounded-xl overflow-hidden border border-slate-700/80 dark:border-slate-700/80 border-gray-200 shadow-xl flex items-center justify-center bg-slate-900/30 dark:bg-slate-900/30 bg-slate-100 cursor-pointer hover:ring-2 hover:ring-indigo-500/50 transition-shadow focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     >
                                         <img
                                             src={item.src}
@@ -328,7 +417,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                         </h2>
                     </div>
 
-                    <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+                    <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
                         {[
                             "Automatically links tournament identities to online accounts",
                             "Analyzes games from Chess.com, Lichess, and OTB databases",
@@ -343,88 +432,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             return (
                                 <div 
                                     key={i} 
-                                    className={`flex items-start gap-3 p-4 bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-xl ${
+                                    className={`flex items-start gap-4 p-6 bg-slate-900/50 dark:bg-slate-900/50 bg-gray-50 border border-slate-700/80 dark:border-slate-700/80 border-gray-200 rounded-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04)] ${
                                         benefitsRef.isVisible ? 'animate-fade-in-up' : ''
                                     }`}
                                     style={benefitsRef.isVisible ? { animationDelay: delays[i] || '0s', animationFillMode: 'both' } : {}}
                                 >
-                                    <CheckCircle className="w-5 h-5 text-emerald-400 dark:text-emerald-400 text-emerald-600 shrink-0 mt-0.5" />
-                                    <p className="text-slate-300 dark:text-slate-300 text-gray-700">{benefit}</p>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </section>
-
-            {/* Featured Reports - Pre-generated reports viewable without signing in */}
-            <section className="py-24 px-6 relative overflow-hidden">
-                {/* Radial gradient background */}
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_0%,rgba(99,102,241,0.08),transparent_50%)] pointer-events-none" />
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_100%,rgba(30,41,59,0.6),transparent)] pointer-events-none" />
-                {/* Faint chessboard texture */}
-                <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
-                <div className="max-w-5xl mx-auto relative">
-                    <div className="flex flex-col items-center mb-14">
-                        <Crown className="w-8 h-8 text-amber-500/70 mb-4" />
-                        <h2 className="text-4xl md:text-5xl font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-400 dark:from-white dark:to-slate-400 from-gray-900 to-gray-600 text-center">
-                            Featured Reports
-                        </h2>
-                        <p className="text-slate-500 dark:text-slate-500 text-gray-500 text-sm mt-3 text-center max-w-xl">
-                            Explore sample scouting reports of top players. No sign-in required.
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap justify-center items-stretch gap-6">
-                        {featuredList.map((item) => {
-                            const handleClick = async () => {
-                                if (!onViewFeaturedReport) return;
-                                setLoadingFeatured(item.slug);
-                                try {
-                                    const { getFeaturedReport } = await import('../services/featuredReports');
-                                    const report = await getFeaturedReport(item.slug);
-                                    if (report) await onViewFeaturedReport(item.slug);
-                                } finally {
-                                    setLoadingFeatured(null);
-                                }
-                            };
-                            return (
-                                <div
-                                    key={item.slug}
-                                    role="button"
-                                    tabIndex={0}
-                                    onClick={handleClick}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-                                    className="group relative w-full min-w-[280px] max-w-[340px] bg-slate-800/80 dark:bg-slate-800/80 border border-slate-700/60 dark:border-slate-700/60 rounded-2xl p-6 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-500/40 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 flex flex-col min-h-[120px]"
-                                    style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.03) inset' }}
-                                >
-                                    <div className="flex items-stretch gap-4 flex-1">
-                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                            <div className="text-white dark:text-white font-bold text-lg">{item.name}</div>
-                                            <div className="flex flex-wrap items-center gap-2 mt-1">
-                                                {item.title && (
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                                                        {item.title}
-                                                    </span>
-                                                )}
-                                                {item.rating != null && (
-                                                    <span className="text-slate-400 text-sm">{item.rating}</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); handleClick(); }}
-                                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-sm font-semibold transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-indigo-500/25 disabled:opacity-50 shrink-0"
-                                            disabled={!onViewFeaturedReport || loadingFeatured !== null}
-                                        >
-                                            {loadingFeatured === item.slug ? 'Loading...' : (
-                                                <>
-                                                    View
-                                                    <ArrowRight className="w-4 h-4" />
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
+                                    <CheckCircle className="w-6 h-6 text-emerald-400 dark:text-emerald-400 text-emerald-600 shrink-0 mt-0.5" />
+                                    <p className="text-slate-200 dark:text-slate-200 text-gray-700 text-base leading-relaxed">{benefit}</p>
                                 </div>
                             );
                         })}

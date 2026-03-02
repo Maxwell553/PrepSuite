@@ -1,7 +1,6 @@
 import { logger } from '../lib/logger.js';
 import { capitalizeName } from '../lib/validation.js';
 import { fetchWithRetry } from '../lib/fetchWithRetry.js';
-import { getCachedIdentity, setCachedIdentity } from '../lib/identityCache.js';
 import type {
   FideProfile,
   UscfProfile,
@@ -75,33 +74,6 @@ export async function resolveIdentity(
   const hasLichess = !!providedLichessUsername?.trim();
   const skipOnline = options?.skipOnlinePlatforms ?? false;
 
-  onProgress?.('Looking up cache...');
-  const cached = await getCachedIdentity(
-    inputName,
-    fideId,
-    uscfId,
-    providedChessComUsername,
-    providedLichessUsername,
-  );
-  if (cached) {
-    // Cache only contributes IDs/usernames; re-fetch profiles for fresh data (avoids stale/empty graphs)
-    onProgress?.('Cache hit: using cached IDs, fetching fresh profiles...');
-    logger.info({ name: inputName }, '[Identity] Cache hit: using IDs/usernames, re-fetching FIDE/USCF profiles');
-    const uscfIdFromCache = cached.uscfProfile?.id;
-    const [fideProfileFetched, uscfProfileFetched] = await Promise.all([
-      cached.fideId ? getFideProfile(cached.fideId) : Promise.resolve(null),
-      uscfIdFromCache ? getUscfProfile(uscfIdFromCache) : Promise.resolve(null),
-    ]);
-    const result: ResolvedIdentity = {
-      ...cached,
-      fideProfile: fideProfileFetched ?? cached.fideProfile,
-      uscfProfile: uscfProfileFetched ?? cached.uscfProfile,
-      chessComUsername: skipOnline ? '' : (cached.chessComUsername ?? ''),
-      lichessUsername: skipOnline ? '' : (cached.lichessUsername ?? ''),
-    };
-    return result;
-  }
-
   if (hasFideId && hasUscfId && hasChessCom && hasLichess && !skipOnline) {
     onProgress?.('Fetching FIDE & USCF profiles...');
     logger.info({ name: inputName }, '[Identity] Fast path: all IDs provided, skipping search');
@@ -109,7 +81,7 @@ export async function resolveIdentity(
       getFideProfile(fideId.trim()),
       getUscfProfile(uscfId.trim()),
     ]);
-    const fastResult: ResolvedIdentity = {
+    return {
       verifiedName: capitalizeName(inputName.trim()),
       fideId: fideId.trim(),
       fideProfile: fideProfileFetched,
@@ -118,15 +90,6 @@ export async function resolveIdentity(
       lichessUsername: providedLichessUsername!.trim(),
       confidence: 1.0,
     };
-    await setCachedIdentity(
-      inputName,
-      fideId,
-      uscfId,
-      providedChessComUsername,
-      providedLichessUsername,
-      fastResult,
-    );
-    return fastResult;
   }
 
   try {
@@ -351,8 +314,7 @@ export async function resolveIdentity(
       }
     }
 
-    onProgress?.('Saving identity...');
-    const result: ResolvedIdentity = {
+    return {
       verifiedName: capitalizeName(officialName),
       fideId: finalFideId?.trim() || '',
       fideProfile,
@@ -361,16 +323,6 @@ export async function resolveIdentity(
       lichessUsername: verifiedLichess,
       confidence: verifiedChessCom || verifiedLichess ? 1.0 : 0,
     };
-
-    await setCachedIdentity(
-      inputName,
-      fideId,
-      uscfId,
-      providedChessComUsername,
-      providedLichessUsername,
-      result,
-    );
-    return result;
   } catch (err) {
     logger.error({ err, name: inputName }, '[Identity] Fatal discovery failure');
     return {

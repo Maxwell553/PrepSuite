@@ -128,7 +128,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
       <div className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-3xl overflow-hidden shadow-2xl">
         <div className="h-44 bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-950 dark:from-indigo-900/40 dark:via-slate-900 dark:to-slate-950 from-indigo-50 via-white to-gray-50 relative p-10 flex flex-col justify-end">
           <div className="flex justify-between items-end">
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 text-indigo-400 dark:text-indigo-400 text-indigo-600 font-bold text-xs uppercase tracking-[0.2em] mb-2">
                 <Shield className="w-4 h-4" />
                 Verified Tournament Profile

@@ -54,24 +54,24 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogoClick 
         </nav>
       </div>
 
-      <div className="mt-auto p-6 space-y-4 border-t border-slate-800/50 dark:border-slate-800/50 border-gray-200">
+      <div className="mt-auto p-6 space-y-3 border-t border-slate-800/50 dark:border-slate-800/50 border-gray-200">
         <a
           href="https://www.uschess.org"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-500 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 transition-colors"
+          className="flex items-center justify-between text-sm text-slate-400 dark:text-slate-400 hover:text-indigo-400 dark:hover:text-indigo-400 transition-colors py-1 rounded-lg hover:bg-slate-800/50 px-2 -mx-2"
         >
           <span>USCF Portal</span>
-          <ExternalLink className="w-3 h-3" />
+          <ExternalLink className="w-4 h-4 opacity-70" />
         </a>
         <a
           href="https://fide.com"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-500 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 transition-colors"
+          className="flex items-center justify-between text-sm text-slate-400 dark:text-slate-400 hover:text-indigo-400 dark:hover:text-indigo-400 transition-colors py-1 rounded-lg hover:bg-slate-800/50 px-2 -mx-2"
         >
           <span>FIDE Portal</span>
-          <ExternalLink className="w-3 h-3" />
+          <ExternalLink className="w-4 h-4 opacity-70" />
         </a>
       </div>
     </aside>

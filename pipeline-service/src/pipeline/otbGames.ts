@@ -44,6 +44,20 @@ function getClient() {
 /** Supabase/PostgREST default max rows per request; we paginate to fetch beyond this. */
 const BATCH_SIZE = 1000;
 
+/** Row shape from otb_games table (used for batch fetch typing) */
+interface OtbRow {
+  id?: string;
+  white: string;
+  black: string;
+  result: string | null;
+  eco: string | null;
+  event: string | null;
+  game_date: string | null;
+  white_elo: number | null;
+  black_elo: number | null;
+  pgn: string | null;
+}
+
 /**
  * Fetch OTB games for a player by FIDE ID.
  * Paginates through the DB to return up to `limit` games (no artificial cap).
@@ -62,18 +76,7 @@ export async function fetchOtbGames(fideId: string, limit: number): Promise<Game
   const seen = new Set<string>();
   const games: GameData[] = [];
 
-  const addGame = (row: {
-    id?: string;
-    white: string;
-    black: string;
-    result: string | null;
-    eco: string | null;
-    event: string | null;
-    game_date: string | null;
-    white_elo: number | null;
-    black_elo: number | null;
-    pgn: string | null;
-  }) => {
+  const addGame = (row: OtbRow) => {
     const key = `${row.white}|${row.black}|${row.game_date || ''}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -108,7 +111,7 @@ export async function fetchOtbGames(fideId: string, limit: number): Promise<Game
   const fetchBatch = async (
     column: 'white_fide_id' | 'black_fide_id',
     offset: number,
-  ): Promise<{ rows: unknown[]; hasMore: boolean }> => {
+  ): Promise<{ rows: OtbRow[]; hasMore: boolean }> => {
     const { data, error } = await supabase
       .from(TABLE)
       .select('id, white, black, result, eco, event, game_date, white_elo, black_elo, pgn')
@@ -120,7 +123,7 @@ export async function fetchOtbGames(fideId: string, limit: number): Promise<Game
       logger.warn({ error, column }, '[OtbGames] Supabase query failed');
       return { rows: [], hasMore: false };
     }
-    const rows = (data || []) as Parameters<typeof addGame>[0][];
+    const rows = (data || []) as OtbRow[];
     return { rows, hasMore: rows.length >= BATCH_SIZE };
   };
 
@@ -129,11 +132,15 @@ export async function fetchOtbGames(fideId: string, limit: number): Promise<Game
   let whiteHasMore = true;
   let blackHasMore = true;
 
+  type BatchResult = { rows: OtbRow[]; hasMore: boolean };
+  const emptyBatch: BatchResult = { rows: [], hasMore: false };
   while (games.length < limit && (whiteHasMore || blackHasMore)) {
-    const [whiteBatch, blackBatch] = await Promise.all([
-      whiteHasMore ? fetchBatch('white_fide_id', whiteOffset) : Promise.resolve({ rows: [], hasMore: false }),
-      blackHasMore ? fetchBatch('black_fide_id', blackOffset) : Promise.resolve({ rows: [], hasMore: false }),
+    const batches: [BatchResult, BatchResult] = await Promise.all([
+      whiteHasMore ? fetchBatch('white_fide_id', whiteOffset) : Promise.resolve(emptyBatch),
+      blackHasMore ? fetchBatch('black_fide_id', blackOffset) : Promise.resolve(emptyBatch),
     ]);
+    const whiteBatch = batches[0];
+    const blackBatch = batches[1];
 
     for (const row of whiteBatch.rows) addGame(row);
     for (const row of blackBatch.rows) addGame(row);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, Loader2, Play, Cpu, User, Info } from 'lucide-react';
+import { AlertCircle, Loader2, Play, Cpu, User, Shield, AlertTriangle, GitBranch, ChevronDown, ChevronUp } from 'lucide-react';
 import { ScoutingReport } from '../types';
 import { playerRepository } from '../services/playerRepository';
 import { User as SupabaseUser } from '@supabase/supabase-js';
@@ -61,6 +61,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
     chessComUsername: '',
     lichessUsername: ''
   });
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [tipsExpanded, setTipsExpanded] = useState(false);
 
   const pipelineCallbacks = usePipelineProgressCallbacks({
     gameLimit,
@@ -193,14 +195,14 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8">
+    <div className="w-full max-w-6xl mx-auto py-8 px-4 sm:px-6">
       <div className="text-center mb-12">
         <h2 className="text-4xl font-serif mb-4 text-white dark:text-white text-gray-900">Opponent Analysis</h2>
         <p className="text-slate-400 dark:text-slate-400 text-gray-600 text-lg italic">Verified search across online platforms and OTB tournament databases.</p>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-8">
-        <div className="md:col-span-2">
+      <div className="flex flex-col lg:flex-row gap-8 justify-center items-stretch w-full">
+        <div className="flex-[2] min-w-0">
           <form onSubmit={handleSubmit} className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-8 space-y-6 shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-5">
               <Cpu className="w-24 h-24" />
@@ -222,38 +224,46 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                 </div>
               </div>
 
-              {/* Chess.com & Lichess (optional, always visible) */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="relative group">
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-2 uppercase tracking-widest">Chess.com Username</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={formData.chessComUsername}
-                      onChange={e => setFormData({ ...formData, chessComUsername: e.target.value })}
-                      disabled={loading}
-                      placeholder="hikaru"
-                      className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500/50 dark:focus:border-emerald-500/50 focus:border-emerald-600 text-slate-300 dark:text-slate-300 text-gray-900 text-sm transition-colors placeholder:text-slate-700 dark:placeholder:text-slate-700 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
+              {/* Advanced: Manually link accounts */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 transition-colors uppercase tracking-widest"
+                >
+                  {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  Manually link accounts (optional)
+                </button>
+                {showAdvanced && (
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div className="relative group">
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-2 uppercase tracking-widest">Chess.com</label>
+                      <input
+                        type="text"
+                        value={formData.chessComUsername}
+                        onChange={e => setFormData({ ...formData, chessComUsername: e.target.value })}
+                        disabled={loading}
+                        placeholder="e.g. hikaru"
+                        className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500/50 dark:focus:border-emerald-500/50 focus:border-emerald-600 text-slate-300 dark:text-slate-300 text-gray-900 text-sm transition-colors placeholder:text-slate-700 dark:placeholder:text-slate-700 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                    <div className="relative group">
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-2 uppercase tracking-widest">Lichess</label>
+                      <input
+                        type="text"
+                        value={formData.lichessUsername}
+                        onChange={e => setFormData({ ...formData, lichessUsername: e.target.value })}
+                        disabled={loading}
+                        placeholder="e.g. DrNykterstein"
+                        className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:border-indigo-500/50 dark:focus:border-indigo-500/50 focus:border-indigo-600 text-slate-300 dark:text-slate-300 text-gray-900 text-sm transition-colors placeholder:text-slate-700 dark:placeholder:text-slate-700 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="relative group">
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-2 uppercase tracking-widest">Lichess Username</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={formData.lichessUsername}
-                      onChange={e => setFormData({ ...formData, lichessUsername: e.target.value })}
-                      disabled={loading}
-                      placeholder="DrNykterstein"
-                      className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:border-indigo-500/50 dark:focus:border-indigo-500/50 focus:border-indigo-600 text-slate-300 dark:text-slate-300 text-gray-900 text-sm transition-colors placeholder:text-slate-700 dark:placeholder:text-slate-700 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Game sliders - always visible */}
-              <div className="relative group space-y-6 pt-4">
+              <div className="relative group space-y-3 pt-4">
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-3 uppercase tracking-widest">Number of Games to Analyze</label>
 
                     {/* Total Games Slider */}
@@ -265,7 +275,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                       <input
                         type="range"
                         min={500}
-                        max={5000}
+                        max={2000}
                         step={250}
                         value={gameLimit}
                         onChange={(e) => {
@@ -278,7 +288,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         disabled={loading}
                         className="w-full h-2.5 bg-slate-800 dark:bg-slate-800 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{
-                          background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${((gameLimit - 500) / (5000 - 500)) * 100}%, rgb(30, 41, 59) ${((gameLimit - 500) / (5000 - 500)) * 100}%, rgb(30, 41, 59) 100%)`
+                          background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${((gameLimit - 500) / (2000 - 500)) * 100}%, rgb(30, 41, 59) ${((gameLimit - 500) / (2000 - 500)) * 100}%, rgb(30, 41, 59) 100%)`
                         }}
                       />
                     </div>
@@ -335,6 +345,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                   </div>
             </div>
 
+            <div className="pt-4" />
+
             {error && (
               <div className="flex items-center gap-2 p-4 bg-red-900/20 dark:bg-red-900/20 bg-red-50 border border-red-900/50 dark:border-red-900/50 border-red-200 text-red-400 dark:text-red-400 text-red-600 rounded-xl text-sm animate-pulse">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -369,25 +381,41 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
           </form>
         </div>
 
-        <div className="space-y-6">
-          <div className="bg-indigo-900/10 dark:bg-indigo-900/10 bg-indigo-50 border border-indigo-500/20 dark:border-indigo-500/20 border-indigo-200 rounded-2xl p-6 shadow-inner">
-            <h3 className="text-indigo-400 dark:text-indigo-400 text-indigo-600 font-bold text-sm uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Info className="w-4 h-4" /> Developer&apos;s Note
-            </h3>
-            <ul className="space-y-4 text-sm text-slate-400 dark:text-slate-400 text-gray-600">
-              <li className="flex gap-3">
-                <span className="text-indigo-500 font-bold bg-indigo-500/10 w-5 h-5 flex items-center justify-center rounded text-xs shrink-0">1</span>
-                <span><strong className="text-slate-300 dark:text-slate-300">Accuracy without usernames:</strong> The more well-known the player (e.g. titled, high-rated, or frequently featured), the more accurate identity and repertoire resolution will be when usernames are not provided.</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="text-indigo-500 font-bold bg-indigo-500/10 w-5 h-5 flex items-center justify-center rounded text-xs shrink-0">2</span>
-                <span><strong className="text-slate-300 dark:text-slate-300">AI limitations:</strong> Do not fully trust every claim. AI can make mistakes; treat insights as guidance and cross-check critical conclusions.</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="text-indigo-500 font-bold bg-indigo-500/10 w-5 h-5 flex items-center justify-center rounded text-xs shrink-0">3</span>
-                <span><strong className="text-slate-300 dark:text-slate-300">Tournament vs online:</strong> There will often be discrepancies between over-the-board tournament play and online play (openings, time controls, and style).</span>
-              </li>
-            </ul>
+        <div className="space-y-6 w-full lg:w-52 shrink-0">
+          <div className="bg-slate-800/50 dark:bg-slate-800/50 border border-slate-700/80 dark:border-slate-700/80 rounded-2xl overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
+            <button
+              type="button"
+              onClick={() => setTipsExpanded(!tipsExpanded)}
+              className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-800/30 transition-colors"
+            >
+              <span className="text-indigo-400 dark:text-indigo-400 font-bold text-sm uppercase tracking-widest">Tips</span>
+              {tipsExpanded ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+            </button>
+            {tipsExpanded && (
+              <div className="px-5 pb-5 space-y-4 border-t border-slate-700/50">
+                <div className="flex gap-3 pt-4">
+                  <Shield className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-slate-200 text-sm">Accuracy without usernames</p>
+                    <p className="text-slate-400 text-sm mt-0.5">Well-known players (titled, high-rated) resolve more accurately when usernames aren&apos;t provided.</p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-slate-200 text-sm">AI insights</p>
+                    <p className="text-slate-400 text-sm mt-0.5">Treat recommendations as guidance. Cross-check critical conclusions.</p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <GitBranch className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-slate-200 text-sm">OTB vs online</p>
+                    <p className="text-slate-400 text-sm mt-0.5">Tournament play often differs from online in openings, time controls, and style.</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
