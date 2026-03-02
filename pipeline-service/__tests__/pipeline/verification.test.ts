@@ -27,6 +27,10 @@ describe('namesMatch', () => {
     expect(namesMatch('Magnus Carlsen', 'John Smith')).toBe(false);
   });
 
+  it('rejects similar-looking but different names (short substring false positive)', () => {
+    expect(namesMatch('Caleb Klenoff', 'Le Quang Liem')).toBe(false);
+  });
+
   it('rejects empty strings', () => {
     expect(namesMatch('', 'Magnus Carlsen')).toBe(false);
     expect(namesMatch('Magnus Carlsen', '')).toBe(false);
@@ -34,6 +38,11 @@ describe('namesMatch', () => {
 
   it('handles special characters', () => {
     expect(namesMatch('José Raúl Capablanca', 'Capablanca, José Raúl')).toBe(true);
+  });
+
+  it('matches abbreviated surname (FIDE lists "Gukesh D" for Gukesh Dommaraju)', () => {
+    expect(namesMatch('Gukesh Dommaraju', 'Gukesh D')).toBe(true);
+    expect(namesMatch('Gukesh D', 'Gukesh Dommaraju')).toBe(true);
   });
 });
 

@@ -1,19 +1,118 @@
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip
 } from 'recharts';
-import { Shield, Target, Zap, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, Crosshair, BookOpen, Search, MessageSquare } from 'lucide-react';
-import { ScoutingReport } from '../types';
+import { Shield, Target, Zap, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, Crosshair, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import { ScoutingReport, OpeningStat } from '../types';
 import AnalysisBoard from './AnalysisBoard';
 import RepertoireChat from './RepertoireChat';
+import { aggregateOpeningsBySource } from '../lib/openingStats';
 
 interface ReportDashboardProps {
   report: ScoutingReport;
+  /** When true, chat is grayed out with "Requires sign in" */
+  requiresSignInForChat?: boolean;
 }
 
-const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
+function OpeningList({ openings, defaultExpanded = false, id }: { openings: OpeningStat[]; defaultExpanded?: boolean; id?: string }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  return (
+    <div className="space-y-1" id={id}>
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center justify-between w-full py-1.5 text-left text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
+      >
+        <span>Openings list ({openings.length})</span>
+        {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+      </button>
+      {expanded && (
+        <div className="space-y-1 max-h-48 overflow-y-auto">
+          {openings.map((op, idx) => {
+            const winRate = typeof op.winRate === 'number' && !isNaN(op.winRate) ? op.winRate : 0;
+            const winPercent = (winRate * 100).toFixed(0);
+            const totalGames = Math.round(op.totalGames || 0);
+            const wins = Math.round(op.wins || 0);
+            const draws = Math.round(op.draws || 0);
+            const losses = Math.round(op.losses || 0);
+            return (
+              <div key={idx} className="flex justify-between items-center text-xs py-1 px-2 bg-slate-950 rounded border border-slate-800">
+                <span className="text-slate-200 font-semibold">{op.name}</span>
+                <span className="text-slate-400 font-mono text-[11px]">
+                  {totalGames} Games | {winPercent}% W ({wins}W/{draws}D/{losses}L)
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RepertoireChartSection({
+  title,
+  icon: Icon,
+  openings,
+  gamesLabel,
+}: {
+  title: string;
+  icon: React.ElementType;
+  openings: OpeningStat[];
+  gamesLabel: string;
+}) {
+  return (
+    <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg flex flex-col">
+      <h3 className="text-lg font-bold mb-1 flex items-center gap-2 text-white">
+        <Icon className="w-5 h-5 text-indigo-400" />
+        {title}
+      </h3>
+      <p className="text-sm text-slate-400 mb-6">{gamesLabel}</p>
+      <div className="h-64 mb-6 overflow-x-auto overflow-y-hidden w-full">
+        <BarChart
+          data={openings}
+          width={Math.max(400, (openings?.length || 0) * 30)}
+          height={256}
+          margin={{ bottom: 40 }}
+          barSize={20}
+          barCategoryGap={10}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+          <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} angle={-45} textAnchor="end" height={60} />
+          <YAxis stroke="#475569" fontSize={10} />
+          <Tooltip cursor={{ fill: '#ffffff08' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }} />
+          <Bar dataKey="wins" name="Wins" fill="#10b981" stackId="a" barSize={20} />
+          <Bar dataKey="draws" name="Draws" fill="#64748b" stackId="a" barSize={20} />
+          <Bar dataKey="losses" name="Losses" fill="#ef4444" stackId="a" barSize={20} />
+        </BarChart>
+      </div>
+      <OpeningList openings={openings} id={title.replace(/\s+/g, '-').toLowerCase()} />
+    </section>
+  );
+}
+
+const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignInForChat }) => {
   const { player, whiteOpenings, blackDefenses } = report;
+
+  const hasBothSources = useMemo(() => {
+    if (!report.games || report.games.length === 0) return false;
+    const sources = new Set((report.games as { source?: string }[]).map((g) => (g.source || '').toLowerCase()));
+    const hasOnline = sources.has('lichess') || sources.has('chess.com');
+    const hasOtb = sources.has('otb');
+    return hasOnline && hasOtb;
+  }, [report.games]);
+
+  const openingsBySource = useMemo(() => {
+    if (!report.games || report.games.length === 0 || !hasBothSources) return null;
+    const targetNames = [
+      player.name,
+      player.platforms?.chessCom,
+      player.platforms?.lichess,
+      (player as { actualUsername?: string }).actualUsername,
+    ].filter(Boolean) as string[];
+    return aggregateOpeningsBySource(report.games as { source?: string; openingName?: string; eco?: string; white: string; black: string; result: string }[], targetNames);
+  }, [report.games, hasBothSources, player]);
 
   // Prevent auto-scroll to chat section on mount
   React.useEffect(() => {
@@ -91,11 +190,11 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
                   return acc;
                 }, {} as Record<string, number>);
                 const parts = [
-                  bySource.chesscom && `${bySource.chesscom} Chess.com`,
+                  (bySource['chess.com'] ?? bySource.chesscom) && `${bySource['chess.com'] ?? bySource.chesscom} Chess.com`,
                   bySource.lichess && `${bySource.lichess} Lichess`,
                   bySource.otb && `${bySource.otb} OTB`,
                 ].filter(Boolean);
-                return parts.length ? parts.join(' · ') : `${report.games.length} games`;
+                return parts.length ? parts.join(', ') : `${report.games.length} games`;
               })() : '—'}
             </div>
           </div>
@@ -181,131 +280,59 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
           </div>
         </div>
 
-        {/* Repertoire Graphs - full width, 2 columns */}
-        <div className="grid md:grid-cols-2 gap-8">
-            {/* White Opening Efficiency */}
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg flex flex-col">
-              <h3 className="text-lg font-bold mb-1 flex items-center gap-2 text-white">
-                <TrendingUp className="w-5 h-5 text-indigo-400" />
-                White Repertoire (Primary Openings)
-              </h3>
-              <p className="text-sm text-slate-400 mb-6">
-                {(whiteOpenings || []).reduce((sum, op) => sum + (op.totalGames || 0), 0).toLocaleString()} games as White
-              </p>
-              <div className="h-64 mb-6 overflow-x-auto overflow-y-hidden w-full">
-                <BarChart
-                  data={whiteOpenings || []}
-                  width={Math.max(400, (whiteOpenings?.length || 0) * 30)}
-                  height={256}
-                  margin={{ bottom: 40 }}
-                  barSize={20}
-                  barCategoryGap={10}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                  <XAxis
-                    dataKey="name"
-                    stroke="#94a3b8"
-                    fontSize={10}
-                    angle={-45}
-                    textAnchor="end"
-                    height={60}
-                  />
-                  <YAxis stroke="#475569" fontSize={10} />
-                  <Tooltip
-                    cursor={{ fill: '#ffffff08' }}
-                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }}
-                  />
-                  <Bar dataKey="wins" name="Wins" fill="#10b981" stackId="a" barSize={20} />
-                  <Bar dataKey="draws" name="Draws" fill="#64748b" stackId="a" barSize={20} />
-                  <Bar dataKey="losses" name="Losses" fill="#ef4444" stackId="a" barSize={20} />
-                </BarChart>
-              </div>
-              <div className="space-y-3">
-                {(whiteOpenings || []).map((op, idx) => {
-                  // Safely calculate win rate, handling NaN/undefined cases
-                  const winRate = typeof op.winRate === 'number' && !isNaN(op.winRate) ? op.winRate : 0;
-                  const winPercent = (winRate * 100).toFixed(0);
-                  // Ensure all counts are integers (round to nearest)
-                  const totalGames = Math.round(op.totalGames || 0);
-                  const wins = Math.round(op.wins || 0);
-                  const draws = Math.round(op.draws || 0);
-                  const losses = Math.round(op.losses || 0);
-                  
-                  return (
-                    <div key={idx} className="flex justify-between items-center text-[10px] p-2 bg-slate-950 rounded border border-slate-800">
-                      <span className="text-slate-300 font-bold">{op.name}</span>
-                      <span className="text-slate-500 font-mono">
-                        {totalGames} Games | {winPercent}% W ({wins}W/{draws}D/{losses}L)
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* Black Repertoire */}
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg flex flex-col">
-              <h3 className="text-lg font-bold mb-1 flex items-center gap-2 text-white">
-                <Clock className="w-5 h-5 text-indigo-400" />
-                Black Repertoire (Defensive Systems)
-              </h3>
-              <p className="text-sm text-slate-400 mb-6">
-                {(blackDefenses || []).reduce((sum, op) => sum + (op.totalGames || 0), 0).toLocaleString()} games as Black
-              </p>
-              <div className="h-64 mb-6 overflow-x-auto overflow-y-hidden">
-                <BarChart
-                  data={blackDefenses || []}
-                  width={Math.max(400, (blackDefenses?.length || 0) * 30)}
-                  height={256}
-                  margin={{ bottom: 40 }}
-                  barSize={20}
-                  barCategoryGap={10}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                  <XAxis
-                    dataKey="name"
-                    stroke="#94a3b8"
-                    fontSize={10}
-                    angle={-45}
-                    textAnchor="end"
-                    height={60}
-                  />
-                  <YAxis stroke="#475569" fontSize={10} />
-                  <Tooltip
-                    cursor={{ fill: '#ffffff08' }}
-                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }}
-                  />
-                  <Bar dataKey="wins" name="Wins" fill="#10b981" stackId="a" barSize={20} />
-                  <Bar dataKey="draws" name="Draws" fill="#64748b" stackId="a" barSize={20} />
-                  <Bar dataKey="losses" name="Losses" fill="#ef4444" stackId="a" barSize={20} />
-                </BarChart>
-              </div>
-              <div className="space-y-3">
-                {(blackDefenses || []).map((op, idx) => {
-                  // Safely calculate win rate, handling NaN/undefined cases
-                  const winRate = typeof op.winRate === 'number' && !isNaN(op.winRate) ? op.winRate : 0;
-                  const winPercent = (winRate * 100).toFixed(0);
-                  // Ensure all counts are integers (round to nearest)
-                  const totalGames = Math.round(op.totalGames || 0);
-                  const wins = Math.round(op.wins || 0);
-                  const draws = Math.round(op.draws || 0);
-                  const losses = Math.round(op.losses || 0);
-                  
-                  return (
-                    <div key={idx} className="flex justify-between items-center text-[10px] p-2 bg-slate-950 rounded border border-slate-800">
-                      <span className="text-slate-300 font-bold">{op.name}</span>
-                      <span className="text-slate-500 font-mono">
-                        {totalGames} Games | {winPercent}% W ({wins}W/{draws}D/{losses}L)
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
+        {/* Repertoire Graphs - 4 when online+OTB, else 2 */}
+        {hasBothSources && openingsBySource ? (
+          <div className="space-y-8">
+            <h3 className="text-xl font-bold text-white">Online (Chess.com, Lichess)</h3>
+            <div className="grid md:grid-cols-2 gap-8 items-start">
+              <RepertoireChartSection
+                title="White Repertoire (Online)"
+                icon={TrendingUp}
+                openings={openingsBySource.online.white}
+                gamesLabel={`${openingsBySource.online.white.reduce((s, o) => s + (o.totalGames || 0), 0).toLocaleString()} games as White`}
+              />
+              <RepertoireChartSection
+                title="Black Repertoire (Online)"
+                icon={Clock}
+                openings={openingsBySource.online.black}
+                gamesLabel={`${openingsBySource.online.black.reduce((s, o) => s + (o.totalGames || 0), 0).toLocaleString()} games as Black`}
+              />
+            </div>
+            <h3 className="text-xl font-bold text-white">OTB (Over-the-board)</h3>
+            <div className="grid md:grid-cols-2 gap-8 items-start">
+              <RepertoireChartSection
+                title="White Repertoire (OTB)"
+                icon={TrendingUp}
+                openings={openingsBySource.otb.white}
+                gamesLabel={`${openingsBySource.otb.white.reduce((s, o) => s + (o.totalGames || 0), 0).toLocaleString()} games as White`}
+              />
+              <RepertoireChartSection
+                title="Black Repertoire (OTB)"
+                icon={Clock}
+                openings={openingsBySource.otb.black}
+                gamesLabel={`${openingsBySource.otb.black.reduce((s, o) => s + (o.totalGames || 0), 0).toLocaleString()} games as Black`}
+              />
+            </div>
           </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-8 items-start">
+            <RepertoireChartSection
+              title="White Repertoire (Primary Openings)"
+              icon={TrendingUp}
+              openings={whiteOpenings || []}
+              gamesLabel={`${(whiteOpenings || []).reduce((sum, op) => sum + (op.totalGames || 0), 0).toLocaleString()} games as White`}
+            />
+            <RepertoireChartSection
+              title="Black Repertoire (Defensive Systems)"
+              icon={Clock}
+              openings={blackDefenses || []}
+              gamesLabel={`${(blackDefenses || []).reduce((sum, op) => sum + (op.totalGames || 0), 0).toLocaleString()} games as Black`}
+            />
+          </div>
+        )}
 
         {/* Text Summaries - full width, 2 columns */}
-        <div className="grid md:grid-cols-2 gap-8">
+        <div className="grid md:grid-cols-2 gap-8 items-start">
           <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
             <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-indigo-400">
               <BookOpen className="w-5 h-5" />
@@ -342,7 +369,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report }) => {
 
       {/* Chat Section - At Bottom, Collapsed by Default */}
       <section className="mt-8" id="chat-section" style={{ scrollMarginTop: '0px' }}>
-        <RepertoireChat report={report} />
+        <RepertoireChat report={report} requiresSignIn={requiresSignInForChat} />
       </section>
     </div>
   );

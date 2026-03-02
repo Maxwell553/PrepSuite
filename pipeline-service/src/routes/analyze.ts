@@ -118,7 +118,9 @@ analyzeRoute.post('/analyze', async (c) => {
         '[Analyze] Identity resolved',
       );
 
-      const hasOnline = !!(identity.chessComUsername || identity.lichessUsername);
+      // Only treat as "has online" when user actually requested online games (onlineLimit > 0)
+      const hasOnline =
+        onlineLimit > 0 && !!(identity.chessComUsername || identity.lichessUsername);
       const hasOtb = otbLimit > 0 && !!identity.fideId;
 
       if (!hasOnline && !hasOtb) {
@@ -136,18 +138,22 @@ analyzeRoute.post('/analyze', async (c) => {
         durationMs: 0,
       };
 
-      if (onlineLimit > 0 && hasOnline) {
-        gameResult = await fetchGames(
-          identity.chessComUsername || '',
-          identity.lichessUsername || '',
-          onlineLimit,
-          sse,
-        );
-      }
-
+      // 1. OTB first: wait for all OTB games to complete before any online fetch
       let otbGames: import('../lib/types.js').GameData[] = [];
       if (otbLimit > 0 && identity.fideId) {
         otbGames = await fetchOtbGames(identity.fideId, otbLimit);
+      }
+
+      // 2. Online only when requested; do NOT fill-in (preserve requested OTB/online split)
+      const onlineFetchLimit = onlineLimit;
+
+      if (onlineFetchLimit > 0 && hasOnline) {
+        gameResult = await fetchGames(
+          identity.chessComUsername || '',
+          identity.lichessUsername || '',
+          onlineFetchLimit,
+          sse,
+        );
       }
 
       logger.info(
@@ -191,19 +197,24 @@ analyzeRoute.post('/analyze', async (c) => {
         );
       }
 
-      // Merge online + OTB games, sort by most recent, trim to gameLimit
-      const merged = [...chessComGames, ...lichessGames, ...otbGames].sort(
+      // Respect OTB/online split: take up to otbLimit from OTB, up to onlineLimit from online, then combine
+      const otbSlice = otbGames.slice(0, otbLimit);
+      const onlineMerged = [...chessComGames, ...lichessGames].sort(
         (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
       );
-      const allGames = merged.slice(0, gameLimit);
+      const onlineSlice = onlineMerged.slice(0, onlineLimit);
+      const allGames = [...otbSlice, ...onlineSlice].sort(
+        (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
+      );
 
       logger.info(
         {
           chessCom: chessComGames.length,
           lichess: lichessGames.length,
           otb: otbGames.length,
-          merged: merged.length,
-          trimmed: allGames.length,
+          otbSlice: otbSlice.length,
+          onlineSlice: onlineSlice.length,
+          total: allGames.length,
         },
         '[Analyze] Games parsed',
       );

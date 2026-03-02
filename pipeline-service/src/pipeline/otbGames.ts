@@ -41,8 +41,12 @@ function getClient() {
   return createClient(url, key);
 }
 
+/** Supabase/PostgREST default max rows per request; we paginate to fetch beyond this. */
+const BATCH_SIZE = 1000;
+
 /**
  * Fetch OTB games for a player by FIDE ID.
+ * Paginates through the DB to return up to `limit` games (no artificial cap).
  * Returns games where the player was white or black, sorted by date descending.
  */
 export async function fetchOtbGames(fideId: string, limit: number): Promise<GameData[]> {
@@ -55,26 +59,6 @@ export async function fetchOtbGames(fideId: string, limit: number): Promise<Game
   }
 
   const start = Date.now();
-
-  const { data: asWhite, error: errWhite } = await supabase
-    .from(TABLE)
-    .select('id, white, black, result, eco, event, game_date, white_elo, black_elo, pgn')
-    .eq('white_fide_id', fideId.trim())
-    .order('game_date', { ascending: false })
-    .limit(limit);
-
-  const { data: asBlack, error: errBlack } = await supabase
-    .from(TABLE)
-    .select('id, white, black, result, eco, event, game_date, white_elo, black_elo, pgn')
-    .eq('black_fide_id', fideId.trim())
-    .order('game_date', { ascending: false })
-    .limit(limit);
-
-  if (errWhite || errBlack) {
-    logger.warn({ errWhite, errBlack }, '[OtbGames] Supabase query failed');
-    return [];
-  }
-
   const seen = new Set<string>();
   const games: GameData[] = [];
 
@@ -121,14 +105,52 @@ export async function fetchOtbGames(fideId: string, limit: number): Promise<Game
     });
   };
 
-  for (const row of asWhite || []) addGame(row);
-  for (const row of asBlack || []) addGame(row);
+  const fetchBatch = async (
+    column: 'white_fide_id' | 'black_fide_id',
+    offset: number,
+  ): Promise<{ rows: unknown[]; hasMore: boolean }> => {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('id, white, black, result, eco, event, game_date, white_elo, black_elo, pgn')
+      .eq(column, fideId.trim())
+      .order('game_date', { ascending: false })
+      .range(offset, offset + BATCH_SIZE - 1);
+
+    if (error) {
+      logger.warn({ error, column }, '[OtbGames] Supabase query failed');
+      return { rows: [], hasMore: false };
+    }
+    const rows = (data || []) as Parameters<typeof addGame>[0][];
+    return { rows, hasMore: rows.length >= BATCH_SIZE };
+  };
+
+  let whiteOffset = 0;
+  let blackOffset = 0;
+  let whiteHasMore = true;
+  let blackHasMore = true;
+
+  while (games.length < limit && (whiteHasMore || blackHasMore)) {
+    const [whiteBatch, blackBatch] = await Promise.all([
+      whiteHasMore ? fetchBatch('white_fide_id', whiteOffset) : Promise.resolve({ rows: [], hasMore: false }),
+      blackHasMore ? fetchBatch('black_fide_id', blackOffset) : Promise.resolve({ rows: [], hasMore: false }),
+    ]);
+
+    for (const row of whiteBatch.rows) addGame(row);
+    for (const row of blackBatch.rows) addGame(row);
+
+    whiteOffset += whiteBatch.rows.length;
+    blackOffset += blackBatch.rows.length;
+    whiteHasMore = whiteBatch.hasMore;
+    blackHasMore = blackBatch.hasMore;
+
+    if (whiteBatch.rows.length === 0 && blackBatch.rows.length === 0) break;
+  }
 
   games.sort((a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime());
   const trimmed = games.slice(0, limit);
 
   logger.info(
-    { fideId, fetched: trimmed.length, durationMs: Date.now() - start },
+    { fideId, requested: limit, fetched: trimmed.length, durationMs: Date.now() - start },
     '[OtbGames] Fetched OTB games',
   );
 

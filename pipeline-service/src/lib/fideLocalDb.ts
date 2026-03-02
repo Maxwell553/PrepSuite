@@ -90,7 +90,12 @@ export function searchFideByName(name: string): FideSearchResult[] {
 
     let matchCount = 0;
     for (const qp of queryParts) {
-      if (nameParts.some((np) => np.includes(qp) || qp.includes(np))) {
+      if (nameParts.some((np) => {
+        if (qp.length >= 3 && np.length >= 3) return np.includes(qp) || qp.includes(np);
+        if (qp.length <= 2 && np.length > 2) return np.startsWith(qp) || np === qp;
+        if (np.length <= 2 && qp.length > 2) return qp.startsWith(np) || qp === np;
+        return qp === np;
+      })) {
         matchCount++;
       }
     }
@@ -130,7 +135,12 @@ function scoreMatch(searchName: string, resultName: string): number {
   if (searchParts.length === 0 || resultParts.length === 0) return 0;
   let matchCount = 0;
   for (const sp of searchParts) {
-    if (resultParts.some((rp) => rp.includes(sp) || sp.includes(rp))) matchCount++;
+    if (resultParts.some((rp) => {
+      if (sp.length >= 3 && rp.length >= 3) return rp.includes(sp) || sp.includes(rp);
+      if (sp.length <= 2 && rp.length > 2) return rp.startsWith(sp) || rp === sp;
+      if (rp.length <= 2 && sp.length > 2) return sp.startsWith(rp) || sp === rp;
+      return sp === rp;
+    })) matchCount++;
   }
   let score = matchCount / searchParts.length;
   if (norm(searchName) === norm(resultName)) score += 0.5;

@@ -25,10 +25,12 @@ export function namesMatch(searchName: string, profileName: string): boolean {
 
   if (searchParts.length === 0 || profileParts.length === 0) return false;
 
-  // Require meaningful matches: single-letter parts (e.g. "n" from "Max N") only match exact same letter
+  // Require meaningful matches. Allow single-letter abbreviations: "D" matches "Dommaraju" (FIDE lists "Gukesh D")
   const partsMatch = (sp: string, pp: string) => {
-    if (sp.length < 2 || pp.length < 2) return sp === pp;
-    return pp.includes(sp) || sp.includes(pp);
+    if (sp.length >= 3 && pp.length >= 3) return pp.includes(sp) || sp.includes(pp);
+    if (sp.length <= 2 && pp.length > 2) return pp.startsWith(sp) || pp === sp;
+    if (pp.length <= 2 && sp.length > 2) return sp.startsWith(pp) || sp === pp;
+    return sp === pp;
   };
 
   const matchingParts = searchParts.filter((sp) => profileParts.some((pp) => partsMatch(sp, pp)));

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Shield, Mail, ChevronRight, Search, Database, Target, Zap, TrendingUp, Cpu, Users, Globe, BarChart3, Brain, CheckCircle, ArrowRight, X } from 'lucide-react';
+import { Shield, Mail, ChevronRight, Search, Database, Target, Zap, TrendingUp, Cpu, Users, Globe, BarChart3, Brain, CheckCircle, ArrowRight, X, Crown } from 'lucide-react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
 import generationImg from '@/assets/landing/generation.png';
@@ -15,13 +15,22 @@ interface LandingPageProps {
     user?: SupabaseUser | null;
     onShowPrivacyPolicy?: () => void;
     onShowTermsOfService?: () => void;
+    onViewFeaturedReport?: (slug: string) => Promise<void>;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, onShowPrivacyPolicy, onShowTermsOfService }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, onShowPrivacyPolicy, onShowTermsOfService, onViewFeaturedReport }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [view, setView] = useState<'login' | 'signup' | 'success'>('login');
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+    const [featuredList, setFeaturedList] = useState<{ slug: string; name: string; title?: string; federation?: string; rating?: number }[]>([]);
+    const [loadingFeatured, setLoadingFeatured] = useState<string | null>(null);
+
+    useEffect(() => {
+        import('../services/featuredReports').then(({ getFeaturedReportList }) => {
+            getFeaturedReportList().then(setFeaturedList);
+        });
+    }, []);
 
     const featuresRef = useScrollAnimation();
     const howItWorksRef = useScrollAnimation();
@@ -341,6 +350,81 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                 >
                                     <CheckCircle className="w-5 h-5 text-emerald-400 dark:text-emerald-400 text-emerald-600 shrink-0 mt-0.5" />
                                     <p className="text-slate-300 dark:text-slate-300 text-gray-700">{benefit}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </section>
+
+            {/* Featured Reports - Pre-generated reports viewable without signing in */}
+            <section className="py-24 px-6 relative overflow-hidden">
+                {/* Radial gradient background */}
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_0%,rgba(99,102,241,0.08),transparent_50%)] pointer-events-none" />
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_100%,rgba(30,41,59,0.6),transparent)] pointer-events-none" />
+                {/* Faint chessboard texture */}
+                <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+                <div className="max-w-5xl mx-auto relative">
+                    <div className="flex flex-col items-center mb-14">
+                        <Crown className="w-8 h-8 text-amber-500/70 mb-4" />
+                        <h2 className="text-4xl md:text-5xl font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-400 dark:from-white dark:to-slate-400 from-gray-900 to-gray-600 text-center">
+                            Featured Reports
+                        </h2>
+                        <p className="text-slate-500 dark:text-slate-500 text-gray-500 text-sm mt-3 text-center max-w-xl">
+                            Explore sample scouting reports of top players. No sign-in required.
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap justify-center items-stretch gap-6">
+                        {featuredList.map((item) => {
+                            const handleClick = async () => {
+                                if (!onViewFeaturedReport) return;
+                                setLoadingFeatured(item.slug);
+                                try {
+                                    const { getFeaturedReport } = await import('../services/featuredReports');
+                                    const report = await getFeaturedReport(item.slug);
+                                    if (report) await onViewFeaturedReport(item.slug);
+                                } finally {
+                                    setLoadingFeatured(null);
+                                }
+                            };
+                            return (
+                                <div
+                                    key={item.slug}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={handleClick}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+                                    className="group relative w-full min-w-[280px] max-w-[340px] bg-slate-800/80 dark:bg-slate-800/80 border border-slate-700/60 dark:border-slate-700/60 rounded-2xl p-6 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-500/40 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 flex flex-col min-h-[120px]"
+                                    style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.03) inset' }}
+                                >
+                                    <div className="flex items-stretch gap-4 flex-1">
+                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                            <div className="text-white dark:text-white font-bold text-lg">{item.name}</div>
+                                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                                                {item.title && (
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                                        {item.title}
+                                                    </span>
+                                                )}
+                                                {item.rating != null && (
+                                                    <span className="text-slate-400 text-sm">{item.rating}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleClick(); }}
+                                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-sm font-semibold transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-indigo-500/25 disabled:opacity-50 shrink-0"
+                                            disabled={!onViewFeaturedReport || loadingFeatured !== null}
+                                        >
+                                            {loadingFeatured === item.slug ? 'Loading...' : (
+                                                <>
+                                                    View
+                                                    <ArrowRight className="w-4 h-4" />
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
                             );
                         })}

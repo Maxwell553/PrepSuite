@@ -15,7 +15,7 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
   const [currentGameIndex, setCurrentGameIndex] = useState(0);
   const [currentMoveIndex, setCurrentMoveIndex] = useState(-1); // -1 = starting position
   const [isPlaying, setIsPlaying] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'white' | 'black' | 'wins' | 'losses' | 'draws'>('all');
+  const [filter, setFilter] = useState<'all' | 'white' | 'black' | 'wins' | 'losses' | 'draws' | 'chess.com' | 'lichess' | 'otb'>('all');
   const [game, setGame] = useState<Chess | null>(null);
   const [gamePosition, setGamePosition] = useState<string>('start');
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
@@ -59,8 +59,6 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     return playerName;
   })();
 
-  const usernameLower = actualUsername.toLowerCase().trim();
-
   // Helper function to check if names match (more robust)
   const namesMatch = (name1: string, name2: string): boolean => {
     const n1 = name1.toLowerCase().trim();
@@ -83,11 +81,13 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     return false;
   };
 
-  // Filter games based on selected filter - use actual username for matching
+  // Filter games based on selected filter - match against playerName and actualUsername
+  const identifiersForFilter = [actualUsername, playerName].filter(Boolean);
   const filteredGames = games.filter(game => {
-    const isWhite = namesMatch(game.white, actualUsername);
-    const isBlack = namesMatch(game.black, actualUsername);
+    const isWhite = identifiersForFilter.some((id) => namesMatch(game.white, id));
+    const isBlack = identifiersForFilter.some((id) => namesMatch(game.black, id));
     const resultTrimmed = game.result.trim();
+    const gameSource = (game.source || '').toLowerCase();
     
     if (filter === 'white') return isWhite;
     if (filter === 'black') return isBlack;
@@ -102,6 +102,9 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
       return false;
     }
     if (filter === 'draws') return resultTrimmed === '1/2-1/2';
+    if (filter === 'chess.com') return gameSource === 'chess.com';
+    if (filter === 'lichess') return gameSource === 'lichess';
+    if (filter === 'otb') return gameSource === 'otb';
     return true; // 'all'
   });
 
@@ -124,62 +127,34 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     );
   }
 
-  // More robust player matching - use actual username from games
-  const isPlayerWhite = namesMatch(currentGame.white, actualUsername);
-  const isPlayerBlack = namesMatch(currentGame.black, actualUsername);
-  
+  // Match against both playerName and actualUsername (OTB games use FIDE "Last, First"
+  // while playerName may be "First Last"; actualUsername from first game may be online-only)
+  const playerIdentifiers = [actualUsername, playerName].filter(Boolean);
+  const isPlayerWhite = playerIdentifiers.some((id) => namesMatch(currentGame.white, id));
+  const isPlayerBlack = playerIdentifiers.some((id) => namesMatch(currentGame.black, id));
+
   // Helper function to determine win/loss/draw (defined before use)
   const getGameResult = (result: string): string => {
     const resultTrimmed = result.trim();
-    
+
     // First, try to determine based on isPlayerWhite/isPlayerBlack flags
     if (isPlayerWhite) {
       if (resultTrimmed === '1-0') return 'Win';
       if (resultTrimmed === '0-1') return 'Loss';
       if (resultTrimmed === '1/2-1/2') return 'Draw';
     }
-    
+
     if (isPlayerBlack) {
       if (resultTrimmed === '0-1') return 'Win';
       if (resultTrimmed === '1-0') return 'Loss';
       if (resultTrimmed === '1/2-1/2') return 'Draw';
     }
-    
-    // Fallback: Check if actual username matches white or black exactly
-    const whiteExact = currentGame.white.toLowerCase().trim() === usernameLower;
-    const blackExact = currentGame.black.toLowerCase().trim() === usernameLower;
-    
-    if (whiteExact) {
-      if (resultTrimmed === '1-0') return 'Win';
-      if (resultTrimmed === '0-1') return 'Loss';
-      if (resultTrimmed === '1/2-1/2') return 'Draw';
-    }
-    
-    if (blackExact) {
-      if (resultTrimmed === '0-1') return 'Win';
-      if (resultTrimmed === '1-0') return 'Loss';
-      if (resultTrimmed === '1/2-1/2') return 'Draw';
-    }
-    
-    // Last resort: Check if username is contained in white/black names
-    const whiteContains = currentGame.white.toLowerCase().trim().includes(usernameLower) || usernameLower.includes(currentGame.white.toLowerCase().trim());
-    const blackContains = currentGame.black.toLowerCase().trim().includes(usernameLower) || usernameLower.includes(currentGame.black.toLowerCase().trim());
-    
-    if (whiteContains && !blackContains) {
-      // Player is likely white
-      if (resultTrimmed === '1-0') return 'Win';
-      if (resultTrimmed === '0-1') return 'Loss';
-      if (resultTrimmed === '1/2-1/2') return 'Draw';
-    }
-    
-    if (blackContains && !whiteContains) {
-      // Player is likely black
-      if (resultTrimmed === '0-1') return 'Win';
-      if (resultTrimmed === '1-0') return 'Loss';
-      if (resultTrimmed === '1/2-1/2') return 'Draw';
-    }
-    
-    return 'Unknown';
+
+    // When we can't determine the player's side (e.g. name mismatch), show raw result
+    if (resultTrimmed === '1-0') return '1-0';
+    if (resultTrimmed === '0-1') return '0-1';
+    if (resultTrimmed === '1/2-1/2') return '½-½';
+    return resultTrimmed || 'Unknown';
   };
   
   // Auto-flip board: if player is white, show from white's perspective (white on bottom)
@@ -417,26 +392,35 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
         <select
           value={filter}
           onChange={(e) => {
-            setFilter(e.target.value as any);
+            setFilter(e.target.value as typeof filter);
             setCurrentGameIndex(0);
             setIsPlaying(false);
           }}
           className="bg-slate-800/80 border border-slate-600 rounded-xl px-4 py-2 text-sm text-white"
         >
           <option value="all">All Games ({games.length})</option>
-          <option value="white">As White ({games.filter(g => namesMatch(g.white, actualUsername)).length})</option>
-          <option value="black">As Black ({games.filter(g => namesMatch(g.black, actualUsername)).length})</option>
+          <option value="white">As White ({games.filter(g => identifiersForFilter.some(id => namesMatch(g.white, id))).length})</option>
+          <option value="black">As Black ({games.filter(g => identifiersForFilter.some(id => namesMatch(g.black, id))).length})</option>
           <option value="wins">Wins ({games.filter(g => {
-            const isW = namesMatch(g.white, actualUsername);
-            const isB = namesMatch(g.black, actualUsername);
+            const isW = identifiersForFilter.some(id => namesMatch(g.white, id));
+            const isB = identifiersForFilter.some(id => namesMatch(g.black, id));
             return (isW && g.result.trim() === '1-0') || (isB && g.result.trim() === '0-1');
           }).length})</option>
           <option value="losses">Losses ({games.filter(g => {
-            const isW = namesMatch(g.white, actualUsername);
-            const isB = namesMatch(g.black, actualUsername);
+            const isW = identifiersForFilter.some(id => namesMatch(g.white, id));
+            const isB = identifiersForFilter.some(id => namesMatch(g.black, id));
             return (isW && g.result.trim() === '0-1') || (isB && g.result.trim() === '1-0');
           }).length})</option>
           <option value="draws">Draws ({games.filter(g => g.result.trim() === '1/2-1/2').length})</option>
+          {games.some(g => (g.source || '').toLowerCase() === 'chess.com') && (
+            <option value="chess.com">Chess.com ({games.filter(g => (g.source || '').toLowerCase() === 'chess.com').length})</option>
+          )}
+          {games.some(g => (g.source || '').toLowerCase() === 'lichess') && (
+            <option value="lichess">Lichess ({games.filter(g => (g.source || '').toLowerCase() === 'lichess').length})</option>
+          )}
+          {games.some(g => (g.source || '').toLowerCase() === 'otb') && (
+            <option value="otb">OTB ({games.filter(g => (g.source || '').toLowerCase() === 'otb').length})</option>
+          )}
         </select>
       </div>
 
@@ -460,8 +444,8 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
                   {filteredGames.map((g, idx) => {
                     const isSelected = idx === currentGameIndex;
                     const rowResult = g.result.trim();
-                    const isW = namesMatch(g.white, actualUsername);
-                    const isB = namesMatch(g.black, actualUsername);
+                    const isW = identifiersForFilter.some((id) => namesMatch(g.white, id));
+                    const isB = identifiersForFilter.some((id) => namesMatch(g.black, id));
                     return (
                       <tr
                         key={idx}

@@ -83,9 +83,26 @@ export async function resolveIdentity(
     providedChessComUsername,
     providedLichessUsername,
   );
-  if (cached) return cached;
+  if (cached) {
+    // Cache only contributes IDs/usernames; re-fetch profiles for fresh data (avoids stale/empty graphs)
+    onProgress?.('Cache hit: using cached IDs, fetching fresh profiles...');
+    logger.info({ name: inputName }, '[Identity] Cache hit: using IDs/usernames, re-fetching FIDE/USCF profiles');
+    const uscfIdFromCache = cached.uscfProfile?.id;
+    const [fideProfileFetched, uscfProfileFetched] = await Promise.all([
+      cached.fideId ? getFideProfile(cached.fideId) : Promise.resolve(null),
+      uscfIdFromCache ? getUscfProfile(uscfIdFromCache) : Promise.resolve(null),
+    ]);
+    const result: ResolvedIdentity = {
+      ...cached,
+      fideProfile: fideProfileFetched ?? cached.fideProfile,
+      uscfProfile: uscfProfileFetched ?? cached.uscfProfile,
+      chessComUsername: skipOnline ? '' : (cached.chessComUsername ?? ''),
+      lichessUsername: skipOnline ? '' : (cached.lichessUsername ?? ''),
+    };
+    return result;
+  }
 
-  if (hasFideId && hasUscfId && hasChessCom && hasLichess) {
+  if (hasFideId && hasUscfId && hasChessCom && hasLichess && !skipOnline) {
     onProgress?.('Fetching FIDE & USCF profiles...');
     logger.info({ name: inputName }, '[Identity] Fast path: all IDs provided, skipping search');
     const [fideProfileFetched, uscfProfileFetched] = await Promise.all([
@@ -275,12 +292,12 @@ export async function resolveIdentity(
     let verifiedChessCom = '';
     let verifiedLichess = '';
 
-    // Trust provided usernames
-    if (providedChessComUsername?.trim()) {
+    // Trust provided usernames (only when online platforms are requested)
+    if (!skipOnline && providedChessComUsername?.trim()) {
       verifiedChessCom = providedChessComUsername.trim();
       logger.info({ username: verifiedChessCom }, '[Identity] Using provided Chess.com username');
     }
-    if (providedLichessUsername?.trim()) {
+    if (!skipOnline && providedLichessUsername?.trim()) {
       verifiedLichess = providedLichessUsername.trim();
       logger.info({ username: verifiedLichess }, '[Identity] Using provided Lichess username');
     }

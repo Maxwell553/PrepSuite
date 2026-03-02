@@ -11,11 +11,38 @@ export interface FideSearchResult {
   birthYear: string;
 }
 
+/** Known aliases for players with abbreviated names in FIDE DB (e.g. "Gukesh D" for Gukesh Dommaraju) */
+const KNOWN_ALIASES: Record<string, string> = {
+  'gukesh dommaraju': '46616543',
+  'gukesh d': '46616543',
+  dommaraju: '46616543',
+};
+
 /**
  * Search FIDE ratings database by player name.
  * Uses local FIDE rating list (standard_rating_list.txt).
+ * Checks known aliases first for players with abbreviated FIDE names.
  */
 export async function searchFideByName(name: string): Promise<FideSearchResult[]> {
+  const norm = name.trim().toLowerCase().replace(/\s+/g, ' ');
+  const aliasId = KNOWN_ALIASES[norm] || KNOWN_ALIASES[norm.replace(/,/g, '')];
+  if (aliasId) {
+    const { getFideProfileById } = await import('../lib/fideLocalDb.js');
+    const profile = getFideProfileById(aliasId);
+    if (profile) {
+      logger.info({ name, fideId: aliasId }, '[FideSearch] Resolved via known alias');
+      return [
+        {
+          fideId: aliasId,
+          name: profile.name,
+          federation: profile.federation,
+          title: profile.title,
+          rating: profile.rating,
+          birthYear: profile.birthYear ?? '',
+        },
+      ];
+    }
+  }
   logger.info({ name }, '[FideSearch] Searching FIDE by name (local DB)');
   return searchLocal(name);
 }
@@ -106,10 +133,15 @@ export function scoreFideMatch(searchName: string, result: FideSearchResult): nu
 
   if (searchParts.length === 0 || resultParts.length === 0) return 0;
 
-  // Count matching parts (bidirectional substring matching)
+  // Count matching parts; allow single-letter abbreviations (e.g. "D" matches "Dommaraju")
   let matchCount = 0;
   for (const sp of searchParts) {
-    if (resultParts.some((rp) => rp.includes(sp) || sp.includes(rp))) {
+    if (resultParts.some((rp) => {
+      if (sp.length >= 3 && rp.length >= 3) return rp.includes(sp) || sp.includes(rp);
+      if (sp.length <= 2 && rp.length > 2) return rp.startsWith(sp) || rp === sp;
+      if (rp.length <= 2 && sp.length > 2) return sp.startsWith(rp) || sp === rp;
+      return sp === rp;
+    })) {
       matchCount++;
     }
   }

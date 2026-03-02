@@ -1,0 +1,7 @@
+[
+  { "slug": "magnus-carlsen", "name": "Magnus Carlsen", "title": "GM", "federation": "NOR", "rating": 2840 },
+  { "slug": "hikaru-nakamura", "name": "Hikaru Nakamura", "title": "GM", "federation": "USA", "rating": 2810 },
+  { "slug": "levy-rozman", "name": "Levy Rozman", "title": "IM", "federation": "USA", "rating": 2318 },
+  { "slug": "gukesh-dommaraju", "name": "Gukesh Dommaraju", "title": "GM", "federation": "IND", "rating": 2754 },
+  { "slug": "ju-wenjun", "name": "Ju Wenjun", "title": "GM", "federation": "CHN", "rating": 2559 }
+]

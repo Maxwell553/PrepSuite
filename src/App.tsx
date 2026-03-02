@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, History, Shield, Database, LayoutDashboard, ChevronRight, User, Loader2, Trash2, Square, CheckSquare } from 'lucide-react';
+import { Search, History, Shield, Database, LayoutDashboard, ChevronRight, ChevronLeft, User, Loader2, Trash2, Square, CheckSquare } from 'lucide-react';
 import SearchScreen from './components/SearchScreen';
 import ReportDashboard from './components/ReportDashboard';
 import Sidebar from './components/Sidebar';
@@ -17,6 +17,34 @@ import TermsOfService from './components/TermsOfService';
 import { ThemeProvider } from './lib/themeContext';
 import { setSentryUser, clearSentryUser } from './lib/sentry';
 
+function FeaturedReportLayout({
+  report,
+  user,
+  onBack,
+}: {
+  report: ScoutingReport;
+  user: SupabaseUser | null;
+  onBack: () => void;
+}) {
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    scrollRef.current?.scrollTo(0, 0);
+  }, [report]);
+  return (
+    <div ref={scrollRef} className="h-screen overflow-y-auto bg-slate-950 dark:bg-slate-950 bg-gray-50">
+      <header className="sticky top-0 z-10 backdrop-blur-md bg-slate-950/80 border-b border-slate-800 p-4 flex justify-between items-center">
+        <button type="button" onClick={onBack} className="text-slate-400 hover:text-white flex items-center gap-2">
+          <ChevronLeft className="w-4 h-4" /> Back to home
+        </button>
+        <span className="text-slate-400 text-sm">Featured Report — No sign-in required</span>
+      </header>
+      <main className="max-w-6xl mx-auto p-6">
+        <ReportDashboard report={report} requiresSignInForChat={!user} />
+      </main>
+    </div>
+  );
+}
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'search' | 'dashboard' | 'history'>('search');
   const [selectedReport, setSelectedReport] = useState<ScoutingReport | null>(null);
@@ -28,6 +56,7 @@ const App: React.FC = () => {
   const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
   const [showUserSettings, setShowUserSettings] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(false);
+  const [viewingFeaturedReport, setViewingFeaturedReport] = useState<ScoutingReport | null>(null);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const [showTermsOfService, setShowTermsOfService] = useState(false);
   // Persist loading state across tab switches
@@ -278,6 +307,30 @@ const App: React.FC = () => {
     );
   }
 
+  const handleViewFeaturedReport = async (slug: string) => {
+    const { getFeaturedReport } = await import('./services/featuredReports');
+    const report = await getFeaturedReport(slug);
+    if (report) {
+      setViewingFeaturedReport(report);
+      setShowLandingPage(false);
+    }
+  };
+
+  if (viewingFeaturedReport) {
+    return (
+      <ThemeProvider>
+        <FeaturedReportLayout
+          report={viewingFeaturedReport}
+          user={user}
+          onBack={() => {
+            setViewingFeaturedReport(null);
+            setShowLandingPage(true);
+          }}
+        />
+      </ThemeProvider>
+    );
+  }
+
   if (!user || showLandingPage) {
     return (
       <ThemeProvider>
@@ -295,6 +348,7 @@ const App: React.FC = () => {
           user={user}
           onShowPrivacyPolicy={() => setShowPrivacyPolicy(true)}
           onShowTermsOfService={() => setShowTermsOfService(true)}
+          onViewFeaturedReport={handleViewFeaturedReport}
         />
         </div>
       </ThemeProvider>

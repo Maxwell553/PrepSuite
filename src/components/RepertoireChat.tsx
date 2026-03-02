@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase';
 interface RepertoireChatProps {
   report: ScoutingReport;
   onClose?: () => void; // Optional, won't show close button if not provided
+  /** When true, show grayed-out state with "Requires sign in" instead of chat */
+  requiresSignIn?: boolean;
 }
 
 interface Message {
@@ -15,7 +17,7 @@ interface Message {
   timestamp: Date;
 }
 
-const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose }) => {
+const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requiresSignIn }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -109,6 +111,20 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose }) => {
       return () => clearTimeout(timer);
     }
   }, [isExpanded]);
+
+  if (requiresSignIn) {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-lg opacity-60">
+        <div className="w-full flex items-center justify-between p-4 cursor-not-allowed">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-slate-500" />
+            <h3 className="text-lg font-semibold text-slate-400">Repertoire Analysis Chat</h3>
+          </div>
+          <span className="text-sm text-slate-500">Requires sign in</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!isExpanded) {
     return (
