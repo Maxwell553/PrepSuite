@@ -258,7 +258,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             </div>
                             <h3 className="text-2xl font-bold mb-3 text-white dark:text-white text-gray-900">Multi-Source Game Aggregation</h3>
                             <p className="text-slate-400 dark:text-slate-400 text-gray-600 leading-relaxed">
-                                Analyzes up to 5,000 games from Chess.com, Lichess, and OTB tournament databases. Get a complete picture of your opponent's playing style across online and over-the-board play.
+                                Analyzes up to 2,000 games from Chess.com, Lichess, and OTB tournament databases. Get a complete picture of your opponent's playing style across online and over-the-board play.
                             </p>
                         </div>
 

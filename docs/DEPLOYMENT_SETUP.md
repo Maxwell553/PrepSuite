@@ -217,7 +217,7 @@ export VITE_SUPABASE_URL=your_supabase_url
 export VITE_SUPABASE_ANON_KEY=your_anon_key
 ./deploy.sh
 ```
-Prerequisites: `gcloud auth login`, and Secret Manager secrets `supabase-jwt-secret`, `supabase-url`.
+Prerequisites: `gcloud auth login`, and Secret Manager secrets `supabase-jwt-secret`, `supabase-url`, `supabase-service-role-key`.
 
 ---
 
@@ -240,7 +240,7 @@ Prerequisites: `gcloud auth login`, and Secret Manager secrets `supabase-jwt-sec
 **Cloud Run deployment fails:**
 - Verify `GCP_SA_KEY` secret is valid JSON with Cloud Build and Cloud Run permissions
 - Check `GCP_PROJECT_ID` matches your GCP project
-- Ensure Secret Manager has `supabase-jwt-secret` and `supabase-url` secrets
+- Ensure Secret Manager has `supabase-jwt-secret`, `supabase-url`, and `supabase-service-role-key` secrets
 - Enable Cloud Build API and Cloud Run API on the project
 
 **Supabase deployment fails:**
@@ -252,6 +252,13 @@ Prerequisites: `gcloud auth login`, and Secret Manager secrets `supabase-jwt-sec
 - Check migration SQL syntax
 - Verify database permissions
 - Test migration locally first: `supabase db push`
+
+**OTB games not fetching ("Supabase not configured, skipping OTB fetch"):**
+- The pipeline needs `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to query the `otb_games` table
+- Create secret in GCP: `gcloud secrets create supabase-service-role-key --data-file=-` (paste your Supabase service_role key, then Ctrl+D)
+- Get the key from Supabase Dashboard → Project Settings → API → `service_role` (secret, not anon)
+- Grant Cloud Run access: ensure the Cloud Run service account can access the secret
+- Redeploy so Cloud Run receives the secret
 
 ---
 

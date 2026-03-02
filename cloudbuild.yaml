@@ -58,7 +58,7 @@ steps:
       - '--set-env-vars'
       - 'NODE_ENV=production,VERTEX_PROJECT_ID=${PROJECT_ID},VERTEX_LOCATION=${_REGION}'
       - '--set-secrets'
-      - 'SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,SUPABASE_URL=supabase-url:latest,GEMINI_API_KEY=gemini-api-key:latest'
+      - 'SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,SUPABASE_URL=supabase-url:latest,SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest,GEMINI_API_KEY=gemini-api-key:latest'
 
 images:
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE_NAME}:${BUILD_ID}'
