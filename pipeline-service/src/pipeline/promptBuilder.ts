@@ -19,8 +19,8 @@ import {
 } from './moveSequenceExtractor.js';
 
 // Prompt size limits: keep token count manageable while retaining statistical coverage
-const MAX_GAME_METADATA_IN_PROMPT = 20;
-const MAX_MOVE_LIST_IN_PROMPT = 40;
+const MAX_GAME_METADATA_IN_PROMPT = 10;
+const MAX_MOVE_LIST_IN_PROMPT = 14;
 
 /** Stratified sample: pick games from each opening group for diversity. Preserves per-opening representation. */
 export function stratifiedSample<T>(
@@ -56,7 +56,7 @@ export function stratifiedSample<T>(
   return sampled;
 }
 
-/** Format engine analysis into prompt text */
+/** Format engine analysis into prompt text. Excludes mistakes-per-game and endgame-accuracy (poor skill metrics). */
 function formatEngineAnalysis(engineAnalysis: GameAnalysis[], allGames: GameData[]): string {
   if (engineAnalysis.length === 0) return '';
 
@@ -79,29 +79,17 @@ function formatEngineAnalysis(engineAnalysis: GameAnalysis[], allGames: GameData
   Object.entries(analysesByOpening).forEach(([eco, data]) => {
     if (data.analyses.length >= 3) {
       const openingName = data.games[0]?.openingName || data.games[0]?.eco || eco;
-      const totalMistakes = data.analyses.reduce((sum, a) => sum + a.criticalMistakes.length, 0);
-      const avgEndgameAccuracy =
-        data.analyses.reduce((sum, a) => sum + a.endgameAccuracy, 0) / data.analyses.length;
       const avgEvaluation =
         data.analyses.reduce((sum, a) => sum + a.averageEvaluation, 0) / data.analyses.length;
-      const mistakesPerGame = (totalMistakes / data.analyses.length).toFixed(2);
-
       openingInsights.push(
-        `${openingName} (${data.analyses.length}g): mistakes=${totalMistakes} (${mistakesPerGame}/g), endgame=${avgEndgameAccuracy.toFixed(1)}%, eval=${avgEvaluation > 0 ? '+' : ''}${(avgEvaluation / 100).toFixed(2)}`,
+        `${openingName} (${data.analyses.length}g): avg eval=${avgEvaluation > 0 ? '+' : ''}${(avgEvaluation / 100).toFixed(2)}`,
       );
     }
   });
 
-  const totalMistakes = engineAnalysis.reduce((sum, a) => sum + a.criticalMistakes.length, 0);
-  const avgEndgameAccuracy =
-    engineAnalysis.reduce((sum, a) => sum + a.endgameAccuracy, 0) / engineAnalysis.length;
-  const mistakesPerGame =
-    engineAnalysis.length > 0 ? (totalMistakes / engineAnalysis.length).toFixed(2) : '0';
-
   return `
-ENGINE ANALYSIS (sample for tactical/accuracy metrics — do NOT cite this count in report text):
-Total mistakes (>150cp): ${totalMistakes} (${mistakesPerGame}/game), Endgame accuracy: ${avgEndgameAccuracy.toFixed(1)}%
-${openingInsights.length > 0 ? 'By opening:\n' + openingInsights.join('\n') : ''}
+ENGINE ANALYSIS (sample for tactical patterns — do NOT cite sample count. Do NOT use "mistakes per game" or "endgame accuracy" — these are poor skill metrics. Prefer win rate, opening frequency, and concrete tactical themes from game results):
+${openingInsights.length > 0 ? 'By opening:\n' + openingInsights.join('\n') : 'Use game results and opening stats instead.'}
   `.trim();
 }
 
@@ -178,7 +166,7 @@ RULES (apply to entire response):
 - Only generalise ("often"/"typically") for patterns in 10+ games. For <10 say "appeared in X games".
 - Do not reference specific game numbers ("Game 19"). Use aggregate language only.
 - Do not use ** (bold markdown). Use * only for bullet points.
-- whiteOpenings = openings ${identity.verifiedName} FACES when they have White (the opponent's defense, e.g. Sicilian Defense). Phrase as "faces [opening] as White with X% win rate" — never say they "play" the Sicilian or Queen's Gambit when they have White; the opponent plays the defense. blackDefenses = what they PLAY as Black. Phrase as "plays [opening] as Black with X% win rate". Never confuse.
+- CRITICAL: whiteOpenings = what the OPPONENT plays when ${identity.verifiedName} has White (e.g. Sicilian Defense, Queen's Gambit Declined). White does NOT initiate these — Black does. Phrase as "faces the Sicilian Defense" or "most often faces the Sicilian as White" — NEVER "plays the Sicilian as White". blackDefenses = what ${identity.verifiedName} PLAYS as Black (they initiate, e.g. Sicilian Defense, King's Indian Defense). Phrase as "plays the Sicilian Defense as Black". For White openings they initiate (e.g. English, Italian, Ruy Lopez), say "plays the English as White".
 - Use human opening names only (e.g. "Sicilian Defense", "Queen's Gambit"). Never use ECO codes (A05, B20, etc.) in narrative text — readers expect names like "King's Pawn Game", not "B00".
 - Weight all games equally regardless of date.
 - winRate/frequency are decimals 0.0-1.0. totalGames must = wins+draws+losses. Never return NaN/null.
@@ -186,6 +174,7 @@ RULES (apply to entire response):
 
 DATA SUMMARY (${totalGamesCount} games):
 Chess.com: ${chessComGames.length} | Lichess: ${lichessGames.length} | OTB: ${otbGames.length}
+${otbGames.length === 0 ? 'WARNING: No OTB games. Do NOT make claims about OTB repertoire, opening variety, or preparation against this player. State that OTB data is unavailable. Avoid generic phrases like "opponents cannot rely on specific opening preparation" or "frequently varies opening choices" when OTB=0.' : ''}
 Decisive: ${allGames.filter((g) => g.result === '1-0' || g.result === '0-1').length} | Draws: ${allGames.filter((g) => g.result === '1/2-1/2').length}
 ${dateRange ? `Date range: ${dateRangeStr}` : ''}
 
@@ -211,9 +200,9 @@ ${metadataSample
       )
       .join('\n')}
 
-MOVE SEQUENCES (${moveListSample.length} of ${totalGamesCount}, up to 20 moves, stratified):
+MOVE SEQUENCES (${moveListSample.length} of ${totalGamesCount}, up to 10 moves, stratified):
 ${(() => {
-      const maxMovesPerGame = 20;
+      const maxMovesPerGame = 10;
       return moveListSample
         .map((g, idx) => {
           const moves = g.pgn && g.pgn.trim().length > 20 ? parsePGNMoves(g.pgn) : [];
@@ -239,7 +228,7 @@ Required fields:
 - strategicSummary: comprehensive White+Black analysis
 - blackStrategicSummary: Black repertoire ONLY (do NOT mention White openings)
 - preparationSummary: White repertoire ONLY (do NOT mention Black defenses)
-- tacticalProfile, endgameReliability: detailed text
+- tacticalProfile, endgameReliability: focus on win rates, opening patterns, and concrete themes from game results. Do NOT cite "mistakes per game" or "endgame accuracy" — these metrics are unreliable for skill assessment.
 - strengths[3], weaknesses[3]: evidence from 10+ games each, using engine analysis where available
 - specificVulnerability, tacticalRecommendation: actionable, citing game counts
 - suggestedLines[3]: prefer lines with 10+ games and 5-6 moves. Format: "1.e4 c5 2.Nf3 d6... (Xg, Y% WR)"

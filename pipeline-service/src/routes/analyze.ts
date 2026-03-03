@@ -9,6 +9,7 @@ import { fetchGames } from '../pipeline/gameFetcher.js';
 import { fetchOtbGames } from '../pipeline/otbGames.js';
 import { parseChessComGames, parseLichessGames, standardizePgnForBoard } from '../pipeline/gameParser.js';
 import { fetchLichessPgnBatch } from '../pipeline/lichess.js';
+import { validateAndRefetchPgn } from '../pipeline/pgnValidator.js';
 import { identifyOpeningsBatch } from '../pipeline/openingClassifier.js';
 import { generateStats } from '../pipeline/statsAggregator.js';
 import { extractMostPlayedLines } from '../pipeline/moveSequenceExtractor.js';
@@ -202,10 +203,85 @@ analyzeRoute.post('/analyze', async (c) => {
       const onlineMerged = [...chessComGames, ...lichessGames].sort(
         (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
       );
-      const onlineSlice = onlineMerged.slice(0, onlineLimit);
-      const allGames = [...otbSlice, ...onlineSlice].sort(
+      let onlineSlice = onlineMerged.slice(0, onlineLimit);
+      let allGames = [...otbSlice, ...onlineSlice].sort(
         (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
       );
+
+      // Validate PGN and refetch missing/invalid notation in pipeline (before report)
+      let validationResult = await validateAndRefetchPgn(
+        allGames,
+        identity.chessComUsername || '',
+        identity.lichessUsername || '',
+      );
+      allGames = validationResult.valid;
+
+      // Refetch more games to fill slots when validation removed some
+      const maxRefillRounds = 2;
+      const originalOnlineIds = new Set(onlineSlice.map((g) => g.id));
+      let invalidIds = new Set(
+        [...originalOnlineIds].filter((id) => !allGames.some((g) => g.id === id)),
+      );
+      for (let round = 0; round < maxRefillRounds && validationResult.invalidCount > 0 && hasOnline; round++) {
+        const toFill = validationResult.invalidCount;
+        logger.info({ toFill, round: round + 1 }, '[Analyze] Refetching games to fill invalid PGN slots');
+        const refetchLimit = onlineLimit + toFill;
+        const refetchResult = await fetchGames(
+          identity.chessComUsername || '',
+          identity.lichessUsername || '',
+          refetchLimit,
+          sse,
+        );
+        const refetchChessCom = parseChessComGames(
+          refetchResult.chessComGames,
+          identity.chessComUsername,
+        );
+        const refetchLichess = parseLichessGames(
+          refetchResult.lichessGamesNdjson,
+          identity.lichessUsername,
+        );
+        if (refetchLichess.length > 0) {
+          const pgnMap = await fetchLichessPgnBatch(refetchLichess.map((g) => g.id));
+          for (const g of refetchLichess) {
+            const pgn = pgnMap.get(g.id);
+            if (pgn) g.pgn = standardizePgnForBoard(pgn);
+          }
+        }
+        const refetchMerged = [...refetchChessCom, ...refetchLichess].sort(
+          (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
+        );
+        const seenIds = new Set(allGames.map((g) => g.id));
+        const newGames = refetchMerged.filter(
+          (g) => !seenIds.has(g.id) && !invalidIds.has(g.id),
+        );
+        const refetchValid = await validateAndRefetchPgn(
+          newGames,
+          identity.chessComUsername || '',
+          identity.lichessUsername || '',
+        );
+        const validIds = new Set(refetchValid.valid.map((g) => g.id));
+        for (const g of newGames) {
+          if (!validIds.has(g.id)) invalidIds.add(g.id);
+        }
+        const added = refetchValid.valid.length;
+        allGames = [...allGames, ...refetchValid.valid].sort(
+          (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
+        );
+        const otbGamesFiltered = allGames.filter((g) => g.source === 'otb').slice(0, otbLimit);
+        const onlineGamesFiltered = allGames
+          .filter((g) => g.source !== 'otb')
+          .slice(0, onlineLimit);
+        allGames = [...otbGamesFiltered, ...onlineGamesFiltered].sort(
+          (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
+        );
+        validationResult = await validateAndRefetchPgn(
+          allGames,
+          identity.chessComUsername || '',
+          identity.lichessUsername || '',
+        );
+        allGames = validationResult.valid;
+        if (validationResult.invalidCount === 0 || added === 0) break;
+      }
 
       logger.info(
         {

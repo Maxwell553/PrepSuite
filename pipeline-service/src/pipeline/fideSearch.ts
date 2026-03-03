@@ -1,6 +1,5 @@
 import { searchFideByName as searchLocal } from '../lib/fideLocalDb.js';
 import { logger } from '../lib/logger.js';
-import { namesMatch } from './verification.js';
 
 export interface FideSearchResult {
   fideId: string;
@@ -120,6 +119,7 @@ export function parseFideSearchResults(html: string): FideSearchResult[] {
  * Score how well a FIDE search result matches the searched name.
  * Higher score = better match.
  */
+/** @deprecated No longer used; FIDE matching now requires exact name match. */
 export function scoreFideMatch(searchName: string, result: FideSearchResult): number {
   const normalize = (s: string) =>
     s
@@ -163,9 +163,39 @@ export function scoreFideMatch(searchName: string, result: FideSearchResult): nu
 }
 
 /**
+ * Check if search name and FIDE result name match exactly.
+ * Handles "Last, First" vs "First Last" format by comparing normalized part sets.
+ * No fuzzy matching — prevents wrong-person matches (e.g. "David Mashkov" vs "Nunn, John D M").
+ */
+function fideNamesMatchExact(searchName: string, resultName: string): boolean {
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const searchParts = new Set(normalize(searchName).split(' ').filter((p) => p.length > 0));
+  const resultParts = new Set(
+    normalize(resultName)
+      .replace(/,/g, ' ')
+      .split(' ')
+      .filter((p) => p.length > 0),
+  );
+
+  if (searchParts.size === 0 || resultParts.size === 0) return false;
+  if (searchParts.size !== resultParts.size) return false;
+
+  for (const p of searchParts) {
+    if (!resultParts.has(p)) return false;
+  }
+  return true;
+}
+
+/**
  * Pick the best FIDE match from search results.
- * Returns the best match only if score >= 0.5 AND namesMatch(searchName, result.name).
- * ALWAYS rejects if the result name does not match the entered name (prevents wrong person).
+ * Returns a match ONLY when the name matches exactly (same set of normalized parts).
+ * Rejects fuzzy matches to prevent wrong-person results.
  */
 export function pickBestFideMatch(
   searchName: string,
@@ -173,29 +203,15 @@ export function pickBestFideMatch(
 ): FideSearchResult | null {
   if (results.length === 0) return null;
 
-  let best: FideSearchResult | null = null;
-  let bestScore = 0;
-
-  for (const r of results) {
-    const score = scoreFideMatch(searchName, r);
-    if (score > bestScore && namesMatch(searchName, r.name)) {
-      bestScore = score;
-      best = r;
-    }
+  const exact = results.find((r) => fideNamesMatchExact(searchName, r.name));
+  if (exact) {
+    logger.info({ name: exact.name, fideId: exact.fideId }, '[FideSearch] Exact match');
+    return exact;
   }
 
-  if (bestScore >= 0.5 && best && namesMatch(searchName, best.name)) {
-    logger.info({ name: best.name, fideId: best.fideId, score: bestScore }, '[FideSearch] Best match');
-    return best;
-  }
-
-  if (best && !namesMatch(searchName, best.name)) {
-    logger.info(
-      { searchName, resultName: best.name, fideId: best.fideId },
-      '[FideSearch] Rejecting: name does not match entered name',
-    );
-  } else {
-    logger.info({ bestScore }, '[FideSearch] No match above threshold');
-  }
+  logger.info(
+    { searchName, candidates: results.slice(0, 3).map((r) => r.name) },
+    '[FideSearch] No exact name match',
+  );
   return null;
 }

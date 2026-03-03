@@ -16,6 +16,9 @@ export function sanitizePgn(pgn: string): string {
   s = s.replace(/\[\s*FEN\s+"[^"]*"\s*\]/gi, '');
   s = s.replace(/\[\s*SetUp\s+"?[^"]*"?\s*\]/gi, '');
   s = s.replace(/\[\s*CurrentPosition\s+"[^"]*"\s*\]/gi, ''); // Chess.com-specific
+  s = s.replace(/\[\s*GameId\s+"[^"]*"\s*\]/gi, ''); // Lichess export format
+  s = s.replace(/\[\s*ECOUrl\s+"[^"]*"\s*\]/gi, ''); // Chess.com - long URLs can cause issues
+  s = s.replace(/\[\s*Link\s+"[^"]*"\s*\]/gi, ''); // Chess.com - long URLs
 
   // Remove Numeric Annotation Glyphs ($0-$255) that can confuse the move parser
   s = s.replace(/\$\d+/g, '');

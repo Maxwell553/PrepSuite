@@ -15,6 +15,9 @@ export function standardizePgnForBoard(pgn: string): string {
   s = s.replace(/\[\s*FEN\s+"[^"]*"\s*\]/gi, '');
   s = s.replace(/\[\s*SetUp\s+"?[^"]*"?\s*\]/gi, '');
   s = s.replace(/\[\s*CurrentPosition\s+"[^"]*"\s*\]/gi, ''); // Chess.com-specific
+  s = s.replace(/\[\s*GameId\s+"[^"]*"\s*\]/gi, ''); // Lichess export format
+  s = s.replace(/\[\s*ECOUrl\s+"[^"]*"\s*\]/gi, ''); // Chess.com - long URLs
+  s = s.replace(/\[\s*Link\s+"[^"]*"\s*\]/gi, ''); // Chess.com - long URLs
   // Remove NAGs and inline comments (Chess.com {[%clk ...]}, Lichess {[%eval ...]})
   s = s.replace(/\$\d+/g, '');
   while (/\{[^{}]*\}/.test(s)) {

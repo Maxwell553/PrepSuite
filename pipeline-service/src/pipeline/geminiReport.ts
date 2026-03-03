@@ -10,7 +10,9 @@ import type { ScoutingReport } from '../lib/types.js';
 
 const GEMINI_MODEL_PRIMARY = 'gemini-2.5-flash';
 const GEMINI_MODEL_FALLBACK = 'gemini-2.0-flash-001';
-const GEMINI_TIMEOUT_MS = 120_000;
+// 4 min timeout: Vertex AI can be slow in production (cold starts, large prompts).
+// Cloud Run request timeout is 300s; keep under that.
+const GEMINI_TIMEOUT_MS = 240_000;
 const MAX_RETRIES = 2;
 
 /** Errors that indicate the model may not be available (try fallback) */

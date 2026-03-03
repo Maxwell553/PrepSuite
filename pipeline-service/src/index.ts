@@ -15,6 +15,7 @@ import { loggerMiddleware } from './middleware/logger.js';
 import { healthRoute } from './routes/health.js';
 import { analyzeRoute } from './routes/analyze.js';
 import { chatRoute } from './routes/chat.js';
+import { fideRatingHistoryRoute } from './routes/fideRatingHistory.js';
 import { logger } from './lib/logger.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,6 +33,63 @@ app.route('/health', healthRoute);
 app.use('/api/*', authMiddleware);
 app.route('/api', analyzeRoute);
 app.route('/api', chatRoute);
+app.route('/api', fideRatingHistoryRoute);
+
+// ── Lichess PGN export proxy (for AnalysisBoard when inline PGN missing) ──
+// Production has no Vite proxy; frontend fetches /lichess-export/game/export/{id}
+app.all('/lichess-export/*', async (c) => {
+  const lichessPath = c.req.path.replace(/^\/lichess-export/, '');
+  const url = `https://lichess.org${lichessPath}`;
+  try {
+    const res = await fetch(url, {
+      method: c.req.method,
+      headers: { Accept: 'application/x-chess-pgn' },
+    });
+    const text = await res.text();
+    return c.text(text, res.status, {
+      'Content-Type': res.headers.get('Content-Type') || 'application/x-chess-pgn',
+    });
+  } catch (err) {
+    logger.warn({ err, url }, '[Lichess] Proxy fetch failed');
+    return c.text('PGN fetch failed', 502);
+  }
+});
+
+// ── Chess.com PGN refetch (for AnalysisBoard when inline PGN missing/invalid) ──
+// Fetches from player archive by game uuid and playedAt month
+app.get('/chesscom-pgn/export/:username/:gameId', async (c) => {
+  const username = c.req.param('username');
+  const gameId = c.req.param('gameId');
+  const playedAt = c.req.query('playedAt');
+  if (!username || !gameId) {
+    return c.json({ error: 'username and gameId required' }, 400);
+  }
+  try {
+    const date = playedAt ? new Date(playedAt) : new Date();
+    const yyyy = date.getUTCFullYear();
+    const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const archiveUrl = `https://api.chess.com/pub/player/${encodeURIComponent(username.toLowerCase())}/games/${yyyy}/${mm}`;
+    const res = await fetch(archiveUrl, {
+      headers: { 'User-Agent': 'PrepSuite-Pipeline/1.0' },
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status, archiveUrl }, '[ChessCom] Archive fetch failed');
+      return c.text('PGN not found', 404);
+    }
+    const data = (await res.json()) as { games?: { uuid?: string; pgn?: string }[] };
+    const games = data.games || [];
+    const match = games.find((g) => g.uuid === gameId);
+    if (!match?.pgn) {
+      return c.text('PGN not found', 404);
+    }
+    return c.text(match.pgn, 200, {
+      'Content-Type': 'application/x-chess-pgn',
+    });
+  } catch (err) {
+    logger.warn({ err, username, gameId }, '[ChessCom] PGN refetch failed');
+    return c.text('PGN fetch failed', 502);
+  }
+});
 
 // ── Static frontend serving ──────────────────────────────────────────
 // Serve the Vite build output (../dist relative to pipeline-service/)

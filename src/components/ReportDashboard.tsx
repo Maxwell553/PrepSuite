@@ -1,13 +1,15 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  LineChart, Line, ResponsiveContainer,
 } from 'recharts';
-import { Shield, Target, Zap, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, Crosshair, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import { Shield, Target, Zap, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, Crosshair, BookOpen, ChevronDown, ChevronUp, Activity } from 'lucide-react';
 import { ScoutingReport, OpeningStat } from '../types';
 import AnalysisBoard from './AnalysisBoard';
 import RepertoireChat from './RepertoireChat';
 import { aggregateOpeningsBySource } from '../lib/openingStats';
+import { supabase } from '../lib/supabase';
 
 interface ReportDashboardProps {
   report: ScoutingReport;
@@ -92,6 +94,171 @@ function RepertoireChartSection({
   );
 }
 
+interface RatingHistoryPoint {
+  date: string;
+  classicalRating?: number;
+  rapidRating?: number;
+  blitzRating?: number;
+  uscfRating?: number;
+}
+
+function ActivityReportSection({ player }: { player: ScoutingReport['player'] }) {
+  const [activeTab, setActiveTab] = useState<'chart' | 'table'>('chart');
+  const [fideHistory, setFideHistory] = useState<Array<{
+    date: string;
+    classicalRating?: number;
+    rapidRating?: number;
+    blitzRating?: number;
+  }>>([]);
+
+  useEffect(() => {
+    if (!player.fideId?.trim()) return;
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const baseUrl = import.meta.env.VITE_PIPELINE_SERVICE_URL || '';
+        const url = `${baseUrl}/api/fide-rating-history/${player.fideId}`;
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        });
+        if (res.ok) {
+          const { history } = await res.json();
+          if (Array.isArray(history) && history.length > 0) {
+            setFideHistory(history);
+          }
+        }
+      } catch {
+        // ignore — use current rating as fallback
+      }
+    })();
+    return () => controller.abort();
+  }, [player.fideId]);
+
+  const fideRating = player.currentRating != null && player.currentRating > 0 ? player.currentRating : null;
+  const uscfRating = player.uscfRating != null && player.uscfRating > 0 ? player.uscfRating : null;
+
+  const chartData: RatingHistoryPoint[] = useMemo(() => {
+    if (fideHistory.length > 0) {
+      const sorted = [...fideHistory].sort((a, b) => b.date.localeCompare(a.date));
+      const latestDate = sorted[0]?.date;
+      return fideHistory.map((p) => ({
+        date: p.date,
+        classicalRating: p.classicalRating,
+        rapidRating: p.rapidRating,
+        blitzRating: p.blitzRating,
+        // USCF: no history API; show current rating only at most recent point
+        uscfRating: p.date === latestDate ? (uscfRating ?? undefined) : undefined,
+      }));
+    }
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const point: RatingHistoryPoint = { date: `${yyyy}-${mm}` };
+    if (fideRating) point.classicalRating = fideRating;
+    if (uscfRating) point.uscfRating = uscfRating;
+    return Object.keys(point).length > 1 ? [point] : [];
+  }, [fideHistory, fideRating, uscfRating]);
+
+  const hasChartData = chartData.length > 0 && chartData.some((d) =>
+    d.classicalRating != null || d.rapidRating != null || d.blitzRating != null || d.uscfRating != null,
+  );
+
+  return (
+    <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
+      <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">
+        <Activity className="w-5 h-5 text-indigo-400" />
+        PROGRESS
+      </h3>
+      <div className="flex gap-4 mb-4">
+        <button
+          type="button"
+          onClick={() => setActiveTab('chart')}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            activeTab === 'chart' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+          }`}
+        >
+          Rating Chart
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('table')}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            activeTab === 'table' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+          }`}
+        >
+          Rating Table
+        </button>
+      </div>
+      <div className="h-64 bg-slate-950/50 rounded-xl border border-slate-800 p-6">
+        {activeTab === 'chart' && hasChartData ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} tickFormatter={(v) => v.slice(0, 7)} />
+              <YAxis stroke="#94a3b8" fontSize={10} domain={['dataMin - 50', 'dataMax + 50']} />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}
+                labelFormatter={(v) => v}
+                formatter={(value: number, name: string) => [value, name]}
+              />
+              {chartData.some((d) => d.classicalRating != null) && (
+                <Line type="monotone" dataKey="classicalRating" stroke="#818cf8" strokeWidth={2} dot={{ r: 2 }} name="Classical" connectNulls />
+              )}
+              {chartData.some((d) => d.rapidRating != null) && (
+                <Line type="monotone" dataKey="rapidRating" stroke="#f59e0b" strokeWidth={2} dot={{ r: 2 }} name="Rapid" connectNulls />
+              )}
+              {chartData.some((d) => d.blitzRating != null) && (
+                <Line type="monotone" dataKey="blitzRating" stroke="#ec4899" strokeWidth={2} dot={{ r: 2 }} name="Blitz" connectNulls />
+              )}
+              {uscfRating != null && (
+                <Line type="monotone" dataKey="uscfRating" stroke="#34d399" strokeWidth={2} dot={{ r: 2 }} name="USCF" connectNulls />
+              )}
+            </LineChart>
+          </ResponsiveContainer>
+        ) : activeTab === 'table' ? (
+          <div className="flex flex-col justify-center h-full">
+            <p className="text-slate-400 text-sm mb-4">No games found for analysis. Current ratings:</p>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">FIDE Rating</div>
+                <div className="text-3xl font-bold text-indigo-400">
+                  {fideRating ?? '—'}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">{player.titles?.join(', ') || 'No title'}</div>
+              </div>
+              <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">USCF Rating</div>
+                <div className="text-3xl font-bold text-emerald-400">
+                  {uscfRating ?? '—'}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">{player.country || ''}</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col justify-center h-full text-center">
+            <p className="text-slate-400 text-sm mb-4">No games found for analysis. Current ratings:</p>
+            <div className="grid grid-cols-2 gap-6 max-w-md mx-auto">
+              <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">FIDE Rating</div>
+                <div className="text-3xl font-bold text-indigo-400">{fideRating ?? '—'}</div>
+                <div className="text-xs text-slate-400 mt-1">{player.titles?.join(', ') || 'No title'}</div>
+              </div>
+              <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">USCF Rating</div>
+                <div className="text-3xl font-bold text-emerald-400">{uscfRating ?? '—'}</div>
+                <div className="text-xs text-slate-400 mt-1">{player.country || ''}</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignInForChat }) => {
   const { player, whiteOpenings, blackDefenses } = report;
 
@@ -105,13 +272,29 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
 
   const openingsBySource = useMemo(() => {
     if (!report.games || report.games.length === 0 || !hasBothSources) return null;
-    const targetNames = [
+    const baseTargets = [
       player.name,
       player.platforms?.chessCom,
       player.platforms?.lichess,
       (player as { actualUsername?: string }).actualUsername,
+      (player as { fideName?: string }).fideName,
     ].filter(Boolean) as string[];
-    return aggregateOpeningsBySource(report.games as { source?: string; openingName?: string; eco?: string; white: string; black: string; result: string }[], targetNames);
+    // OTB games use different name formats (e.g. "Gukesh D" vs "Gukesh Dommaraju"). Include names from OTB games that share a significant word with base targets.
+    const games = report.games as { source?: string; openingName?: string; eco?: string; white: string; black: string; result: string }[];
+    const otbGames = games.filter((g) => (g.source || '').toLowerCase() === 'otb');
+    const baseWords = new Set(baseTargets.flatMap((t) => t.toLowerCase().replace(/,/g, ' ').split(/\s+/).filter((w) => w.length >= 2)));
+    const otbNames = new Set<string>();
+    for (const g of otbGames) {
+      for (const n of [g.white, g.black]) {
+        if (!n) continue;
+        const words = n.toLowerCase().replace(/,/g, ' ').split(/\s+/).filter((w) => w.length >= 2);
+        if (words.some((w) => baseWords.has(w) || [...baseWords].some((bw) => bw.includes(w) || w.includes(bw)))) {
+          otbNames.add(n.trim());
+        }
+      }
+    }
+    const targetNames = [...new Set([...baseTargets, ...otbNames])];
+    return aggregateOpeningsBySource(games, targetNames);
   }, [report.games, hasBothSources, player]);
 
   // Prevent auto-scroll to chat section on mount
@@ -121,6 +304,11 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   }, []);
+
+  const hasNoGames = !report.games || report.games.length === 0;
+  const hasFideOrUscf = !!(player.fideId || (player.currentRating != null && player.currentRating > 0) || (player.uscfRating != null && player.uscfRating > 0));
+  const showActivityReport = hasFideOrUscf;
+  const showMainContent = !hasNoGames || !hasFideOrUscf;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
@@ -208,6 +396,9 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
       </div>
 
       <div className="space-y-8">
+        {/* Main content: hide when no games and we're showing activity report only */}
+        {showMainContent && (
+        <>
         {/* Top Row: Strategic Profile (left) | Tactical Rec + Specific Vulnerability (right, same width, combined height = left) */}
         <div className="grid lg:grid-cols-3 gap-8 items-stretch">
           <section className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
@@ -353,8 +544,13 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
             </div>
           </section>
         </div>
-      </div>
+        </>
+        )}
 
+      {/* Progress chart: below repertoire strategy & defensive philosophy, above Game Analysis Board */}
+      {showActivityReport && (
+        <ActivityReportSection player={player} />
+      )}
 
       {/* Analysis Board Section */}
       {report.games && report.games.length > 0 && (
@@ -362,7 +558,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
           <AnalysisBoard 
             games={report.games} 
             playerName={player.name}
-            playerUsername={(player as any).actualUsername || player.platforms?.chessCom || player.platforms?.lichess || undefined}
+            playerUsername={(player as { actualUsername?: string }).actualUsername || player.platforms?.chessCom || player.platforms?.lichess || undefined}
           />
         </section>
       )}
@@ -371,6 +567,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
       <section className="mt-8" id="chat-section" style={{ scrollMarginTop: '0px' }}>
         <RepertoireChat report={report} requiresSignIn={requiresSignInForChat} />
       </section>
+    </div>
     </div>
   );
 };

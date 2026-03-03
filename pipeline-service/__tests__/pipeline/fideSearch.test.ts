@@ -89,4 +89,12 @@ describe('pickBestFideMatch', () => {
     const best = pickBestFideMatch('Max Ingargiola', results);
     expect(best).toBeNull();
   });
+
+  it('rejects fuzzy match (e.g. David Mashkov must not match Nunn, John D M)', () => {
+    const results = [
+      { fideId: '400017', name: 'Nunn, John D M', federation: 'ENG', title: 'GM', rating: 0, birthYear: '' },
+    ];
+    const best = pickBestFideMatch('David Mashkov', results);
+    expect(best).toBeNull();
+  });
 });

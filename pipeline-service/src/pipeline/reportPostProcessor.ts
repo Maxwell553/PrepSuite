@@ -97,6 +97,12 @@ export function postProcessReport(
     (reportData.player as unknown as Record<string, unknown>).actualUsername = actualUsername;
   }
 
+  // FIDE name (e.g. "Carlsen, Magnus") for OTB game matching in opening stats.
+  // OTB games use FIDE format; online usernames don't match, causing empty OTB graphs.
+  if (identity.fideProfile?.name) {
+    (reportData.player as unknown as Record<string, unknown>).fideName = identity.fideProfile.name;
+  }
+
   // Ensure required arrays exist
   reportData.strengths = reportData.strengths || [];
   reportData.weaknesses = reportData.weaknesses || [];

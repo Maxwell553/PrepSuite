@@ -28,6 +28,10 @@ export default defineConfig(({ mode }) => {
           target: 'https://lichess.org',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/lichess-export/, ''),
+        },
+        '/chesscom-pgn': {
+          target: 'http://localhost:8080',
+          changeOrigin: true,
         }
       }
     },

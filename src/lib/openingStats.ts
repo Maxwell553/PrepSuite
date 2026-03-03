@@ -5,11 +5,52 @@
 
 import type { GameData, OpeningStat } from '../types';
 
+/** Canonical opening names: avoid duplicates like "King's Indian" vs "King's Indian Defense" */
+const OPENING_ALIASES: Record<string, string> = {
+  Sicilian: 'Sicilian Defense',
+  'Sicilian Defence': 'Sicilian Defense',
+  Italian: 'Italian Game',
+  French: 'French Defense',
+  'French Defence': 'French Defense',
+  Caro: 'Caro-Kann Defense',
+  'Caro-Kann': 'Caro-Kann Defense',
+  'Caro Kann': 'Caro-Kann Defense',
+  Pirc: 'Pirc Defense',
+  Scandinavian: 'Scandinavian Defense',
+  'Scandinavian Defence': 'Scandinavian Defense',
+  Modern: 'Modern Defense',
+  "Queen's Gambit": "Queen's Gambit Declined",
+  'Queens Gambit': "Queen's Gambit Declined",
+  QGD: "Queen's Gambit Declined",
+  QGA: "Queen's Gambit Accepted",
+  "King's Indian": "King's Indian Defense",
+  'Kings Indian': "King's Indian Defense",
+  KID: "King's Indian Defense",
+  "Queen's Indian": "Queen's Indian Defense",
+  'Queens Indian': "Queen's Indian Defense",
+  'Nimzo-Indian': 'Nimzo-Indian Defense',
+  Nimzo: 'Nimzo-Indian Defense',
+  Grunfeld: 'Grunfeld Defense',
+  Benoni: 'Benoni Defense',
+  Ruy: 'Ruy Lopez',
+  Petrov: 'Petrov Defense',
+  Scotch: 'Scotch Game',
+  Catalan: 'Catalan Opening',
+  English: 'English Opening',
+  Dutch: 'Dutch Defense',
+  Slav: 'Slav Defense',
+};
+
 function getOpeningFamily(name: string): string {
   if (!name) return 'Unknown';
   const beforeColon = name.split(':')[0].trim();
   const beforeParen = beforeColon.split('(')[0].trim();
-  return beforeParen || name;
+  const base = beforeParen || name;
+  const canonical = OPENING_ALIASES[base];
+  if (canonical) return canonical;
+  const lower = base.toLowerCase();
+  const entry = Object.entries(OPENING_ALIASES).find(([k]) => k.toLowerCase() === lower);
+  return entry ? entry[1] : base;
 }
 
 /** Normalize name for matching (handles "Last, First" and "First Last" formats) */
@@ -37,9 +78,15 @@ function namesMatch(name: string, targets: string[]): boolean {
     const matchingCount = nameParts.filter((np) =>
       targetParts.some((tp) => partsMatch(np, tp)),
     ).length;
+    // Match if: 2+ parts match, or single-word match, or first-name + initial (e.g. "Gukesh D" vs "Gukesh Dommaraju")
+    const firstPartMatch = nameParts[0] && targetParts.some((tp) => partsMatch(nameParts[0], tp));
+    const secondPartInitial = nameParts.length === 2 && nameParts[1].length <= 2 && targetParts.some(
+      (tp) => tp.length >= 3 && tp.startsWith(nameParts[1]),
+    );
     return (
       matchingCount >= Math.min(2, nameParts.length) ||
-      (nameParts.length === 1 && targetParts.some((tp) => partsMatch(nameParts[0], tp)))
+      (nameParts.length === 1 && targetParts.some((tp) => partsMatch(nameParts[0], tp))) ||
+      (firstPartMatch && (matchingCount >= 1 || secondPartInitial))
     );
   });
 }

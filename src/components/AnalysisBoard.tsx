@@ -19,8 +19,6 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
   const [game, setGame] = useState<Chess | null>(null);
   const [gamePosition, setGamePosition] = useState<string>('start');
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
-  const [fetchedPgns, setFetchedPgns] = useState<Record<string, string>>({});
-  const [isFetchingPgn, setIsFetchingPgn] = useState(false);
 
   // Early returns for empty games
   if (!games || games.length === 0) {
@@ -172,43 +170,8 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     return 'text-yellow-400';
   };
   
-  // Effective PGN: use inline or fetched Lichess PGN when missing
-  const effectivePgn = currentGame.pgn && currentGame.pgn.trim().length > 10
-    ? currentGame.pgn
-    : (currentGame.id && currentGame.source === 'lichess' ? fetchedPgns[currentGame.id] : null) || currentGame.pgn;
-
-  // Fetch PGN from Lichess when game has no PGN but has id (fallback for saved reports)
-  useEffect(() => {
-    const g = currentGame;
-    if (!g || g.source !== 'lichess' || !g.id) {
-      setIsFetchingPgn(false);
-      return;
-    }
-    if (g.pgn && g.pgn.trim().length > 10) {
-      setIsFetchingPgn(false);
-      return;
-    }
-    if (fetchedPgns[g.id]) {
-      setIsFetchingPgn(false);
-      return;
-    }
-    let cancelled = false;
-    setIsFetchingPgn(true);
-    (async () => {
-      try {
-        const res = await fetch(`/lichess-export/game/export/${g.id}`);
-        if (!res.ok || cancelled) return;
-        const text = await res.text();
-        if (cancelled || !text.trim()) return;
-        setFetchedPgns(prev => ({ ...prev, [g.id!]: text }));
-      } catch {
-        // ignore
-      } finally {
-        if (!cancelled) setIsFetchingPgn(false);
-      }
-    })();
-    return () => { cancelled = true; setIsFetchingPgn(false); };
-  }, [currentGameIndex, currentGame?.id, currentGame?.source, currentGame?.pgn]);
+  // Effective PGN: inline only (no refetch). When invalid, skip to next game with valid PGN.
+  const effectivePgn = currentGame.pgn && currentGame.pgn.trim().length > 10 ? currentGame.pgn : '';
 
   // Load game when currentGameIndex or effective PGN changes
   useEffect(() => {
@@ -233,6 +196,28 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
       setGamePosition('start');
     }
   }, [currentGameIndex, effectivePgn]);
+
+  // When no valid PGN, skip to next game that has valid PGN
+  useEffect(() => {
+    if (game !== null) return; // Current game loaded fine
+    const list = filteredGames;
+    if (list.length <= 1) return;
+
+    const findNextValidIndex = (start: number): number | null => {
+      for (let i = 1; i <= list.length; i++) {
+        const idx = (start + i) % list.length;
+        const g = list[idx];
+        const pgn = g?.pgn && g.pgn.trim().length > 10 ? g.pgn : '';
+        if (pgn && loadPgn(pgn, Chess)) return idx;
+      }
+      return null;
+    };
+
+    const next = findNextValidIndex(currentGameIndex);
+    if (next !== null && next !== currentGameIndex) {
+      setCurrentGameIndex(next);
+    }
+  }, [game, currentGameIndex, filteredGames]);
 
   // Update board position when move index changes
   useEffect(() => {
@@ -493,7 +478,7 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
                   <div className="text-center text-slate-500">
                     <Database className="w-14 h-14 mx-auto mb-2 opacity-50" />
                     <div className="text-sm">
-                      {isFetchingPgn ? 'Loading PGN...' : 'No valid PGN available'}
+                      No valid PGN available
                     </div>
                   </div>
                 </div>
