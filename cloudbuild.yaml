@@ -2,16 +2,18 @@
 # Builds the Docker image with frontend env vars, then deploys to Cloud Run.
 #
 # Substitutions (pass via --substitutions or env):
-#   _VITE_SUPABASE_URL     - Supabase project URL (required)
-#   _VITE_SUPABASE_ANON_KEY - Supabase anon key (required)
-#   _SERVICE_NAME          - Cloud Run service name (default: prepsuite)
-#   _REGION                - Cloud Run region (default: us-central1)
+#   _VITE_SUPABASE_URL        - Supabase project URL (required)
+#   _VITE_SUPABASE_ANON_KEY   - Supabase anon key (required)
+#   _VITE_PIPELINE_SERVICE_URL - Pipeline service URL for frontend (optional; empty = same-origin)
+#   _SERVICE_NAME            - Cloud Run service name (default: prepsuite)
+#   _REGION                  - Cloud Run region (default: us-central1)
 
 substitutions:
   _SERVICE_NAME: prepsuite
   _REGION: us-central1
   _VITE_SUPABASE_URL: ''
   _VITE_SUPABASE_ANON_KEY: ''
+  _VITE_PIPELINE_SERVICE_URL: ''
 
 steps:
   - name: 'gcr.io/cloud-builders/docker'
@@ -21,6 +23,8 @@ steps:
       - 'VITE_SUPABASE_URL=${_VITE_SUPABASE_URL}'
       - '--build-arg'
       - 'VITE_SUPABASE_ANON_KEY=${_VITE_SUPABASE_ANON_KEY}'
+      - '--build-arg'
+      - 'VITE_PIPELINE_SERVICE_URL=${_VITE_PIPELINE_SERVICE_URL}'
       - '-t'
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE_NAME}:${BUILD_ID}'
       - '.'

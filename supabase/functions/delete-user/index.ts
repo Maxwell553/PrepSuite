@@ -80,6 +80,13 @@ serve(async (req) => {
       },
     });
 
+    // Get player_ids from user's reports before deleting (for orphan cleanup)
+    const { data: reports } = await supabaseAdmin
+      .from('scouting_reports')
+      .select('player_id')
+      .eq('user_id', userId);
+    const playerIdsToCheck = [...new Set((reports || []).map((r) => r.player_id))];
+
     // Delete user's scouting reports (explicit deletion, though cascade will handle it)
     console.log('[delete-user] Deleting user scouting reports...');
     const { error: reportsError } = await supabaseAdmin
@@ -92,6 +99,25 @@ serve(async (req) => {
       // Continue with account deletion even if reports deletion fails
     } else {
       console.log('[delete-user] Scouting reports deleted successfully');
+    }
+
+    // Delete orphaned players (players that had only this user's reports and now have none)
+    for (const playerId of playerIdsToCheck) {
+      const { count } = await supabaseAdmin
+        .from('scouting_reports')
+        .select('*', { count: 'exact', head: true })
+        .eq('player_id', playerId);
+      if (count === 0) {
+        const { error: playerError } = await supabaseAdmin
+          .from('players')
+          .delete()
+          .eq('id', playerId);
+        if (playerError) {
+          console.warn('[delete-user] Failed to delete orphaned player:', playerId, playerError);
+        } else {
+          console.log('[delete-user] Deleted orphaned player:', playerId);
+        }
+      }
     }
 
     // Delete the user account from auth.users

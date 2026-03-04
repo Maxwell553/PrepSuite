@@ -10,14 +10,15 @@ Place images in the `public/` directory. They are served at the root URL and **n
 
 ```
 public/
-  logo.png
+  NewLogo.jpg
+  tabimage.png
   hero-banner.jpg
 ```
 
 Use in JSX:
 
 ```tsx
-<img src="/logo.png" alt="Logo" />
+<img src="/NewLogo.jpg" alt="Logo" />
 <img src="/hero-banner.jpg" alt="Hero" />
 ```
 

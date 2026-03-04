@@ -5,6 +5,7 @@
 
 import { Hono } from 'hono';
 import { logger } from '../lib/logger.js';
+import { chatRateLimitMiddleware } from '../middleware/rateLimit.js';
 import { getAccessToken, getVertexUrl, invalidateAccessTokenCache } from '../lib/vertexAuth.js';
 import { validateChatRequest } from '../lib/validation.js';
 import type { ChatContext } from '../lib/types.js';
@@ -266,7 +267,7 @@ async function executeTool(
   }
 }
 
-chatRoute.post('/chat', async (c) => {
+chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
   const requestId = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   logger.info({ requestId }, '[Chat] Request received');
 

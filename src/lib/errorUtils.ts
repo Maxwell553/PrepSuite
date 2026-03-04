@@ -16,6 +16,11 @@ export function getUserFriendlyError(error: unknown, context?: ErrorContext): st
     const message = error.message.toLowerCase();
     const operation = context?.operation || 'operation';
 
+    // Abort/timeout (e.g. AbortSignal.timeout, user abort)
+    if (error.name === 'AbortError' || message.includes('aborted')) {
+      return `Request timed out. The ${operation} is taking longer than expected. Please try again with fewer games.`;
+    }
+
     // Network errors
     if (message.includes('network') || message.includes('fetch') || message.includes('failed to fetch')) {
       return `Network error. Please check your internet connection and try again.`;
@@ -111,8 +116,10 @@ export function isNetworkError(error: unknown): boolean {
 export function isRetryableError(error: unknown): boolean {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
-    // Network errors, timeouts, and 5xx errors are retryable
+    // Network errors, timeouts, aborts, and 5xx errors are retryable
     return isNetworkError(error) ||
+           error.name === 'AbortError' ||
+           message.includes('aborted') ||
            message.includes('timeout') ||
            message.includes('500') ||
            message.includes('502') ||

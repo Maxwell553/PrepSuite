@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { logger } from '../lib/logger.js';
+import { analyzeRateLimitMiddleware } from '../middleware/rateLimit.js';
 import { validateAnalyzeRequest } from '../lib/validation.js';
 import { SSEStream } from '../lib/sse.js';
 import type { ResolvedIdentity } from '../lib/types.js';
@@ -62,7 +63,7 @@ function resolveTargetUsername(games: GameData[], identity: ResolvedIdentity): s
   return best;
 }
 
-analyzeRoute.post('/analyze', async (c) => {
+analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
   // Validate input
   let input;
   try {
@@ -208,79 +209,18 @@ analyzeRoute.post('/analyze', async (c) => {
         (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
       );
 
-      // Validate PGN and refetch missing/invalid notation in pipeline (before report)
-      let validationResult = await validateAndRefetchPgn(
+      // Validate PGN and refetch missing/invalid notation once. After one refetch attempt, drop games that still lack valid PGN.
+      const validationResult = await validateAndRefetchPgn(
         allGames,
         identity.chessComUsername || '',
         identity.lichessUsername || '',
       );
       allGames = validationResult.valid;
-
-      // Refetch more games to fill slots when validation removed some
-      const maxRefillRounds = 2;
-      const originalOnlineIds = new Set(onlineSlice.map((g) => g.id));
-      let invalidIds = new Set(
-        [...originalOnlineIds].filter((id) => !allGames.some((g) => g.id === id)),
-      );
-      for (let round = 0; round < maxRefillRounds && validationResult.invalidCount > 0 && hasOnline; round++) {
-        const toFill = validationResult.invalidCount;
-        logger.info({ toFill, round: round + 1 }, '[Analyze] Refetching games to fill invalid PGN slots');
-        const refetchLimit = onlineLimit + toFill;
-        const refetchResult = await fetchGames(
-          identity.chessComUsername || '',
-          identity.lichessUsername || '',
-          refetchLimit,
-          sse,
+      if (validationResult.invalidCount > 0) {
+        logger.info(
+          { dropped: validationResult.invalidCount },
+          '[Analyze] Dropped games with no valid PGN after single refetch attempt',
         );
-        const refetchChessCom = parseChessComGames(
-          refetchResult.chessComGames,
-          identity.chessComUsername,
-        );
-        const refetchLichess = parseLichessGames(
-          refetchResult.lichessGamesNdjson,
-          identity.lichessUsername,
-        );
-        if (refetchLichess.length > 0) {
-          const pgnMap = await fetchLichessPgnBatch(refetchLichess.map((g) => g.id));
-          for (const g of refetchLichess) {
-            const pgn = pgnMap.get(g.id);
-            if (pgn) g.pgn = standardizePgnForBoard(pgn);
-          }
-        }
-        const refetchMerged = [...refetchChessCom, ...refetchLichess].sort(
-          (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
-        );
-        const seenIds = new Set(allGames.map((g) => g.id));
-        const newGames = refetchMerged.filter(
-          (g) => !seenIds.has(g.id) && !invalidIds.has(g.id),
-        );
-        const refetchValid = await validateAndRefetchPgn(
-          newGames,
-          identity.chessComUsername || '',
-          identity.lichessUsername || '',
-        );
-        const validIds = new Set(refetchValid.valid.map((g) => g.id));
-        for (const g of newGames) {
-          if (!validIds.has(g.id)) invalidIds.add(g.id);
-        }
-        const added = refetchValid.valid.length;
-        allGames = [...allGames, ...refetchValid.valid].sort(
-          (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
-        );
-        const otbGamesFiltered = allGames.filter((g) => g.source === 'otb').slice(0, otbLimit);
-        const onlineGamesFiltered = allGames
-          .filter((g) => g.source !== 'otb')
-          .slice(0, onlineLimit);
-        allGames = [...otbGamesFiltered, ...onlineGamesFiltered].sort(
-          (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
-        );
-        validationResult = await validateAndRefetchPgn(
-          allGames,
-          identity.chessComUsername || '',
-          identity.lichessUsername || '',
-        );
-        allGames = validationResult.valid;
-        if (validationResult.invalidCount === 0 || added === 0) break;
       }
 
       logger.info(
@@ -339,7 +279,7 @@ analyzeRoute.post('/analyze', async (c) => {
       if (sampled.length > 0) {
         let pool: StockfishPool | null = null;
         try {
-          pool = new StockfishPool({ workerCount: 4, depth: 10 });
+          pool = new StockfishPool({ workerCount: 4, depth: 7 });
           await pool.initialize();
 
           engineAnalysis = await pool.analyzeGames(sampled, targetUsername, (current, total) => {
@@ -417,6 +357,7 @@ analyzeRoute.post('/analyze', async (c) => {
       sse.sendError({ error: message });
     } finally {
       sse.close();
+      c.get('releaseAnalyzeSlot')?.();
     }
   })();
 

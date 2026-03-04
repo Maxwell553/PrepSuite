@@ -3,6 +3,7 @@ import { Search, History, Shield, Database, LayoutDashboard, ChevronRight, Chevr
 import SearchScreen from './components/SearchScreen';
 import ReportDashboard from './components/ReportDashboard';
 import Sidebar from './components/Sidebar';
+import OfflineBanner from './components/OfflineBanner';
 import { ScoutingReport } from './types';
 import LandingPage from './components/LandingPage';
 import { supabase, authActions } from './lib/supabase';
@@ -59,6 +60,7 @@ const App: React.FC = () => {
   const [viewingFeaturedReport, setViewingFeaturedReport] = useState<ScoutingReport | null>(null);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const [showTermsOfService, setShowTermsOfService] = useState(false);
+  const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
   // Persist loading state across tab switches
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -104,6 +106,17 @@ const App: React.FC = () => {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const handleOffline = () => setIsOffline(true);
+    const handleOnline = () => setIsOffline(false);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
   }, []);
 
   // Fetch history when user is available (only once, not on every render)
@@ -284,6 +297,7 @@ const App: React.FC = () => {
   if (loadingAuth) {
     return (
       <ThemeProvider>
+        {isOffline && <OfflineBanner />}
         <div className="h-screen bg-slate-950 dark:bg-slate-950 bg-gray-50 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-indigo-500 dark:text-indigo-500 text-indigo-600 animate-spin" />
         </div>
@@ -294,6 +308,7 @@ const App: React.FC = () => {
   if (showPrivacyPolicy) {
     return (
       <ThemeProvider>
+        {isOffline && <OfflineBanner />}
         <PrivacyPolicy onBack={() => setShowPrivacyPolicy(false)} />
       </ThemeProvider>
     );
@@ -302,6 +317,7 @@ const App: React.FC = () => {
   if (showTermsOfService) {
     return (
       <ThemeProvider>
+        {isOffline && <OfflineBanner />}
         <TermsOfService onBack={() => setShowTermsOfService(false)} />
       </ThemeProvider>
     );
@@ -319,6 +335,7 @@ const App: React.FC = () => {
   if (viewingFeaturedReport) {
     return (
       <ThemeProvider>
+        {isOffline && <OfflineBanner />}
         <FeaturedReportLayout
           report={viewingFeaturedReport}
           user={user}
@@ -334,6 +351,7 @@ const App: React.FC = () => {
   if (!user || showLandingPage) {
     return (
       <ThemeProvider>
+        {isOffline && <OfflineBanner />}
         <div className="h-screen overflow-y-auto overflow-x-hidden">
         <LandingPage 
           onGetStarted={() => {
@@ -357,6 +375,7 @@ const App: React.FC = () => {
 
   return (
     <ThemeProvider>
+      {isOffline && <OfflineBanner />}
       <div className="flex h-screen bg-slate-950 dark:bg-slate-950 bg-gray-50 text-slate-100 dark:text-slate-100 text-gray-900 overflow-hidden">
         {!showUserSettings && (
           <Sidebar 

@@ -11,7 +11,7 @@ import { logger } from '../lib/logger.js';
 
 const STOCKFISH_BINARY = process.env.STOCKFISH_PATH || 'stockfish';
 const DEFAULT_WORKER_COUNT = 4;
-const DEFAULT_DEPTH = 10;
+const DEFAULT_DEPTH = 7;
 const EVAL_TIMEOUT_MS = 8000;
 const INIT_TIMEOUT_MS = 5000;
 

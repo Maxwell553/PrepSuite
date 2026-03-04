@@ -80,6 +80,7 @@ export async function runPipeline(
 
   const url = `${baseUrl}/api/analyze`;
 
+  const PIPELINE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -87,6 +88,7 @@ export async function runPipeline(
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(params),
+    signal: AbortSignal.timeout(PIPELINE_TIMEOUT_MS),
   });
 
   if (!response.ok) {

@@ -35,8 +35,9 @@ app.route('/api', analyzeRoute);
 app.route('/api', chatRoute);
 app.route('/api', fideRatingHistoryRoute);
 
-// ── Lichess PGN export proxy (for AnalysisBoard when inline PGN missing) ──
+// ── Lichess PGN export proxy (requires auth to prevent abuse) ──
 // Production has no Vite proxy; frontend fetches /lichess-export/game/export/{id}
+app.use('/lichess-export/*', authMiddleware);
 app.all('/lichess-export/*', async (c) => {
   const lichessPath = c.req.path.replace(/^\/lichess-export/, '');
   const url = `https://lichess.org${lichessPath}`;
@@ -56,8 +57,9 @@ app.all('/lichess-export/*', async (c) => {
   }
 });
 
-// ── Chess.com PGN refetch (for AnalysisBoard when inline PGN missing/invalid) ──
+// ── Chess.com PGN refetch (requires auth to prevent abuse) ──
 // Fetches from player archive by game uuid and playedAt month
+app.use('/chesscom-pgn/*', authMiddleware);
 app.get('/chesscom-pgn/export/:username/:gameId', async (c) => {
   const username = c.req.param('username');
   const gameId = c.req.param('gameId');

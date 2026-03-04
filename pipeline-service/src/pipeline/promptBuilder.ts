@@ -19,8 +19,9 @@ import {
 } from './moveSequenceExtractor.js';
 
 // Prompt size limits: keep token count manageable while retaining statistical coverage
-const MAX_GAME_METADATA_IN_PROMPT = 10;
-const MAX_MOVE_LIST_IN_PROMPT = 14;
+const MAX_GAME_METADATA_IN_PROMPT = 30;
+const MAX_MOVE_LIST_IN_PROMPT = 20;
+const MAX_OPENINGS_PER_COLOR = 20;
 
 /** Stratified sample: pick games from each opening group for diversity. Preserves per-opening representation. */
 export function stratifiedSample<T>(
@@ -156,6 +157,10 @@ export function buildReportPrompt(opts: BuildReportPromptOpts): string {
     ? `${new Date(dateRange.earliest).toLocaleDateString()} to ${new Date(dateRange.latest).toLocaleDateString()}`
     : 'N/A';
 
+  // Cap openings to top 20 by frequency (stats already sorted by frequency)
+  const whiteStatsCapped = whiteStats.slice(0, MAX_OPENINGS_PER_COLOR);
+  const blackStatsCapped = blackStats.slice(0, MAX_OPENINGS_PER_COLOR);
+
   return `
 CHESS SCOUTING REPORT FOR: "${identity.verifiedName}"
 
@@ -167,7 +172,7 @@ RULES (apply to entire response):
 - Only generalise ("often"/"typically") for patterns in 10+ games. For <10 say "appeared in X games".
 - Do not reference specific game numbers ("Game 19"). Use aggregate language only.
 - Do not use ** (bold markdown). Use * only for bullet points.
-- CRITICAL: whiteOpenings = what the OPPONENT plays when ${identity.verifiedName} has White (e.g. Sicilian Defense, Queen's Gambit Declined). White does NOT initiate these — Black does. Phrase as "faces the Sicilian Defense" or "most often faces the Sicilian as White" — NEVER "plays the Sicilian as White". blackDefenses = what ${identity.verifiedName} PLAYS as Black (they initiate, e.g. Sicilian Defense, King's Indian Defense). Phrase as "plays the Sicilian Defense as Black". For White openings they initiate (e.g. English, Italian, Ruy Lopez), say "plays the English as White".
+- CRITICAL — Opening terminology: "Defense" (e.g. Sicilian Defense, Caro-Kann Defense) = Black-initiated; Black plays it, White faces it. "Opening" (e.g. English Opening, Ruy Lopez) and "Attack" (e.g. King's Indian Attack, Trompowsky Attack) = White-initiated; White plays it. whiteOpenings = what the OPPONENT (Black) plays when ${identity.verifiedName} has White — these are Defenses. Phrase as "faces the Sicilian Defense" or "most often faces the Sicilian as White" — NEVER "plays the Sicilian as White". blackDefenses = what ${identity.verifiedName} PLAYS as Black (they initiate Defenses, e.g. Sicilian Defense, King's Indian Defense). Phrase as "plays the Sicilian Defense as Black". For White repertoire (Openings/Attacks they initiate, e.g. English Opening, King's Indian Attack), say "plays the English Opening as White" or "plays the King's Indian Attack as White".
 - Use human opening names only (e.g. "Sicilian Defense", "Queen's Gambit"). Never use ECO codes (A05, B20, etc.) in narrative text — readers expect names like "King's Pawn Game", not "B00".
 - Weight all games equally regardless of date.
 - winRate/frequency are decimals 0.0-1.0. totalGames must = wins+draws+losses. Never return NaN/null.
@@ -183,11 +188,11 @@ IDENTITY:
 FIDE: ${identity.fideProfile?.rating ?? 'N/A'} (${identity.fideProfile?.title || 'No title'}) | USCF: ${identity.uscfProfile?.rating ?? 'N/A'}
 Chess.com: ${chessComUser || 'N/A'} | Lichess: ${lichessUser || 'N/A'}
 
-WHITE OPENINGS (all ${totalGamesCount} games, 10+ each):
-${formatOpeningStats(whiteStats)}
+WHITE OPENINGS (all ${totalGamesCount} games, top ${MAX_OPENINGS_PER_COLOR} by frequency):
+${formatOpeningStats(whiteStatsCapped)}
 
-BLACK DEFENSES (all ${totalGamesCount} games, 10+ each):
-${formatOpeningStats(blackStats)}
+BLACK DEFENSES (all ${totalGamesCount} games, top ${MAX_OPENINGS_PER_COLOR} by frequency):
+${formatOpeningStats(blackStatsCapped)}
 
 MOST PLAYED LINES:
 White: ${(moveSequences.white || []).map((l, i) => `${i + 1}. ${l.notation} (${l.games}g)`).join(' | ') || 'None'}
@@ -201,9 +206,9 @@ ${metadataSample
       )
       .join('\n')}
 
-MOVE SEQUENCES (${moveListSample.length} of ${totalGamesCount}, up to 10 moves, stratified):
+MOVE SEQUENCES (${moveListSample.length} of ${totalGamesCount}, up to 15 moves, stratified):
 ${(() => {
-      const maxMovesPerGame = 10;
+      const maxMovesPerGame = 15;
       return moveListSample
         .map((g, idx) => {
           const moves = g.pgn && g.pgn.trim().length > 20 ? parsePGNMoves(g.pgn) : [];
@@ -224,8 +229,8 @@ TASK: Generate a ScoutingReport JSON object.
 
 Required fields:
 - player: { name, fideId, country, titles[], currentRating, uscfRating, platforms: { chessCom, lichess } }
-- whiteOpenings[]: { name, eco, frequency, winRate, wins, draws, losses, totalGames, trend } — copy directly from data above, include ALL openings
-- blackDefenses[]: same structure — copy directly from data above, include ALL defenses
+- whiteOpenings[]: { name, eco, frequency, winRate, wins, draws, losses, totalGames, trend } — copy directly from data above, include all openings listed
+- blackDefenses[]: same structure — copy directly from data above, include all defenses listed
 - strategicSummary: comprehensive White+Black analysis
 - blackStrategicSummary: Black repertoire ONLY (do NOT mention White openings)
 - preparationSummary: White repertoire ONLY (do NOT mention Black defenses)

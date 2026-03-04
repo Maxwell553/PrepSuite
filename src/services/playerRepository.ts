@@ -251,20 +251,30 @@ export const playerRepository = {
 
     /**
      * Deletes multiple scouting reports by IDs.
+     * Verifies the delete count matches the requested count; throws if partial delete (e.g. RLS blocked some).
      */
     async deleteReports(reportIds: string[]) {
         if (reportIds.length === 0) return;
         console.log(`[Repository] Deleting ${reportIds.length} reports`);
-        const { error } = await supabase
+        const { error, count } = await supabase
             .from('scouting_reports')
-            .delete()
+            .delete({ count: 'exact' })
             .in('id', reportIds);
 
         if (error) {
             console.error('[Repository] Error bulk deleting reports:', error);
             throw error;
         }
-        console.log(`[Repository] Bulk delete completed for ${reportIds.length} reports`);
+
+        const deletedCount = count ?? 0;
+        console.log(`[Repository] Bulk delete completed. Requested: ${reportIds.length}, deleted: ${deletedCount}`);
+
+        if (deletedCount !== reportIds.length) {
+            console.warn('[Repository] WARNING: Partial delete. Some reports may be missing or RLS prevented deletion.');
+            throw new Error(
+                `Database delete incomplete: ${deletedCount} of ${reportIds.length} reports deleted. Please check your RLS policies.`
+            );
+        }
     },
 
     /**
