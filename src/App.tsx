@@ -382,12 +382,7 @@ const App: React.FC = () => {
           ) : (
             <>
               <header className="sticky top-0 z-10 backdrop-blur-md bg-slate-950/80 dark:bg-slate-950/80 bg-gray-50/80 border-b border-slate-800 dark:border-slate-800 border-gray-200 p-4 flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <div className="p-1">
-                    <Shield className="w-6 h-6 text-indigo-500 dark:text-indigo-500 text-indigo-600" />
-                  </div>
-                  <h1 className="text-xl font-semibold tracking-tight text-white dark:text-slate-100 text-gray-900">PrepSuite <span className="text-xs font-normal text-slate-500 dark:text-slate-500 text-gray-600 uppercase tracking-widest ml-2">v1.2 Stable</span></h1>
-                </div>
+                <span className="text-[0.9rem] font-normal text-slate-500 dark:text-slate-500 text-gray-600 uppercase tracking-widest">V1.1 Stable</span>
                 <div className="flex items-center gap-4">
                   <div className="hidden sm:block bg-slate-900 dark:bg-slate-900 bg-gray-100 border border-emerald-500/50 dark:border-emerald-500/50 border-emerald-400 px-3 py-1 rounded-full text-xs font-medium text-emerald-400 dark:text-emerald-400 text-emerald-600">
                     Live Database Sync
@@ -396,7 +391,7 @@ const App: React.FC = () => {
                     <span className="text-xs text-slate-500 dark:text-slate-500 text-gray-600 hidden md:block">{user.email}</span>
                     <div
                       onClick={() => setShowUserSettings(true)}
-                      className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white cursor-pointer hover:bg-indigo-500 transition-colors"
+                      className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white cursor-pointer hover:bg-indigo-500 transition-colors ml-[12px]"
                     >
                       <User className="w-5 h-5" />
                     </div>

@@ -18,23 +18,22 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogoClick 
   return (
     <aside className="w-64 bg-slate-900 dark:bg-slate-900 bg-white border-r border-slate-800 dark:border-slate-800 border-gray-200 flex flex-col hidden md:flex">
       <div className="p-6">
-        <div className="flex items-center gap-3 mb-10">
+        <div className="mb-10 flex justify-start -ml-1">
           {onLogoClick ? (
             <button
               onClick={onLogoClick}
-              className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 transition-colors cursor-pointer"
+              type="button"
+              aria-label="Prepsuite.ai"
+              className="logo-button flex items-center hover:opacity-90 transition-opacity cursor-pointer outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 select-none [&:focus]:outline-none [&:focus]:ring-0"
+              style={{ outline: 'none' }}
             >
-              <span className="text-xl font-bold italic">PS</span>
+              <img src="/NewLogo.jpg" alt="" className="h-9 w-auto pointer-events-none select-none" draggable={false} aria-hidden />
             </button>
           ) : (
-            <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <span className="text-xl font-bold italic">PS</span>
+            <div className="flex items-center select-none">
+              <img src="/NewLogo.jpg" alt="" className="h-9 w-auto pointer-events-none select-none" draggable={false} aria-hidden />
             </div>
           )}
-          <div>
-            <div className="font-bold text-sm leading-none tracking-tight text-white dark:text-white text-gray-900">PREPSUITE</div>
-            <div className="text-[10px] text-indigo-400 dark:text-indigo-400 text-indigo-600 font-bold tracking-widest mt-1 uppercase">Strategic Engine</div>
-          </div>
         </div>
 
         <nav className="space-y-1">

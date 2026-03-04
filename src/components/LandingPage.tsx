@@ -7,6 +7,7 @@ import generationImg from '@/assets/landing/generation.png';
 import tacticalRecommendationImg from '@/assets/landing/tactical_recommendation.png';
 import repertoireChartsImg from '@/assets/landing/repertoire_charts.png';
 import repertoireChatImg from '@/assets/landing/repertoire_chat.png';
+import playerActivityImg from '@/assets/landing/player_activity.png';
 import gameAnalysisBoardImg from '@/assets/landing/game-analysis-board.png';
 
 interface LandingPageProps {
@@ -43,6 +44,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
         { src: tacticalRecommendationImg, caption: 'Get a verified tournament profile with strategic insights.' },
         { src: repertoireChartsImg, caption: 'Look at every opening—win rates, draws, and losses at a glance.' },
         { src: repertoireChatImg, caption: 'Chat with AI to explore openings and player repertoires.' },
+        { src: playerActivityImg, caption: 'Player Activity: Track rating history across classical, rapid, and blitz over time.' },
         { src: gameAnalysisBoardImg, caption: 'Explore every game on the board with full move notation.' },
     ] as const;
 
@@ -74,13 +76,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
             {/* Navigation */}
             <nav className="fixed top-0 w-full z-50 backdrop-blur-xl bg-slate-950/50 dark:bg-slate-950/50 bg-white/90 border-b border-slate-800/50 dark:border-slate-800/50 border-gray-200 px-6 py-4">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                        <div className="bg-indigo-600 p-1.5 rounded-lg shadow-lg shadow-indigo-900/40">
-                            <Shield className="w-6 h-6 text-white" />
-                        </div>
-                        <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 dark:from-white dark:to-slate-400 from-gray-900 to-gray-600">
-                            PrepSuite
-                        </span>
+                    <div className="flex items-center select-none">
+                        <img src="/NewLogo.jpg" alt="Prepsuite.ai" className="h-9 w-auto select-none" draggable={false} />
                     </div>
                     <div className="flex items-center gap-4">
                         {user ? (

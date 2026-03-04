@@ -162,6 +162,7 @@ CHESS SCOUTING REPORT FOR: "${identity.verifiedName}"
 RULES (apply to entire response):
 - Always refer to the player as "${identity.verifiedName}" (never usernames "${chessComUser || 'N/A'}" / "${lichessUser || 'N/A'}").
 - Cite exact game counts for every claim: "in X of Y games" or "X% of games".
+- STRATEGIC SUMMARY FORMAT: Structure the strategicSummary as: "(Player Name) most often plays 1.(move) X% of the time (e.g. 1.e4 45%) and most often faces/plays openings X, Y, and Z, where he/she has a (win rate)% against X, (win rate)% against Y, and (win rate)% against Z. Same structure for Black." Use actual data from whiteOpenings/blackDefenses and MOST PLAYED LINES. Lead with the most frequent first move and its percentage, then the top 3–4 openings faced/played with their win rates.
 - NEVER mention the engine analysis sample size (e.g. "80 analyzed games"). When citing blunders, mistakes, or tactical accuracy from engine analysis, use phrases like "in engine analysis" or "across analyzed positions" — never state how many games were engine-analyzed. The user requested ${totalGamesCount} games; do not imply fewer were analyzed.
 - Only generalise ("often"/"typically") for patterns in 10+ games. For <10 say "appeared in X games".
 - Do not reference specific game numbers ("Game 19"). Use aggregate language only.
@@ -229,13 +230,15 @@ Required fields:
 - blackStrategicSummary: Black repertoire ONLY (do NOT mention White openings)
 - preparationSummary: White repertoire ONLY (do NOT mention Black defenses)
 - tacticalProfile, endgameReliability: focus on win rates, opening patterns, and concrete themes from game results. Do NOT cite "mistakes per game" or "endgame accuracy" — these metrics are unreliable for skill assessment.
-- strengths[3], weaknesses[3]: evidence from 10+ games each, using engine analysis where available
-- specificVulnerability, tacticalRecommendation: actionable, citing game counts
+- strengths[3], weaknesses[3]: evidence from 10+ games each. ALWAYS cite specific opening names, win rates, and game counts (e.g. "77% win rate in 175 games against the Caro-Kann Defense"). Use engine evaluation when available (e.g. "average evaluation of +6.61 across analyzed positions").
+- specificVulnerability, tacticalRecommendation: CRITICAL — recommend SPECIFIC LINES AND OPENINGS with win rates and game counts. Example: "As Black, (Player) performs poorly against the Mieses Opening, indicated by an average evaluation of -0.64 across analyzed positions." Or: "Target the King's Indian Defense — (Player) has only 31% win rate in 13 games as Black." Never give generic advice; always name exact openings/variations and cite win rate or engine eval.
 - suggestedLines[3]: prefer lines with 10+ games and 5-6 moves. Format: "1.e4 c5 2.Nf3 d6... (Xg, Y% WR)"
 - mostPlayedLines: { white[], black[] } each { moves[], frequency, games }
 - repertoireReliability: number 0-1
 
 Opening names: Use human names. QGD=Queen's Gambit Declined. Sicilian=1.e4 c5. Caro-Kann=1.e4 c6. French=1.e4 e6. Indian defenses=1.d4 Nf6. Never write "A05", "B20" etc. in prose — use "King's Pawn Game", "Sicilian Defense", etc.
+
+TACTICAL RECOMMENDATION (PRIMARY EMPHASIS): This is the most actionable field. It MUST name specific openings and variations (e.g. "Mieses Opening", "Trompowsky Attack: Raptor Variation") and cite quantitative performance: win rate with game count (e.g. "18% win rate in 11 games") or engine evaluation (e.g. "average evaluation of -0.64 for Black across analyzed positions"). Tell the user exactly which lines to prepare against. No generic advice.
       `;
 }
 

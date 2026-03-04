@@ -103,7 +103,6 @@ interface RatingHistoryPoint {
 }
 
 function ActivityReportSection({ player }: { player: ScoutingReport['player'] }) {
-  const [activeTab, setActiveTab] = useState<'chart' | 'table'>('chart');
   const [fideHistory, setFideHistory] = useState<Array<{
     date: string;
     classicalRating?: number;
@@ -169,30 +168,10 @@ function ActivityReportSection({ player }: { player: ScoutingReport['player'] })
     <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
       <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">
         <Activity className="w-5 h-5 text-indigo-400" />
-        PROGRESS
+        Player Activity
       </h3>
-      <div className="flex gap-4 mb-4">
-        <button
-          type="button"
-          onClick={() => setActiveTab('chart')}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            activeTab === 'chart' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-          }`}
-        >
-          Rating Chart
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('table')}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            activeTab === 'table' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-          }`}
-        >
-          Rating Table
-        </button>
-      </div>
       <div className="h-64 bg-slate-950/50 rounded-xl border border-slate-800 p-6">
-        {activeTab === 'chart' && hasChartData ? (
+        {hasChartData ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -217,30 +196,10 @@ function ActivityReportSection({ player }: { player: ScoutingReport['player'] })
               )}
             </LineChart>
           </ResponsiveContainer>
-        ) : activeTab === 'table' ? (
+        ) : (
           <div className="flex flex-col justify-center h-full">
             <p className="text-slate-400 text-sm mb-4">No games found for analysis. Current ratings:</p>
             <div className="grid grid-cols-2 gap-6">
-              <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">FIDE Rating</div>
-                <div className="text-3xl font-bold text-indigo-400">
-                  {fideRating ?? '—'}
-                </div>
-                <div className="text-xs text-slate-400 mt-1">{player.titles?.join(', ') || 'No title'}</div>
-              </div>
-              <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">USCF Rating</div>
-                <div className="text-3xl font-bold text-emerald-400">
-                  {uscfRating ?? '—'}
-                </div>
-                <div className="text-xs text-slate-400 mt-1">{player.country || ''}</div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col justify-center h-full text-center">
-            <p className="text-slate-400 text-sm mb-4">No games found for analysis. Current ratings:</p>
-            <div className="grid grid-cols-2 gap-6 max-w-md mx-auto">
               <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
                 <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">FIDE Rating</div>
                 <div className="text-3xl font-bold text-indigo-400">{fideRating ?? '—'}</div>

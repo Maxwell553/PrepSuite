@@ -46,8 +46,9 @@ app.all('/lichess-export/*', async (c) => {
       headers: { Accept: 'application/x-chess-pgn' },
     });
     const text = await res.text();
-    return c.text(text, res.status, {
-      'Content-Type': res.headers.get('Content-Type') || 'application/x-chess-pgn',
+    return new Response(text, {
+      status: res.status,
+      headers: { 'Content-Type': res.headers.get('Content-Type') || 'application/x-chess-pgn' },
     });
   } catch (err) {
     logger.warn({ err, url }, '[Lichess] Proxy fetch failed');

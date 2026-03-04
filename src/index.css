@@ -42,6 +42,13 @@ body {
     min-height: 100vh;
 }
 
+/* Remove focus outline from logo buttons - prevent dashed rectangle on hover/focus */
+.logo-button,
+.logo-button:focus,
+.logo-button:focus-visible {
+    outline: none !important;
+}
+
 .font-serif {
     font-family: 'Playfair Display', serif;
 }
