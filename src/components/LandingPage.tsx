@@ -76,8 +76,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
             {/* Navigation */}
             <nav className="fixed top-0 w-full z-50 backdrop-blur-xl bg-slate-950/50 dark:bg-slate-950/50 bg-white/90 border-b border-slate-800/50 dark:border-slate-800/50 border-gray-200 px-6 py-4">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <div className="flex items-center select-none">
-                        <img src="/NewLogo.jpg" alt="Prepsuite.ai" className="h-9 w-auto select-none" draggable={false} />
+                    <div className="flex items-center select-none py-1">
+                        <img src="/NewLogo.jpg" alt="Prepsuite.ai" className="h-10 w-auto max-h-10 object-contain object-left flex-shrink-0 select-none" draggable={false} />
                     </div>
                     <div className="flex items-center gap-4">
                         {user ? (

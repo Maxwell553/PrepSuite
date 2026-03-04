@@ -18,7 +18,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogoClick 
   return (
     <aside className="w-64 bg-slate-900 dark:bg-slate-900 bg-white border-r border-slate-800 dark:border-slate-800 border-gray-200 flex flex-col hidden md:flex">
       <div className="p-6">
-        <div className="mb-10 flex justify-start -ml-1">
+        <div className="mb-10 flex justify-start -ml-1 py-1">
           {onLogoClick ? (
             <button
               onClick={onLogoClick}
@@ -27,11 +27,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogoClick 
               className="logo-button flex items-center hover:opacity-90 transition-opacity cursor-pointer outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 select-none [&:focus]:outline-none [&:focus]:ring-0"
               style={{ outline: 'none' }}
             >
-              <img src="/NewLogo.jpg" alt="" className="h-9 w-auto pointer-events-none select-none" draggable={false} aria-hidden />
+              <img src="/NewLogo.jpg" alt="" className="h-10 w-auto max-h-10 object-contain object-left flex-shrink-0 pointer-events-none select-none" draggable={false} aria-hidden />
             </button>
           ) : (
             <div className="flex items-center select-none">
-              <img src="/NewLogo.jpg" alt="" className="h-9 w-auto pointer-events-none select-none" draggable={false} aria-hidden />
+              <img src="/NewLogo.jpg" alt="" className="h-10 w-auto max-h-10 object-contain object-left flex-shrink-0 pointer-events-none select-none" draggable={false} aria-hidden />
             </div>
           )}
         </div>
