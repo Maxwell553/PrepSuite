@@ -14,6 +14,7 @@ function makeIdentity(overrides?: Partial<ResolvedIdentity>): ResolvedIdentity {
   return {
     verifiedName: 'Test Player',
     fideId: '1234567',
+    uscfId: '12345678',
     chessComUsername: 'testplayer',
     lichessUsername: 'testlichess',
     fideProfile: {

@@ -55,6 +55,30 @@ export interface ChatContext {
   }>;
 }
 
+/** Partial player data streamed after identity phase */
+export interface IdentityEventData {
+  player: Partial<PlayerMetadata>;
+}
+
+/** Partial report data streamed after parsing phase */
+export interface ParsingEventData {
+  whiteOpenings?: OpeningStat[];
+  blackDefenses?: OpeningStat[];
+  mostPlayedLines?: { white: MoveSequence[]; black: MoveSequence[] };
+  games?: Array<{
+    id?: string;
+    white: string;
+    black: string;
+    result: string;
+    eco: string;
+    pgn?: string;
+    playedAt: string;
+    source?: string;
+    timeControl?: string;
+    openingName?: string;
+  }>;
+}
+
 export interface PipelineCallbacks {
   onPhase?: (
     phase: string,
@@ -64,6 +88,10 @@ export interface PipelineCallbacks {
   ) => void;
   onProgress?: (phase: string, current: number, total: number) => void;
   onError?: (error: string, phase?: string) => void;
+  /** Called when identity is resolved (FIDE, USCF, platforms, etc.) */
+  onIdentity?: (data: IdentityEventData) => void;
+  /** Called when games are parsed and opening stats are ready */
+  onParsing?: (data: ParsingEventData) => void;
 }
 
 /**
@@ -155,6 +183,12 @@ export async function runPipeline(
           break;
         case 'complete':
           result = data as unknown as PipelineResult;
+          break;
+        case 'identity':
+          callbacks.onIdentity?.(data as unknown as IdentityEventData);
+          break;
+        case 'parsing':
+          callbacks.onParsing?.(data as unknown as ParsingEventData);
           break;
         case 'error':
           callbacks.onError?.(data.error as string, data.phase as string | undefined);

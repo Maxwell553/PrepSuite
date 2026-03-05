@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   LineChart, Line, ResponsiveContainer,
 } from 'recharts';
-import { Shield, Target, Zap, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, Crosshair, BookOpen, ChevronDown, ChevronUp, Activity } from 'lucide-react';
+import { Shield, Target, Zap, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, Crosshair, ChevronDown, ChevronUp, Activity } from 'lucide-react';
 import { ScoutingReport, OpeningStat } from '../types';
 import AnalysisBoard from './AnalysisBoard';
 import RepertoireChat from './RepertoireChat';
@@ -15,6 +15,10 @@ interface ReportDashboardProps {
   report: ScoutingReport;
   /** When true, chat is grayed out with "Requires sign in" */
   requiresSignInForChat?: boolean;
+  /** When true, show generating overlay (blocks interaction until report is complete) */
+  isGenerating?: boolean;
+  /** Status message to show in overlay (e.g. "Step 2: Fetching Games...") */
+  generatingStatus?: string;
 }
 
 function OpeningList({ openings, defaultExpanded = false, id }: { openings: OpeningStat[]; defaultExpanded?: boolean; id?: string }) {
@@ -53,17 +57,60 @@ function OpeningList({ openings, defaultExpanded = false, id }: { openings: Open
   );
 }
 
+/** Shimmer skeleton placeholder for loading states */
+function SkeletonLine({ width = '100%' }: { width?: string }) {
+  return (
+    <div
+      className="animate-shimmer h-4 rounded"
+      style={{ width }}
+      aria-hidden
+    />
+  );
+}
+
+function SkeletonBlock({ lines = 3 }: { lines?: number }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: lines }).map((_, i) => (
+        <SkeletonLine key={i} width={i === lines - 1 && lines > 1 ? '75%' : '100%'} />
+      ))}
+    </div>
+  );
+}
+
 function RepertoireChartSection({
   title,
   icon: Icon,
   openings,
   gamesLabel,
+  isSkeleton,
 }: {
   title: string;
   icon: React.ElementType;
   openings: OpeningStat[];
   gamesLabel: string;
+  isSkeleton?: boolean;
 }) {
+  if (isSkeleton) {
+    return (
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg flex flex-col">
+        <h3 className="text-lg font-bold mb-1 flex items-center gap-2 text-white">
+          <Icon className="w-5 h-5 text-indigo-400" />
+          {title}
+        </h3>
+        <p className="text-sm text-slate-400 mb-6">{gamesLabel}</p>
+        <div className="h-64 mb-6 flex flex-col justify-end gap-3 w-full">
+          {[90, 65, 50, 75, 55].map((w, i) => (
+            <div key={i} className="animate-shimmer h-6 rounded" style={{ width: `${w}%` }} aria-hidden />
+          ))}
+        </div>
+        <div className="space-y-2">
+          <SkeletonLine width="60%" />
+          <SkeletonLine width="40%" />
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg flex flex-col">
       <h3 className="text-lg font-bold mb-1 flex items-center gap-2 text-white">
@@ -218,7 +265,7 @@ function ActivityReportSection({ player }: { player: ScoutingReport['player'] })
   );
 }
 
-const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignInForChat }) => {
+const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignInForChat, isGenerating, generatingStatus }) => {
   const { player, whiteOpenings, blackDefenses } = report;
 
   const hasBothSources = useMemo(() => {
@@ -267,10 +314,12 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
   const hasNoGames = !report.games || report.games.length === 0;
   const hasFideOrUscf = !!(player.fideId || (player.currentRating != null && player.currentRating > 0) || (player.uscfRating != null && player.uscfRating > 0));
   const showActivityReport = hasFideOrUscf;
-  const showMainContent = !hasNoGames || !hasFideOrUscf;
+  // Show main content when we have report data OR when generating (skeleton layout)
+  const hasReportContent = (report.games && report.games.length > 0) || (report.strategicSummary && report.strategicSummary.length > 0);
+  const showMainContent = hasReportContent || !!isGenerating;
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
+    <div className={`relative space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12 ${isGenerating ? 'pointer-events-none' : ''}`}>
       {/* Dossier Header */}
       <div className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-3xl overflow-hidden shadow-2xl">
         <div className="h-44 bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-950 dark:from-indigo-900/40 dark:via-slate-900 dark:to-slate-950 from-indigo-50 via-white to-gray-50 relative p-10 flex flex-col justify-end">
@@ -366,32 +415,44 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
               Strategic Profile Analysis
             </h3>
             <div className="text-slate-300 space-y-4 leading-relaxed">
-              <p className="text-lg font-medium">{report.strategicSummary?.replace(/\*\*/g, '')}</p>
+              {isGenerating && !report.strategicSummary ? (
+                <SkeletonBlock lines={4} />
+              ) : (
+                <p className="text-lg font-medium">{report.strategicSummary?.replace(/\*\*/g, '')}</p>
+              )}
 
               <div className="grid md:grid-cols-2 gap-4 mt-8">
                 <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl h-full">
                   <h4 className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-widest mb-4">
                     <CheckCircle className="w-4 h-4" /> Core Strengths
                   </h4>
-                  <ul className="space-y-3 text-sm">
-                    {report.strengths?.map((s, i) => (
-                      <li key={i} className="flex gap-2">
-                        <span className="text-emerald-500/50 font-bold">•</span> {s?.replace(/\*\*/g, '')}
-                      </li>
-                    ))}
-                  </ul>
+                  {isGenerating && (!report.strengths || report.strengths.length === 0) ? (
+                    <SkeletonBlock lines={3} />
+                  ) : (
+                    <ul className="space-y-3 text-sm">
+                      {report.strengths?.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-emerald-500/50 font-bold">•</span> {s?.replace(/\*\*/g, '')}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl h-full">
                   <h4 className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-widest mb-4">
                     <AlertTriangle className="w-4 h-4" /> Strategic Weaknesses
                   </h4>
-                  <ul className="space-y-3 text-sm">
-                    {report.weaknesses?.map((w, i) => (
-                      <li key={i} className="flex gap-2 text-slate-400">
-                        <span className="text-red-500/50 font-bold">•</span> {w?.replace(/\*\*/g, '')}
-                      </li>
-                    ))}
-                  </ul>
+                  {isGenerating && (!report.weaknesses || report.weaknesses.length === 0) ? (
+                    <SkeletonBlock lines={3} />
+                  ) : (
+                    <ul className="space-y-3 text-sm">
+                      {report.weaknesses?.map((w, i) => (
+                        <li key={i} className="flex gap-2 text-slate-400">
+                          <span className="text-red-500/50 font-bold">•</span> {w?.replace(/\*\*/g, '')}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </div>
             </div>
@@ -408,11 +469,11 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
                 Tactical Recommendation
               </h3>
               <div className="text-indigo-50 text-sm leading-relaxed space-y-3 whitespace-pre-wrap min-h-0 overflow-y-auto">
-                <p className="font-semibold">{(report.tacticalRecommendation || '').replace(/\*\*/g, '')}</p>
-                <div className="p-3 bg-white/10 rounded-xl border border-white/20 shrink-0">
-                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/70 mb-1">Target Profile: {player.name}</h4>
-                  <p className="text-xs italic opacity-80">Focus on the transition between late-middlegame and endgame where target accuracy deviates.</p>
-                </div>
+                {isGenerating && !report.tacticalRecommendation ? (
+                  <SkeletonBlock lines={4} />
+                ) : (
+                  <p className="font-semibold">{(report.tacticalRecommendation || '').replace(/\*\*/g, '')}</p>
+                )}
               </div>
             </section>
 
@@ -422,9 +483,15 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
                 Specific Vulnerability
               </h3>
               <div className="text-slate-300 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap min-h-0 overflow-y-auto">
-                <p className="p-4 bg-slate-950 dark:bg-slate-950 rounded-xl border border-slate-800 dark:border-slate-800 italic">
-                  "{(report.specificVulnerability || '').replace(/\*\*/g, '')}"
-                </p>
+                {isGenerating && !report.specificVulnerability ? (
+                  <div className="p-4 bg-slate-950 dark:bg-slate-950 rounded-xl border border-slate-800 dark:border-slate-800">
+                    <SkeletonBlock lines={3} />
+                  </div>
+                ) : (
+                  <p className="p-4 bg-slate-950 dark:bg-slate-950 rounded-xl border border-slate-800 dark:border-slate-800 italic">
+                    "{(report.specificVulnerability || '').replace(/\*\*/g, '')}"
+                  </p>
+                )}
               </div>
             </section>
           </div>
@@ -471,38 +538,18 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
               icon={TrendingUp}
               openings={whiteOpenings || []}
               gamesLabel={`${(whiteOpenings || []).reduce((sum, op) => sum + (op.totalGames || 0), 0).toLocaleString()} games as White`}
+              isSkeleton={!!isGenerating && (whiteOpenings?.length ?? 0) === 0}
             />
             <RepertoireChartSection
               title="Black Repertoire (Defensive Systems)"
               icon={Clock}
               openings={blackDefenses || []}
               gamesLabel={`${(blackDefenses || []).reduce((sum, op) => sum + (op.totalGames || 0), 0).toLocaleString()} games as Black`}
+              isSkeleton={!!isGenerating && (blackDefenses?.length ?? 0) === 0}
             />
           </div>
         )}
 
-        {/* Text Summaries - full width, 2 columns */}
-        <div className="grid md:grid-cols-2 gap-8 items-start">
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
-            <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-indigo-400">
-              <BookOpen className="w-5 h-5" />
-              White Repertoire Strategy
-            </h3>
-            <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 leading-relaxed text-slate-400 text-sm whitespace-pre-wrap">
-              {(report.preparationSummary || '').replace(/\*\*/g, '')}
-            </div>
-          </section>
-
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
-            <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-indigo-400">
-              <Target className="w-5 h-5" />
-              Black Defensive Philosophy
-            </h3>
-            <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 leading-relaxed text-slate-400 text-sm whitespace-pre-wrap">
-              {(report.blackStrategicSummary || "Detailed analysis of black repertoire pending...").replace(/\*\*/g, '')}
-            </div>
-          </section>
-        </div>
         </>
         )}
 
@@ -517,7 +564,11 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
           <AnalysisBoard 
             games={report.games} 
             playerName={player.name}
-            playerUsername={(player as { actualUsername?: string }).actualUsername || player.platforms?.chessCom || player.platforms?.lichess || undefined}
+            playerUsername={[
+              (player as { actualUsername?: string }).actualUsername,
+              player.platforms?.chessCom,
+              player.platforms?.lichess,
+            ].filter(Boolean) as string[]}
           />
         </section>
       )}
@@ -526,6 +577,20 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
       <section className="mt-8" id="chat-section" style={{ scrollMarginTop: '0px' }}>
         <RepertoireChat report={report} requiresSignIn={requiresSignInForChat} />
       </section>
+
+      {/* Generating status - centered overlay with backdrop */}
+      {isGenerating && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/12 backdrop-blur-[2px]"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="flex items-center gap-3 px-6 py-3 bg-slate-800/30 border border-indigo-500/20 rounded-2xl shadow-2xl shadow-indigo-500/5">
+            <div className="w-5 h-5 border-2 border-indigo-400/50 border-t-indigo-400 rounded-full animate-spin" />
+            <span className="text-base font-semibold text-slate-100">{generatingStatus || 'Generating report...'}</span>
+          </div>
+        </div>
+      )}
     </div>
     </div>
   );

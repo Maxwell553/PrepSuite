@@ -55,6 +55,9 @@ export interface ResolveIdentityOptions {
   skipOnlinePlatforms?: boolean;
 }
 
+/** Partial identity sent as each piece is discovered (for progressive UI updates) */
+export type PartialIdentityUpdate = Partial<Pick<ResolvedIdentity, 'verifiedName' | 'fideId' | 'uscfId' | 'fideProfile' | 'uscfProfile' | 'chessComUsername' | 'lichessUsername'>>;
+
 export async function resolveIdentity(
   inputName: string,
   fideId: string,
@@ -62,7 +65,7 @@ export async function resolveIdentity(
   providedChessComUsername?: string,
   providedLichessUsername?: string,
   onProgress?: (message: string) => void,
-  options?: ResolveIdentityOptions,
+  options?: ResolveIdentityOptions & { onPartialIdentity?: (partial: PartialIdentityUpdate) => void },
 ): Promise<ResolvedIdentity> {
   let officialName = inputName;
   let fideProfile: FideProfile | null = null;
@@ -74,6 +77,8 @@ export async function resolveIdentity(
   const hasLichess = !!providedLichessUsername?.trim();
   const skipOnline = options?.skipOnlinePlatforms ?? false;
 
+  const onPartial = options?.onPartialIdentity;
+
   if (hasFideId && hasUscfId && hasChessCom && hasLichess && !skipOnline) {
     onProgress?.('Fetching FIDE & USCF profiles...');
     logger.info({ name: inputName }, '[Identity] Fast path: all IDs provided, skipping search');
@@ -81,9 +86,18 @@ export async function resolveIdentity(
       getFideProfile(fideId.trim()),
       getUscfProfile(uscfId.trim()),
     ]);
+    onPartial?.({
+      verifiedName: capitalizeName(inputName.trim()),
+      fideId: fideId.trim(),
+      fideProfile: fideProfileFetched,
+      uscfProfile: uscfProfileFetched,
+      chessComUsername: providedChessComUsername!.trim(),
+      lichessUsername: providedLichessUsername!.trim(),
+    });
     return {
       verifiedName: capitalizeName(inputName.trim()),
       fideId: fideId.trim(),
+      uscfId: uscfProfileFetched?.id ?? uscfId.trim(),
       fideProfile: fideProfileFetched,
       uscfProfile: uscfProfileFetched,
       chessComUsername: providedChessComUsername!.trim(),
@@ -108,11 +122,11 @@ export async function resolveIdentity(
     const needsLichess = skipOnline ? false : !hasLichess;
 
     for (let geminiAttempt = 0; geminiAttempt < MAX_GEMINI_ID_RETRIES; geminiAttempt++) {
-      if (geminiAttempt === 0 && inputName.trim() && (!fideId || !uscfId || needsChessCom || needsLichess)) {
+        if (geminiAttempt === 0 && inputName.trim() && (!fideId || !uscfId || needsChessCom || needsLichess)) {
         onProgress?.('Searching FIDE, USCF & usernames...');
         logger.info(
-          { name: inputName },
-          '[Identity] Steps 1+2: FIDE + USCF + Gemini IDs + Gemini usernames (parallel)',
+          { name: inputName, needsChessCom, needsLichess, skipOnline },
+          '[Identity] Steps 1+2: FIDE + USCF + Gemini IDs + Gemini usernames (parallel, Vertex + Google Search)',
         );
         const [fideSearchResult, uscfSearchResults, geminiIds, geminiUsernames] = await Promise.all([
           !fideId
@@ -230,6 +244,15 @@ export async function resolveIdentity(
       if (!needGeminiRetry || geminiAttempt >= MAX_GEMINI_ID_RETRIES - 1) break;
     }
 
+    // Stream FIDE/USCF data as soon as we have it (before platform verification)
+    onPartial?.({
+      verifiedName: capitalizeName(officialName),
+      fideId: finalFideId?.trim() || '',
+      uscfId: uscfProfile?.id ?? finalUscfId?.trim() ?? '',
+      fideProfile,
+      uscfProfile,
+    });
+
     // Cross-populate: USCF profile often contains FIDE ID
     if (!fideProfile && uscfProfile?.fideId) {
       logger.info(
@@ -244,6 +267,7 @@ export async function resolveIdentity(
           { fideId: finalFideId, name: crossFide.name },
           '[Identity] FIDE profile resolved via USCF cross-reference',
         );
+        onPartial?.({ fideId: finalFideId, fideProfile });
       }
     }
 
@@ -259,10 +283,12 @@ export async function resolveIdentity(
     if (!skipOnline && providedChessComUsername?.trim()) {
       verifiedChessCom = providedChessComUsername.trim();
       logger.info({ username: verifiedChessCom }, '[Identity] Using provided Chess.com username');
+      onPartial?.({ chessComUsername: verifiedChessCom });
     }
     if (!skipOnline && providedLichessUsername?.trim()) {
       verifiedLichess = providedLichessUsername.trim();
       logger.info({ username: verifiedLichess }, '[Identity] Using provided Lichess username');
+      onPartial?.({ lichessUsername: verifiedLichess });
     }
 
     // Discover missing usernames via Vertex AI (already fetched in parallel with FIDE/USCF in Step 1+2)
@@ -272,6 +298,15 @@ export async function resolveIdentity(
     if (stillNeedsChessCom || stillNeedsLichess) {
       onProgress?.('Verifying Chess.com & Lichess usernames...');
       const geminiUsernames = geminiUsernamesEarly;
+      logger.info(
+        {
+          chessComCandidates: geminiUsernames.chessComCandidates,
+          lichessCandidates: geminiUsernames.lichessCandidates,
+          stillNeedsChessCom,
+          stillNeedsLichess,
+        },
+        '[Identity] Verifying platform usernames from Vertex search',
+      );
 
       // Fetch all profiles in parallel
       const chessComCandidates = geminiUsernames.chessComCandidates.slice(0, 5);
@@ -291,6 +326,7 @@ export async function resolveIdentity(
             if (result) {
               verifiedChessCom = result;
               logger.info({ username: result }, '[Identity] Chess.com verified via Vertex AI');
+              onPartial?.({ chessComUsername: result });
               break;
             }
           }
@@ -307,6 +343,7 @@ export async function resolveIdentity(
             if (result) {
               verifiedLichess = result;
               logger.info({ username: result }, '[Identity] Lichess verified via Vertex AI');
+              onPartial?.({ lichessUsername: result });
               break;
             }
           }
@@ -317,6 +354,7 @@ export async function resolveIdentity(
     return {
       verifiedName: capitalizeName(officialName),
       fideId: finalFideId?.trim() || '',
+      uscfId: uscfProfile?.id ?? finalUscfId?.trim() ?? '',
       fideProfile,
       uscfProfile,
       chessComUsername: verifiedChessCom,
@@ -328,6 +366,7 @@ export async function resolveIdentity(
     return {
       verifiedName: capitalizeName(officialName),
       fideId: '',
+      uscfId: '',
       fideProfile: null,
       uscfProfile: null,
       chessComUsername: '',

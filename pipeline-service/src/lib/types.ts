@@ -58,6 +58,8 @@ export interface ResolvedIdentity {
   verifiedName: string;
   fideId: string;
   fideProfile: FideProfile | null;
+  /** USCF ID when known (from profile or Gemini), even if profile fetch failed */
+  uscfId: string;
   uscfProfile: UscfProfile | null;
   chessComUsername: string;
   lichessUsername: string;

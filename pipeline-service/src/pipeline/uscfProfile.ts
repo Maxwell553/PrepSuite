@@ -31,11 +31,13 @@ export async function searchUscfByName(name: string): Promise<UscfSearchResult[]
     });
 
     // POST form to thin2.php search endpoint
-    const postRes = await fetch('https://www.uschess.org/msa/thin2.php', {
+    const postRes = await fetchWithRetry('https://www.uschess.org/msa/thin2.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
-      signal: AbortSignal.timeout(10000),
+      timeoutMs: 10000,
+      retries: 0,
+      delayMs: 1000,
     });
 
     if (!postRes.ok) return [];
@@ -136,6 +138,7 @@ async function fetchFromThinPage(uscfId: string): Promise<UscfProfile | null> {
   try {
     const res = await fetchWithRetry(`https://www.uschess.org/msa/thin3.php?${uscfId}`, {
       timeoutMs: 10000,
+      retries: 0,
     });
     if (!res.ok) return null;
 
@@ -153,7 +156,7 @@ async function fetchFromMSAScraping(uscfId: string): Promise<UscfProfile | null>
   try {
     const res = await fetchWithRetry(
       `https://www.uschess.org/msa/MbrDtlMain.php?${uscfId}`,
-      { timeoutMs: 10000 },
+      { timeoutMs: 10000, retries: 0 },
     );
     if (!res.ok) return null;
 
@@ -215,7 +218,7 @@ async function fetchFromMSAScraping(uscfId: string): Promise<UscfProfile | null>
  */
 export async function getUscfProfile(
   uscfId: string,
-  retries = 2,
+  retries = 0,
 ): Promise<UscfProfile | null> {
   if (!uscfId?.trim()) return null;
 

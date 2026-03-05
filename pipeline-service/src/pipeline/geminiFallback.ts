@@ -2,8 +2,14 @@ import { logger } from '../lib/logger.js';
 import { getAccessToken, getVertexUrl, invalidateAccessTokenCache } from '../lib/vertexAuth.js';
 import { parseLLMJson } from '../lib/jsonRepair.js';
 
-const GEMINI_MODEL_PRIMARY = 'gemini-2.5-flash';
-const GEMINI_MODEL_FALLBACK = 'gemini-2.0-flash-001';
+const GEMINI_MODEL_PRIMARY = 'gemini-3.1-flash-lite-preview';
+const GEMINI_MODEL_FALLBACK = 'gemini-2.5-flash';
+/** Username search model chain: flash-lite → 2.5-pro → 2.5-flash */
+const GEMINI_SEARCH_MODELS = [
+  'gemini-3.1-flash-lite-preview',
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+] as const;
 const GEMINI_TIMEOUT_MS = 55000;
 const MAX_RETRIES = 2;
 
@@ -27,11 +33,13 @@ interface GeminiUsernameResult {
 
 /**
  * Call Vertex AI Gemini with optional Google Search grounding.
- * Tries gemini-2.5-flash first, falls back to gemini-2.0-flash-001 if unavailable.
+ * Tries gemini-3.1-flash-lite-preview first, falls back to gemini-2.5-flash if unavailable.
+ * @param forceModel - When set, use only this model (e.g. for username search where Search must work)
  */
 async function callGemini(
   prompt: string,
   useGoogleSearch: boolean,
+  forceModel?: string,
 ): Promise<string> {
   const optimizedPrompt = `You are a chess database search agent. You MUST use Google Search to find the requested information.
 1. Perform the search(es) specified in the prompt below (use the exact site: queries it mentions)
@@ -52,11 +60,12 @@ ${prompt}`;
     requestBody.tools = [{ googleSearch: {} }];
   }
 
-  for (const model of [GEMINI_MODEL_PRIMARY, GEMINI_MODEL_FALLBACK]) {
+  const modelsToTry = forceModel ? [forceModel] : [GEMINI_MODEL_PRIMARY, GEMINI_MODEL_FALLBACK];
+  for (const model of modelsToTry) {
     const result = await callGeminiWithModel(requestBody, model);
     if (result !== null) return result;
     if (model === GEMINI_MODEL_PRIMARY) {
-      logger.warn({ model: GEMINI_MODEL_PRIMARY }, '[GeminiFallback] Primary model failed, falling back to 2.0');
+      logger.warn({ model: GEMINI_MODEL_PRIMARY }, '[GeminiFallback] Primary model failed, falling back to 2.5-flash');
     }
   }
   return '';
@@ -175,55 +184,78 @@ export async function searchUsernamesViaGemini(
   _fideId: string | null,
   _uscfId: string | null,
 ): Promise<GeminiUsernameResult> {
-  // Chess.com and Lichess discovery: Vertex/Google Search only. No other sources.
+  // Chess.com and Lichess discovery: Vertex/Google Search only. Use gemini-2.5-flash to guarantee Search grounding.
   const prompts = [
     `Search the web for this chess player's Chess.com and Lichess profiles: "${playerName}".
 
 You MUST use Google Search. Perform these searches:
 
 CHESS.COM:
-- "${playerName} chess.com"
-- site:chess.com/members "${playerName}"
+- "${playerName}" chess.com
 - site:chess.com/member "${playerName}"
-Extract usernames from profile URLs (chess.com/member/USERNAME, chess.com/members/USERNAME).
+- site:chess.com/members "${playerName}"
+- "${playerName}" chess.com profile bio about
+Players often put their real name in their profile bio or "about" section. Look for profile pages where "${playerName}" appears in the bio, about, or status.
 
 LICHESS:
-- "${playerName} lichess"
+- "${playerName}" lichess
 - site:lichess.org "${playerName}"
-Extract usernames from lichess.org/@/USERNAME URLs.
+- lichess.org/@ "${playerName}"
+Extract usernames from profile URLs (chess.com/member/USERNAME, chess.com/members/USERNAME, lichess.org/@/USERNAME).
 
 Return ONLY usernames found in search results. Do NOT guess.
 Return JSON: {"chessComCandidates":["username1","username2"] or [],"lichessCandidates":["username1"] or []}.`,
 
     `Find Chess.com and Lichess usernames for chess player "${playerName}".
-Search: "${playerName} chess.com" and "${playerName} lichess" and site:chess.com/members "${playerName}".
-Extract usernames from URLs. Return JSON: {"chessComCandidates":[],"lichessCandidates":[]}.`,
+Search: "${playerName}" chess.com, "${playerName}" lichess, site:chess.com/members "${playerName}", site:lichess.org "${playerName}".
+Look for profile bios and about sections containing "${playerName}". Extract usernames from URLs. Return JSON: {"chessComCandidates":[],"lichessCandidates":[]}.`,
   ];
 
   for (let attempt = 0; attempt < prompts.length; attempt++) {
-    logger.info({ playerName, attempt: attempt + 1 }, '[GeminiFallback] Searching for usernames');
-    const text = await callGemini(prompts[attempt], true);
-
-    if (!text) continue;
+    let text = '';
+    for (let m = 0; m < GEMINI_SEARCH_MODELS.length; m++) {
+      const model = GEMINI_SEARCH_MODELS[m];
+      logger.info(
+        { playerName, attempt: attempt + 1, model },
+        '[GeminiFallback] Searching for Chess.com/Lichess usernames via Vertex + Google Search',
+      );
+      text = await callGemini(prompts[attempt], true, model);
+      if (text) break;
+      if (m < GEMINI_SEARCH_MODELS.length - 1) {
+        logger.warn({ model, nextModel: GEMINI_SEARCH_MODELS[m + 1] }, '[GeminiFallback] Model returned empty, trying next');
+      }
+    }
+    if (!text) {
+      logger.warn({ playerName, attempt: attempt + 1 }, '[GeminiFallback] Username search returned empty');
+      continue;
+    }
 
     const parsed = parseLLMJson<{
       chessComCandidates?: string[];
       lichessCandidates?: string[];
     }>(text);
 
-    if (!parsed) continue;
+    if (!parsed) {
+      logger.warn({ playerName, attempt: attempt + 1 }, '[GeminiFallback] Failed to parse username JSON');
+      continue;
+    }
 
     const chessCom = extractUsername(parsed.chessComCandidates || [], 'chess.com');
     const lichess = extractUsername(parsed.lichessCandidates || [], 'lichess');
 
     if (chessCom.length > 0 || lichess.length > 0) {
+      logger.info(
+        { playerName, chessComCount: chessCom.length, lichessCount: lichess.length, chessCom, lichess },
+        '[GeminiFallback] Username candidates found',
+      );
       return { chessComCandidates: chessCom, lichessCandidates: lichess };
     }
     if (attempt < prompts.length - 1) {
-      logger.info('[GeminiFallback] No usernames found, retrying with alternate search');
+      logger.info('[GeminiFallback] No usernames found, retrying with alternate search prompt');
     }
   }
 
+  logger.warn({ playerName }, '[GeminiFallback] No Chess.com or Lichess usernames found after all attempts');
   return { chessComCandidates: [], lichessCandidates: [] };
 }
 

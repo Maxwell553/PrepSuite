@@ -19,7 +19,7 @@ import {
 } from './moveSequenceExtractor.js';
 
 // Prompt size limits: keep token count manageable while retaining statistical coverage
-const MAX_GAME_METADATA_IN_PROMPT = 30;
+const MAX_GAME_METADATA_IN_PROMPT = 40;
 const MAX_MOVE_LIST_IN_PROMPT = 20;
 const MAX_OPENINGS_PER_COLOR = 20;
 
@@ -59,13 +59,33 @@ export function stratifiedSample<T>(
 
 /** Format engine analysis into prompt text. Excludes mistakes-per-game and endgame-accuracy (poor skill metrics). */
 function formatEngineAnalysis(engineAnalysis: GameAnalysis[], allGames: GameData[]): string {
+  return formatEngineAnalysisForSide(engineAnalysis, allGames, null, null);
+}
+
+/** Format engine analysis filtered by games where target played the given side. Pass null for side to include all. */
+function formatEngineAnalysisForSide(
+  engineAnalysis: GameAnalysis[],
+  allGames: GameData[],
+  targetUsername: string | null,
+  side: 'white' | 'black' | null,
+): string {
   if (engineAnalysis.length === 0) return '';
 
-  // Group by opening
-  const analysesByOpening: Record<string, { games: GameData[]; analyses: GameAnalysis[] }> = {};
   const gameMap = new Map(allGames.map((g) => [g.id, g]));
+  const targetLower = targetUsername?.toLowerCase().trim() ?? '';
 
-  for (const analysis of engineAnalysis) {
+  const filteredAnalyses =
+    side && targetLower
+      ? engineAnalysis.filter((a) => {
+          const game = gameMap.get(a.gameId);
+          if (!game) return false;
+          const isTargetWhite = game.white.toLowerCase().trim() === targetLower;
+          return side === 'white' ? isTargetWhite : !isTargetWhite;
+        })
+      : engineAnalysis;
+
+  const analysesByOpening: Record<string, { games: GameData[]; analyses: GameAnalysis[] }> = {};
+  for (const analysis of filteredAnalyses) {
     const game = gameMap.get(analysis.gameId);
     const eco = game?.eco || 'Unknown';
     const openingKey = eco.split('-')[0] || eco;
@@ -89,7 +109,7 @@ function formatEngineAnalysis(engineAnalysis: GameAnalysis[], allGames: GameData
   });
 
   return `
-ENGINE ANALYSIS (sample for tactical patterns — do NOT cite sample count. Do NOT use "mistakes per game" or "endgame accuracy" — these are poor skill metrics. Prefer win rate, opening frequency, and concrete tactical themes from game results):
+ENGINE ANALYSIS (Stockfish): When available, CITE average evaluations (e.g. "avg eval +0.75 for White"). Do NOT cite sample count. Do NOT use "mistakes per game" or "endgame accuracy".
 ${openingInsights.length > 0 ? 'By opening:\n' + openingInsights.join('\n') : 'Use game results and opening stats instead.'}
   `.trim();
 }
@@ -114,6 +134,231 @@ export interface BuildReportPromptOpts {
   moveSequences: { white: MoveSequence[]; black: MoveSequence[] };
   engineAnalysis: GameAnalysis[];
   targetUsername: string;
+}
+
+/** Shared context for all parallel report prompts (avoids duplication) */
+function buildSharedContext(opts: BuildReportPromptOpts): string {
+  const { identity, allGames, whiteStats, blackStats, moveSequences, engineAnalysis } = opts;
+  const chessComUser = identity.chessComUsername;
+  const lichessUser = identity.lichessUsername;
+  const totalGamesCount = allGames.length;
+  const gamesWithPGN = allGames.filter((g) => g.pgn && g.pgn.trim().length > 20);
+  const getOpeningKey = (g: GameData) =>
+    (g.openingName || g.eco || 'Unknown').split(/[-:]/)[0].trim();
+  const metadataSample =
+    allGames.length <= MAX_GAME_METADATA_IN_PROMPT
+      ? allGames
+      : stratifiedSample(allGames, getOpeningKey, MAX_GAME_METADATA_IN_PROMPT);
+  const moveListSample =
+    gamesWithPGN.length <= MAX_MOVE_LIST_IN_PROMPT
+      ? gamesWithPGN
+      : stratifiedSample(gamesWithPGN, getOpeningKey, MAX_MOVE_LIST_IN_PROMPT);
+  const chessComGames = allGames.filter((g) => g.source === 'chess.com');
+  const lichessGames = allGames.filter((g) => g.source === 'lichess');
+  const otbGames = allGames.filter((g) => g.source === 'otb');
+  const dateRange =
+    allGames.length > 0
+      ? {
+          earliest: allGames.reduce((e, g) =>
+            new Date(g.playedAt) < new Date(e.playedAt) ? g : e,
+          ).playedAt,
+          latest: allGames.reduce((l, g) =>
+            new Date(g.playedAt) > new Date(l.playedAt) ? g : l,
+          ).playedAt,
+        }
+      : null;
+  const engineText = formatEngineAnalysis(engineAnalysis, allGames);
+  const dateRangeStr = dateRange
+    ? `${new Date(dateRange.earliest).toLocaleDateString()} to ${new Date(dateRange.latest).toLocaleDateString()}`
+    : 'N/A';
+  const whiteStatsCapped = whiteStats.slice(0, MAX_OPENINGS_PER_COLOR);
+  const blackStatsCapped = blackStats.slice(0, MAX_OPENINGS_PER_COLOR);
+
+  return `
+CHESS SCOUTING REPORT FOR: "${identity.verifiedName}"
+
+RULES:
+- Always refer to the player as "${identity.verifiedName}" (never usernames "${chessComUser || 'N/A'}" / "${lichessUser || 'N/A'}").
+- Cite exact game counts for every claim. Only generalise for 10+ games.
+- Do not use ** (bold). Use human opening names (Sicilian Defense, not B20).
+- OPENING/DEFENSE wording (CRITICAL — apply to strategicSummary, strengths, weaknesses, tacticalRecommendation, specificVulnerability): DEFENSE = Black-initiated (Sicilian, French, Caro-Kann, Nimzo-Indian, Dutch, Queen's Indian, Modern, Pterodactyl, QGD). When ${identity.verifiedName} is Black → "plays the X Defense as Black". When White → "faces the X Defense as White". OPENING/ATTACK = White-initiated (Queen's Pawn Game, Italian Game, Ruy Lopez, English Opening, King's Indian Attack, Nimzowitsch-Larsen Attack). When ${identity.verifiedName} is White → "plays the X as White". When Black → "faces the X as Black". WRONG: "faces the Queen's Pawn Game as White" (White plays it). WRONG: "faces the Sicilian Defense as Black" (Black plays it). WRONG: "faces the Modern Defense as Black" (Black plays it).
+- Response MUST be valid JSON.
+
+DATA (${totalGamesCount} games):
+Chess.com: ${chessComGames.length} | Lichess: ${lichessGames.length} | OTB: ${otbGames.length}
+${otbGames.length === 0 ? 'WARNING: No OTB games. Do NOT make OTB claims.' : ''}
+Decisive: ${allGames.filter((g) => g.result === '1-0' || g.result === '0-1').length} | Draws: ${allGames.filter((g) => g.result === '1/2-1/2').length}
+${dateRange ? `Date range: ${dateRangeStr}` : ''}
+
+WHITE OPENINGS:
+${formatOpeningStats(whiteStatsCapped)}
+
+BLACK DEFENSES:
+${formatOpeningStats(blackStatsCapped)}
+
+MOST PLAYED LINES:
+White: ${(moveSequences.white || []).map((l, i) => `${i + 1}. ${l.notation} (${l.games}g)`).join(' | ') || 'None'}
+Black: ${(moveSequences.black || []).map((l, i) => `${i + 1}. ${l.notation} (${l.games}g)`).join(' | ') || 'None'}
+
+GAME METADATA (${metadataSample.length} of ${totalGamesCount}):
+${metadataSample.map((g, idx) => `${idx + 1}. ${g.source} ${g.white} v ${g.black} ${g.result} ${g.eco}`).join('\n')}
+
+MOVE SEQUENCES (${moveListSample.length} of ${totalGamesCount}):
+${moveListSample
+  .map((g, idx) => {
+    const moves = g.pgn && g.pgn.trim().length > 20 ? parsePGNMoves(g.pgn) : [];
+    const movesToShow = moves.length > 15 ? moves.slice(0, 15) : moves;
+    const line = movesToShow.length > 0 ? formatMoveSequence(movesToShow) + (moves.length > 15 ? ' ...' : '') : '(no PGN)';
+    return `${idx + 1}. ${line}`;
+  })
+  .join('\n')}
+
+${engineText ? `${engineText}\n` : ''}`;
+}
+
+/** Context for WHITE repertoire ONLY — games, stats, and engine analysis where target played White */
+function buildWhiteContext(opts: BuildReportPromptOpts): string {
+  const { identity, allGames, whiteStats, moveSequences, engineAnalysis, targetUsername } = opts;
+  const chessComUser = identity.chessComUsername;
+  const lichessUser = identity.lichessUsername;
+  const targetLower = targetUsername.toLowerCase().trim();
+  const whiteGames = allGames.filter((g) => g.white.toLowerCase().trim() === targetLower);
+  const gamesWithPGN = whiteGames.filter((g) => g.pgn && g.pgn.trim().length > 20);
+  const getOpeningKey = (g: GameData) =>
+    (g.openingName || g.eco || 'Unknown').split(/[-:]/)[0].trim();
+  const metadataSample =
+    whiteGames.length <= MAX_GAME_METADATA_IN_PROMPT
+      ? whiteGames
+      : stratifiedSample(whiteGames, getOpeningKey, MAX_GAME_METADATA_IN_PROMPT);
+  const moveListSample =
+    gamesWithPGN.length <= MAX_MOVE_LIST_IN_PROMPT
+      ? gamesWithPGN
+      : stratifiedSample(gamesWithPGN, getOpeningKey, MAX_MOVE_LIST_IN_PROMPT);
+  const engineText = formatEngineAnalysisForSide(engineAnalysis, allGames, targetUsername, 'white');
+  const whiteStatsCapped = whiteStats.slice(0, MAX_OPENINGS_PER_COLOR);
+
+  return `
+CHESS SCOUTING REPORT FOR: "${identity.verifiedName}" — WHITE REPERTOIRE ONLY
+
+CRITICAL: Use ONLY games where ${identity.verifiedName} played as White. Do NOT use any Black games or blackDefenses data.
+
+RULES:
+- Always refer to the player as "${identity.verifiedName}" (never usernames "${chessComUser || 'N/A'}" / "${lichessUser || 'N/A'}").
+- Cite exact game counts. Use human opening names (Sicilian Defense, not B20).
+- Response MUST be valid JSON.
+
+WHITE OPENINGS (games where ${identity.verifiedName} played White):
+${formatOpeningStats(whiteStatsCapped)}
+
+MOST PLAYED LINES (White only):
+${(moveSequences.white || []).map((l, i) => `${i + 1}. ${l.notation} (${l.games}g)`).join(' | ') || 'None'}
+
+GAME METADATA (${metadataSample.length} White games):
+${metadataSample.map((g, idx) => `${idx + 1}. ${g.source} ${g.white} v ${g.black} ${g.result} ${g.eco}`).join('\n')}
+
+MOVE SEQUENCES (${moveListSample.length} White games):
+${moveListSample
+  .map((g, idx) => {
+    const moves = g.pgn && g.pgn.trim().length > 20 ? parsePGNMoves(g.pgn) : [];
+    const movesToShow = moves.length > 15 ? moves.slice(0, 15) : moves;
+    const line = movesToShow.length > 0 ? formatMoveSequence(movesToShow) + (moves.length > 15 ? ' ...' : '') : '(no PGN)';
+    return `${idx + 1}. ${line}`;
+  })
+  .join('\n')}
+
+${engineText ? `${engineText}\n` : ''}`;
+}
+
+/** Context for BLACK repertoire ONLY — games, stats, and engine analysis where target played Black */
+function buildBlackContext(opts: BuildReportPromptOpts): string {
+  const { identity, allGames, blackStats, moveSequences, engineAnalysis, targetUsername } = opts;
+  const chessComUser = identity.chessComUsername;
+  const lichessUser = identity.lichessUsername;
+  const targetLower = targetUsername.toLowerCase().trim();
+  const blackGames = allGames.filter((g) => g.black.toLowerCase().trim() === targetLower);
+  const gamesWithPGN = blackGames.filter((g) => g.pgn && g.pgn.trim().length > 20);
+  const getOpeningKey = (g: GameData) =>
+    (g.openingName || g.eco || 'Unknown').split(/[-:]/)[0].trim();
+  const metadataSample =
+    blackGames.length <= MAX_GAME_METADATA_IN_PROMPT
+      ? blackGames
+      : stratifiedSample(blackGames, getOpeningKey, MAX_GAME_METADATA_IN_PROMPT);
+  const moveListSample =
+    gamesWithPGN.length <= MAX_MOVE_LIST_IN_PROMPT
+      ? gamesWithPGN
+      : stratifiedSample(gamesWithPGN, getOpeningKey, MAX_MOVE_LIST_IN_PROMPT);
+  const engineText = formatEngineAnalysisForSide(engineAnalysis, allGames, targetUsername, 'black');
+  const blackStatsCapped = blackStats.slice(0, MAX_OPENINGS_PER_COLOR);
+
+  return `
+CHESS SCOUTING REPORT FOR: "${identity.verifiedName}" — BLACK REPERTOIRE ONLY
+
+CRITICAL: Use ONLY games where ${identity.verifiedName} played as Black. Do NOT use any White games or whiteOpenings data.
+
+RULES:
+- Always refer to the player as "${identity.verifiedName}" (never usernames "${chessComUser || 'N/A'}" / "${lichessUser || 'N/A'}").
+- Cite exact game counts. Use human opening names (Sicilian Defense, not B20).
+- Response MUST be valid JSON.
+
+BLACK DEFENSES (games where ${identity.verifiedName} played Black):
+${formatOpeningStats(blackStatsCapped)}
+
+MOST PLAYED LINES (Black only):
+${(moveSequences.black || []).map((l, i) => `${i + 1}. ${l.notation} (${l.games}g)`).join(' | ') || 'None'}
+
+GAME METADATA (${metadataSample.length} Black games):
+${metadataSample.map((g, idx) => `${idx + 1}. ${g.source} ${g.white} v ${g.black} ${g.result} ${g.eco}`).join('\n')}
+
+MOVE SEQUENCES (${moveListSample.length} Black games):
+${moveListSample
+  .map((g, idx) => {
+    const moves = g.pgn && g.pgn.trim().length > 20 ? parsePGNMoves(g.pgn) : [];
+    const movesToShow = moves.length > 15 ? moves.slice(0, 15) : moves;
+    const line = movesToShow.length > 0 ? formatMoveSequence(movesToShow) + (moves.length > 15 ? ' ...' : '') : '(no PGN)';
+    return `${idx + 1}. ${line}`;
+  })
+  .join('\n')}
+
+${engineText ? `${engineText}\n` : ''}`;
+}
+
+/** Partial prompts for parallel generation (strategic, tactical). White/Black sections removed for now. */
+export function buildReportPromptsParallel(opts: BuildReportPromptOpts): {
+  strategic: string;
+  tactical: string;
+} {
+  const shared = buildSharedContext(opts);
+
+  const openingWording = `
+OPENING/DEFENSE WORDING (MANDATORY for strategicSummary, strengths, weaknesses, tacticalRecommendation, specificVulnerability — apply to ALL generated text):
+- DEFENSE (Sicilian, French, Caro-Kann, Nimzo-Indian, Dutch, Queen's Indian, Modern, Pterodactyl, QGD, Neo-King's Indian) = Black chooses it. When ${opts.identity.verifiedName} is Black → "plays the X Defense as Black". When White → "faces the X Defense as White".
+- OPENING/ATTACK (Queen's Pawn Game, Italian Game, Ruy Lopez, English Opening, King's Indian Attack, Nimzowitsch-Larsen Attack) = White chooses it. When ${opts.identity.verifiedName} is White → "plays the X as White". When Black → "faces the X as Black".
+- WRONG: "faces the Queen's Pawn Game as White" (White plays it). WRONG: "faces the Sicilian Defense as Black" (Black plays it). WRONG: "faces the Modern Defense as Black" (Black plays it). WRONG: "plays the English Opening as Black" (Black faces it).
+`;
+
+  return {
+    strategic: `${shared}
+${openingWording}
+TASK: Generate JSON with strategicSummary (comprehensive White+Black analysis), strengths[3], weaknesses[3], tacticalProfile, endgameReliability, timeControlInsights, repertoireReliability (0-1).
+
+CONTENT QUALITY (match White/Black repertoire cards): Write RICH, DETAILED paragraphs. For EVERY opening mentioned:
+- Cite exact game counts (e.g. "Sicilian Defense with 73 games, 77% win rate")
+- Cite engine evaluations when available (e.g. "Trompowsky: +1.76 average evaluation for White")
+- Describe strategic approach, adaptability, and tactical precision
+- Include secondary lines with their stats (e.g. "French Defense — 84% win rate")
+- strategicSummary: multi-paragraph overview with primary weapons, opening strategy, classical structures, play against common responses, engine analysis results
+- strengths/weaknesses: each item must include opening name, color, game count, win rate, and when available engine eval. Use "plays" when player initiated (Black for Defense, White for Opening/Attack); "faces" when opponent initiated. Example: "plays the Modern Defense as Black with 113 games and an 87% win rate"
+- tacticalRecommendation/specificVulnerability: cite exact openings, win rates, game counts, and engine evals. No generic advice. Apply OPENING/DEFENSE wording above.`,
+
+    tactical: `${shared}
+${openingWording}
+TASK: Generate JSON with tacticalRecommendation, specificVulnerability, suggestedLines[3].
+
+CONTENT QUALITY (match White/Black repertoire cards): Write RICH, DETAILED paragraphs:
+- tacticalRecommendation: Multi-sentence strategic advice. Use "plays" for Defenses when Black, "faces" for Openings when Black. Example: "proficiency when playing the Modern Defense as Black" (Black plays it). "struggles when facing the Ruy Lopez as Black" (Black faces it). Name SPECIFIC lines with correct wording.
+- specificVulnerability: Multi-sentence analysis. Use "plays" for Defenses when Black (e.g. "struggles when playing the Queen's Indian Defense as Black"); "faces" for Openings when Black (e.g. "vulnerable when facing the Ruy Lopez as Black"). Cite game counts and win rates.
+- suggestedLines: format "1.e4 c5 2.Nf3 d6... (Xg, Y% WR)". Prefer 10+ games, 5-6 moves.`,
+  };
 }
 
 export function buildReportPrompt(opts: BuildReportPromptOpts): string {
@@ -172,7 +417,7 @@ RULES (apply to entire response):
 - Only generalise ("often"/"typically") for patterns in 10+ games. For <10 say "appeared in X games".
 - Do not reference specific game numbers ("Game 19"). Use aggregate language only.
 - Do not use ** (bold markdown). Use * only for bullet points.
-- CRITICAL — Opening terminology: "Defense" (e.g. Sicilian Defense, Caro-Kann Defense) = Black-initiated; Black plays it, White faces it. "Opening" (e.g. English Opening, Ruy Lopez) and "Attack" (e.g. King's Indian Attack, Trompowsky Attack) = White-initiated; White plays it. whiteOpenings = what the OPPONENT (Black) plays when ${identity.verifiedName} has White — these are Defenses. Phrase as "faces the Sicilian Defense" or "most often faces the Sicilian as White" — NEVER "plays the Sicilian as White". blackDefenses = what ${identity.verifiedName} PLAYS as Black (they initiate Defenses, e.g. Sicilian Defense, King's Indian Defense). Phrase as "plays the Sicilian Defense as Black". For White repertoire (Openings/Attacks they initiate, e.g. English Opening, King's Indian Attack), say "plays the English Opening as White" or "plays the King's Indian Attack as White".
+- CRITICAL — Opening/Defense wording (applies to strategicSummary, strengths, weaknesses, tacticalRecommendation, specificVulnerability). DEFENSE (Sicilian, French, Caro-Kann, Nimzo-Indian, Dutch, Queen's Indian, Modern, QGD, Neo-King's Indian) = Black-initiated. When ${identity.verifiedName} is Black → "plays the X Defense as Black". When White → "faces the X Defense as White". OPENING/ATTACK (Queen's Pawn Game, Italian Game, Ruy Lopez, English Opening, King's Indian Attack) = White-initiated. When ${identity.verifiedName} is White → "plays the X as White". When Black → "faces the X as Black". WRONG: "faces the Queen's Pawn Game as White" (White plays it). WRONG: "faces the Sicilian Defense as Black" (Black plays it). WRONG: "plays the English Opening as Black" (Black faces it).
 - Use human opening names only (e.g. "Sicilian Defense", "Queen's Gambit"). Never use ECO codes (A05, B20, etc.) in narrative text — readers expect names like "King's Pawn Game", not "B00".
 - Weight all games equally regardless of date.
 - winRate/frequency are decimals 0.0-1.0. totalGames must = wins+draws+losses. Never return NaN/null.
@@ -356,3 +601,39 @@ export const reportResponseSchema = {
     'suggestedLines',
   ],
 };
+
+/** Partial schemas for parallel generation */
+export const reportPartialSchemas = {
+  strategic: {
+    type: 'OBJECT',
+    properties: {
+      strategicSummary: { type: 'STRING' },
+      strengths: { type: 'ARRAY', items: { type: 'STRING' } },
+      weaknesses: { type: 'ARRAY', items: { type: 'STRING' } },
+      tacticalProfile: { type: 'STRING' },
+      endgameReliability: { type: 'STRING' },
+      timeControlInsights: { type: 'STRING' },
+      repertoireReliability: { type: 'NUMBER' },
+    },
+    required: ['strategicSummary', 'strengths', 'weaknesses', 'tacticalProfile', 'endgameReliability', 'timeControlInsights', 'repertoireReliability'],
+  },
+  tactical: {
+    type: 'OBJECT',
+    properties: {
+      tacticalRecommendation: { type: 'STRING' },
+      specificVulnerability: { type: 'STRING' },
+      suggestedLines: { type: 'ARRAY', items: { type: 'STRING' } },
+    },
+    required: ['tacticalRecommendation', 'specificVulnerability', 'suggestedLines'],
+  },
+  white: {
+    type: 'OBJECT',
+    properties: { preparationSummary: { type: 'STRING' } },
+    required: ['preparationSummary'],
+  },
+  black: {
+    type: 'OBJECT',
+    properties: { blackStrategicSummary: { type: 'STRING' } },
+    required: ['blackStrategicSummary'],
+  },
+} as const;

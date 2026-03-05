@@ -84,6 +84,7 @@ export function postProcessReport(
   reportData.player.platforms.chessCom = identity.chessComUsername || '';
   reportData.player.platforms.lichess = identity.lichessUsername || '';
   reportData.player.currentRating = identity.fideProfile?.rating;
+  reportData.player.uscfId = identity.uscfId || reportData.player.uscfId || '';
   reportData.player.uscfRating = identity.uscfProfile?.rating;
   reportData.player.fideId = identity.fideId || '';
   reportData.player.country =
@@ -122,13 +123,13 @@ export function postProcessReport(
 
   // Set defaults for empty string fields
   reportData.strategicSummary = reportData.strategicSummary || 'Analysis pending...';
-  reportData.blackStrategicSummary = reportData.blackStrategicSummary || 'Analysis pending...';
+  reportData.blackStrategicSummary = reportData.blackStrategicSummary || 'Detailed analysis of black repertoire pending...';
   reportData.tacticalProfile = reportData.tacticalProfile || 'Analysis pending...';
   reportData.endgameReliability = reportData.endgameReliability || 'Analysis pending...';
   reportData.timeControlInsights = reportData.timeControlInsights || 'Analysis pending...';
   reportData.specificVulnerability = reportData.specificVulnerability || 'Analysis pending...';
   reportData.tacticalRecommendation = reportData.tacticalRecommendation || 'Analysis pending...';
-  reportData.preparationSummary = reportData.preparationSummary || 'Analysis pending...';
+  reportData.preparationSummary = reportData.preparationSummary || 'Detailed analysis of white repertoire pending...';
   reportData.repertoireReliability = reportData.repertoireReliability || 0;
 
   // Set timestamp

@@ -94,6 +94,11 @@ export class SSEStream {
     this.send('error', data);
   }
 
+  /** Send custom event for progressive report updates (identity, parsing) */
+  sendEvent(eventName: string, data: unknown): void {
+    this.send(eventName, data);
+  }
+
   async close(): Promise<void> {
     if (this.closed || !this.controller) return;
     this.stopKeepalive();

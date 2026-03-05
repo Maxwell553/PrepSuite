@@ -15,6 +15,7 @@ function makeIdentity(overrides?: Partial<ResolvedIdentity>): ResolvedIdentity {
   return {
     verifiedName: 'Test Player',
     fideId: '1234567',
+    uscfId: '12345678',
     chessComUsername: 'testplayer',
     lichessUsername: 'testlichess',
     fideProfile: {
@@ -209,13 +210,13 @@ describe('postProcessReport', () => {
     const result = postProcessReport(report, opts);
 
     expect(result.strategicSummary).toBe('Analysis pending...');
-    expect(result.blackStrategicSummary).toBe('Analysis pending...');
+    expect(result.blackStrategicSummary).toBe('Detailed analysis of black repertoire pending...');
     expect(result.tacticalProfile).toBe('Analysis pending...');
     expect(result.endgameReliability).toBe('Analysis pending...');
     expect(result.timeControlInsights).toBe('Analysis pending...');
     expect(result.specificVulnerability).toBe('Analysis pending...');
     expect(result.tacticalRecommendation).toBe('Analysis pending...');
-    expect(result.preparationSummary).toBe('Analysis pending...');
+    expect(result.preparationSummary).toBe('Detailed analysis of white repertoire pending...');
   });
 
   it('sets lastUpdated timestamp', () => {

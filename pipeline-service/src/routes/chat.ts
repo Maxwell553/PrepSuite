@@ -11,16 +11,21 @@ import { validateChatRequest } from '../lib/validation.js';
 import type { ChatContext } from '../lib/types.js';
 import { getGame, getPgn, runStockfish, getOpeningBreakdown, lookupOpening } from '../lib/chatTools.js';
 
-// Same models as identity (geminiFallback) and report generation (geminiReport)
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash-001'] as const;
+/** Same model chain as report analysis: pro → flash-lite → 2.5-pro → 2.5-flash */
+const GEMINI_CHAT_MODELS = [
+  'gemini-3.1-pro-preview',
+  'gemini-3.1-flash-lite-preview',
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+] as const;
 const GEMINI_TIMEOUT_MS = 90_000;
-const MAX_TOOL_ROUNDS = 5;
+const MAX_TOOL_ROUNDS = 10;
 
 /** Fall back to next model on 400/404/501/429 (model/request/rate-limit issues) or when error suggests model problem */
 function shouldTryNextModel(status: number, errorText: string): boolean {
   if (status === 404 || status === 501 || status === 429) return true;
-  if (status === 400) return true;
-  if (/model|not found|unavailable|not supported|resource exhausted/i.test(errorText)) return true;
+  if (status === 400) return true; // includes thought_signature errors on Gemini 3
+  if (/model|not found|unavailable|not supported|resource exhausted|thought_signature/i.test(errorText)) return true;
   return false;
 }
 
@@ -197,11 +202,12 @@ ${gamesInfo}
 
 Instructions:
 1. Answer based on the data above. Use tools when relevant: get_game/get_pgn for specific games, run_stockfish for engine analysis, and get_opening_breakdown when the user asks about performance against specific opponent responses to an opening (e.g. English vs 1...e5 vs 1...c5 vs 1...Nf6).
-2. Provide COMPREHENSIVE, DETAILED answers. Cite specific openings, lines, and game counts.
-3. Statistical significance: Only use "often", "typically", "usually" when a pattern appears in 10+ games. For 1–2 games, say "played once/twice".
-4. Use chess notation (e.g. 1.e4 c5 2.Nf3 d6) when discussing lines.
-5. When referencing games, use the tools to fetch actual data—do not invent game numbers or PGNs.
-6. FORMATTING: Do NOT use ** for bold. Use * only for bullet points. Plain text.`;
+2. CRITICAL — SYNTHESIZE AND RESPOND: After 1–2 tool calls, you MUST return a natural-language answer to the user. Do NOT chain get_opening_breakdown repeatedly (e.g. drilling into every variation). One call for the opening position (e.g. 1.e4 e5 2.Nf3 Nc6 3.Bb5 for Ruy Lopez) is usually enough. Synthesize the tool result into a clear, direct answer and respond. Only make additional tool calls if the user explicitly asks for deeper detail.
+3. Provide COMPREHENSIVE, DETAILED answers. Cite specific openings, lines, and game counts.
+4. Statistical significance: Only use "often", "typically", "usually" when a pattern appears in 10+ games. For 1–2 games, say "played once/twice".
+5. Use chess notation (e.g. 1.e4 c5 2.Nf3 d6) when discussing lines.
+6. When referencing games, use the tools to fetch actual data—do not invent game numbers or PGNs.
+7. FORMATTING: Do NOT use ** for bold. Use * only for bullet points. Plain text.`;
 }
 
 /** Build contents: conversation messages only (system context goes in systemInstruction) */
@@ -337,8 +343,8 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
   );
 
   let lastError = '';
-  for (let i = 0; i < GEMINI_MODELS.length; i++) {
-    const model = GEMINI_MODELS[i];
+  for (let i = 0; i < GEMINI_CHAT_MODELS.length; i++) {
+    const model = GEMINI_CHAT_MODELS[i];
     logger.info({ requestId, model }, '[Chat] Calling Gemini API');
     const MAX_AUTH_RETRIES = 2;
     let authRetries = 0;
@@ -369,8 +375,8 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
           const errorText = await res.text().catch(() => 'unable to read');
           lastError = `Vertex AI ${model}: ${res.status} - ${errorText.slice(0, 150)}`;
           logger.error({ requestId, model, status: res.status, errorText: errorText.slice(0, 300) }, '[Chat] Gemini API error');
-          if (shouldTryNextModel(res.status, errorText) && i < GEMINI_MODELS.length - 1) {
-            logger.warn({ requestId, model, nextModel: GEMINI_MODELS[i + 1] }, '[Chat] Model failed, trying next');
+          if (shouldTryNextModel(res.status, errorText) && i < GEMINI_CHAT_MODELS.length - 1) {
+            logger.warn({ requestId, model, nextModel: GEMINI_CHAT_MODELS[i + 1] }, '[Chat] Model failed, trying next');
             break;
           }
           return c.json({ error: `AI service error: ${res.status}. ${errorText.slice(0, 100)}` }, 502);
@@ -389,6 +395,8 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
         const parts = candidate?.content?.parts || [];
         let text = '';
         let functionCall: { name: string; args: Record<string, unknown> } | null = null;
+        /** Parts from model that contain functionCall — must be passed through with thought_signature for Gemini 3 */
+        let modelPartsWithFc: Array<Record<string, unknown>> = [];
 
         logger.debug(
           { requestId, round, partCount: parts.length, finishReason: candidate?.finishReason },
@@ -400,6 +408,8 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
           const fc = part.functionCall ?? part.function_call;
           if (fc) {
             functionCall = fc as { name: string; args: Record<string, unknown> };
+            // Preserve full part (including thought_signature/thoughtSignature) for Gemini 3
+            modelPartsWithFc.push({ ...part } as Record<string, unknown>);
           }
         }
 
@@ -413,10 +423,10 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
             { requestId, round, tool: functionCall.name, resultLength: result.length, resultPreview: result.slice(0, 120) },
             '[Chat] Tool executed',
           );
-          // Append function call and response to contents, call model again
+          // Append model parts (with thought_signature) and function response — required for Gemini 3
           contents.push({
             role: 'model',
-            parts: [{ functionCall: { name: functionCall.name, args: functionCall.args } }],
+            parts: modelPartsWithFc.length > 0 ? modelPartsWithFc : [{ functionCall: { name: functionCall.name, args: functionCall.args } }],
           });
           contents.push({
             role: 'user',
@@ -470,8 +480,8 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
         logger.warn({ requestId }, '[Chat] Request timed out');
         return c.json({ error: 'AI request timed out' }, 504);
       }
-      if (i < GEMINI_MODELS.length - 1 && /404|501|model|not found/i.test(errObj.message ?? '')) {
-        logger.warn({ requestId, model, err: errObj.message, nextModel: GEMINI_MODELS[i + 1] }, '[Chat] Model failed, trying next');
+      if (i < GEMINI_CHAT_MODELS.length - 1 && /404|501|model|not found|thought_signature/i.test(errObj.message ?? '')) {
+        logger.warn({ requestId, model, err: errObj.message, nextModel: GEMINI_CHAT_MODELS[i + 1] }, '[Chat] Model failed, trying next');
         continue;
       }
       logger.error({ requestId, model, err }, '[Chat] Error');

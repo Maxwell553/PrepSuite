@@ -1,15 +1,23 @@
 /**
  * Gemini API caller for structured JSON report generation.
  * Uses Vertex AI with JSON schema mode, retries, and JSON repair.
+ * Supports parallel generation (4 prompts in parallel) for faster reports.
  */
 
 import { logger } from '../lib/logger.js';
 import { getAccessToken, getVertexUrl, invalidateAccessTokenCache } from '../lib/vertexAuth.js';
 import { parseLLMJson } from '../lib/jsonRepair.js';
 import type { ScoutingReport } from '../lib/types.js';
+import { buildReportPromptsParallel, reportPartialSchemas } from './promptBuilder.js';
+import type { BuildReportPromptOpts } from './promptBuilder.js';
 
-const GEMINI_MODEL_PRIMARY = 'gemini-2.5-flash';
-const GEMINI_MODEL_FALLBACK = 'gemini-2.0-flash-001';
+/** Analysis model chain: Pro → Flash-Lite → 2.5 Pro → 2.5 Flash */
+const GEMINI_ANALYSIS_MODELS = [
+  'gemini-3.1-pro-preview',
+  'gemini-3.1-flash-lite-preview',
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+] as const;
 // 4 min timeout: Vertex AI can be slow in production (cold starts, large prompts).
 // Cloud Run request timeout is 300s; keep under that.
 const GEMINI_TIMEOUT_MS = 240_000;
@@ -26,23 +34,23 @@ function shouldFallbackTo25(status: number, errorText: string): boolean {
 
 /**
  * Call Vertex AI Gemini with JSON schema mode to generate a scouting report.
- * Tries gemini-2.5-flash first, falls back to gemini-2.0-flash-001 if unavailable.
+ * Model chain: 3.1-pro → flash-lite → 2.5-pro → 2.5-flash.
  */
 export async function generateReport(
   prompt: string,
   schema: Record<string, unknown>,
 ): Promise<ScoutingReport> {
-  const models = [GEMINI_MODEL_PRIMARY, GEMINI_MODEL_FALLBACK];
-
-  for (const model of models) {
+  for (let i = 0; i < GEMINI_ANALYSIS_MODELS.length; i++) {
+    const model = GEMINI_ANALYSIS_MODELS[i];
     try {
       return await generateReportWithModel(prompt, schema, model);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const status = (err as { status?: number }).status;
       const errorText = (err as { errorText?: string }).errorText ?? msg;
-      if (model === GEMINI_MODEL_PRIMARY && (status ? shouldFallbackTo25(status, errorText) : /404|501|model.*not found/i.test(msg))) {
-        logger.warn({ model: GEMINI_MODEL_PRIMARY, err: msg }, '[GeminiReport] Primary model failed, falling back to 2.0');
+      const shouldTryNext = status ? shouldFallbackTo25(status, errorText) : /404|501|model.*not found/i.test(msg);
+      if (shouldTryNext && i < GEMINI_ANALYSIS_MODELS.length - 1) {
+        logger.warn({ model, nextModel: GEMINI_ANALYSIS_MODELS[i + 1], err: msg }, '[GeminiReport] Model failed, trying next in chain');
         continue;
       }
       throw err;
@@ -50,6 +58,118 @@ export async function generateReport(
   }
 
   throw new Error('Gemini report generation failed');
+}
+
+/**
+ * Generate report in parallel: 2 Gemini calls (strategic, tactical) run concurrently.
+ * Model chain: 3.1-pro → flash-lite → 2.5-pro → 2.5-flash.
+ */
+export async function generateReportParallel(opts: BuildReportPromptOpts): Promise<ScoutingReport> {
+  const prompts = buildReportPromptsParallel(opts);
+
+  let strategic: Record<string, unknown> | undefined;
+  let tactical: Record<string, unknown> | undefined;
+
+  for (let i = 0; i < GEMINI_ANALYSIS_MODELS.length; i++) {
+    const model = GEMINI_ANALYSIS_MODELS[i];
+    try {
+      [strategic, tactical] = await Promise.all([
+        generatePartialWithModel(prompts.strategic, reportPartialSchemas.strategic, model),
+        generatePartialWithModel(prompts.tactical, reportPartialSchemas.tactical, model),
+      ]);
+      break;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const status = (err as { status?: number }).status;
+      const errorText = (err as { errorText?: string })?.errorText ?? msg;
+      const shouldTryNext = status ? shouldFallbackTo25(status, errorText) : /404|501|model.*not found/i.test(msg);
+      if (shouldTryNext && i < GEMINI_ANALYSIS_MODELS.length - 1) {
+        logger.warn({ model, nextModel: GEMINI_ANALYSIS_MODELS[i + 1], err: msg }, '[GeminiReport] Model failed, trying next in chain');
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  if (!strategic || !tactical) {
+    throw new Error('Gemini report generation failed');
+  }
+
+  const merged: ScoutingReport = {
+    id: `report-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    player: { name: opts.identity.verifiedName, platforms: {} },
+    whiteOpenings: [],
+    blackDefenses: [],
+    strategicSummary: String(strategic.strategicSummary ?? ''),
+    blackStrategicSummary: '',
+    tacticalProfile: String(strategic.tacticalProfile ?? ''),
+    endgameReliability: String(strategic.endgameReliability ?? ''),
+    timeControlInsights: String(strategic.timeControlInsights ?? ''),
+    strengths: Array.isArray(strategic.strengths) ? strategic.strengths : [],
+    weaknesses: Array.isArray(strategic.weaknesses) ? strategic.weaknesses : [],
+    specificVulnerability: String(tactical.specificVulnerability ?? ''),
+    tacticalRecommendation: String(tactical.tacticalRecommendation ?? ''),
+    preparationSummary: '',
+    suggestedLines: Array.isArray(tactical.suggestedLines) ? tactical.suggestedLines : [],
+    repertoireReliability: typeof strategic.repertoireReliability === 'number' ? strategic.repertoireReliability : 0,
+    mostPlayedLines: { white: [], black: [] },
+    lastUpdated: new Date().toISOString(),
+  };
+
+  logger.info('[GeminiReport] Parallel generation complete, merged 2 partial responses');
+  return merged;
+}
+
+async function generatePartialWithModel(
+  prompt: string,
+  schema: Record<string, unknown>,
+  model: string,
+): Promise<Record<string, unknown>> {
+  const geminiUrl = getVertexUrl(model);
+  const requestBody = {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: {
+      maxOutputTokens: 8192,
+      temperature: 0.7,
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+    },
+  };
+
+  const accessToken = await getAccessToken();
+  const res = await fetch(geminiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => 'unable to read');
+    throw new Error(`Gemini API error: ${res.status} - ${errorText.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const candidate = data.candidates?.[0];
+  if (!candidate) throw new Error('Gemini returned no candidates');
+
+  const parts = candidate.content?.parts || [];
+  let text = '';
+  for (const part of parts) {
+    if (part.text) text += part.text;
+  }
+  if (!text) throw new Error('Gemini returned empty response');
+
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    const repaired = parseLLMJson<Record<string, unknown>>(text);
+    if (repaired) return repaired;
+    throw new Error('Failed to parse Gemini partial response');
+  }
 }
 
 async function generateReportWithModel(

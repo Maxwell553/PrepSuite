@@ -43,7 +43,7 @@ vi.mock('../../src/pipeline/engineSampler.js', () => ({
 }));
 
 vi.mock('../../src/pipeline/geminiReport.js', () => ({
-  generateReport: vi.fn().mockResolvedValue({
+  generateReportParallel: vi.fn().mockResolvedValue({
     id: 'test-report-1',
     player: { name: 'Test Player', platforms: {} },
     whiteOpenings: [],
@@ -66,8 +66,12 @@ vi.mock('../../src/pipeline/geminiReport.js', () => ({
 }));
 
 vi.mock('../../src/pipeline/promptBuilder.js', () => ({
-  buildReportPrompt: vi.fn().mockReturnValue('mock prompt'),
-  reportResponseSchema: { type: 'OBJECT', properties: {} },
+  buildReportPromptsParallel: vi.fn().mockReturnValue({
+    strategic: 'mock strategic',
+    tactical: 'mock tactical',
+    white: 'mock white',
+    black: 'mock black',
+  }),
 }));
 
 vi.mock('../../src/pipeline/reportPostProcessor.js', () => ({
@@ -133,6 +137,8 @@ describe('POST /api/analyze', () => {
   it('returns SSE stream for valid input', async () => {
     mockedResolve.mockResolvedValue({
       verifiedName: 'Test Player',
+      fideId: '',
+      uscfId: '',
       fideProfile: null,
       uscfProfile: null,
       chessComUsername: 'testplayer',
@@ -171,6 +177,8 @@ describe('POST /api/analyze', () => {
   it('includes parsing and engine phases in SSE stream', async () => {
     mockedResolve.mockResolvedValue({
       verifiedName: 'Test Player',
+      fideId: '',
+      uscfId: '',
       fideProfile: null,
       uscfProfile: null,
       chessComUsername: 'testplayer',

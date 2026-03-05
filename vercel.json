@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/((?!EmailLogo\\.jpg$|.*\\.(jpg|jpeg|png|gif|ico|svg|css|js|json|woff2?)$).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

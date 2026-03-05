@@ -137,3 +137,21 @@ body {
     animation: fadeInRight 0.8s ease-out forwards;
     opacity: 0;
 }
+
+/* Skeleton loader shimmer */
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+    background: linear-gradient(
+        90deg,
+        rgb(51 65 85) 0%,
+        rgb(71 85 105) 50%,
+        rgb(51 65 85) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 0.25rem;
+}

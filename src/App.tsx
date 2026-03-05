@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, History, Shield, Database, LayoutDashboard, ChevronRight, ChevronLeft, User, Loader2, Trash2, Square, CheckSquare } from 'lucide-react';
 import SearchScreen from './components/SearchScreen';
 import ReportDashboard from './components/ReportDashboard';
@@ -15,8 +15,10 @@ import { getUserFriendlyError, logError } from './lib/errorUtils';
 import UserSettings from './components/UserSettings';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
+import AboutPrepSuite from './components/AboutPrepSuite';
 import { ThemeProvider } from './lib/themeContext';
 import { setSentryUser, clearSentryUser } from './lib/sentry';
+import { mergeReport } from './lib/reportUtils';
 
 function FeaturedReportLayout({
   report,
@@ -60,10 +62,15 @@ const App: React.FC = () => {
   const [viewingFeaturedReport, setViewingFeaturedReport] = useState<ScoutingReport | null>(null);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const [showTermsOfService, setShowTermsOfService] = useState(false);
+  const [showAboutPrepSuite, setShowAboutPrepSuite] = useState(false);
   const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
   // Persist loading state across tab switches
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const isGeneratingRef = useRef(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  useEffect(() => {
+    isGeneratingRef.current = isAnalyzing;
+  }, [isAnalyzing]);
   const [loadingStage, setLoadingStage] = useState<'identity' | 'fetching' | 'analyzing' | 'generating' | null>(null);
   const [scanningStatus, setScanningStatus] = useState<string>('');
 
@@ -137,12 +144,25 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const handleReportGenerated = (report: ScoutingReport, options?: { fromCache?: boolean }) => {
+  const handleReportGenerated = (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean }) => {
     setSelectedReport(report);
     setActiveTab('dashboard');
-    // Auto-save report to user's profile (skip when loading from cache - already saved)
-    if (!options?.fromCache) {
-      handleSaveReport(report);
+    if (options?.isInitial) {
+      setIsAnalyzing(true);
+      isGeneratingRef.current = true;
+    } else {
+      setIsAnalyzing(false);
+      isGeneratingRef.current = false;
+      // Auto-save report to user's profile (skip when loading from cache - already saved)
+      if (!options?.fromCache) {
+        handleSaveReport(report);
+      }
+    }
+  };
+
+  const handleReportPartialUpdate = (partial: Partial<ScoutingReport>) => {
+    if (isGeneratingRef.current) {
+      setSelectedReport((prev) => (prev ? mergeReport(prev, partial) : prev));
     }
   };
 
@@ -323,6 +343,15 @@ const App: React.FC = () => {
     );
   }
 
+  if (showAboutPrepSuite) {
+    return (
+      <ThemeProvider>
+        {isOffline && <OfflineBanner />}
+        <AboutPrepSuite onBack={() => setShowAboutPrepSuite(false)} />
+      </ThemeProvider>
+    );
+  }
+
   const handleViewFeaturedReport = async (slug: string) => {
     const { getFeaturedReport } = await import('./services/featuredReports');
     const report = await getFeaturedReport(slug);
@@ -366,6 +395,7 @@ const App: React.FC = () => {
           user={user}
           onShowPrivacyPolicy={() => setShowPrivacyPolicy(true)}
           onShowTermsOfService={() => setShowTermsOfService(true)}
+          onShowAboutPrepSuite={() => setShowAboutPrepSuite(true)}
           onViewFeaturedReport={handleViewFeaturedReport}
         />
         </div>
@@ -422,6 +452,7 @@ const App: React.FC = () => {
                 {activeTab === 'search' && (
                   <SearchScreen 
                     onReportGenerated={handleReportGenerated} 
+                    onReportPartialUpdate={handleReportPartialUpdate}
                     user={user}
                     isAnalyzing={isAnalyzing}
                     setIsAnalyzing={setIsAnalyzing}
@@ -435,7 +466,11 @@ const App: React.FC = () => {
                 )}
 
                 {activeTab === 'dashboard' && selectedReport && (
-                  <ReportDashboard report={selectedReport} />
+                  <ReportDashboard
+                    report={selectedReport}
+                    isGenerating={isAnalyzing}
+                    generatingStatus={scanningStatus}
+                  />
                 )}
 
                 {activeTab === 'dashboard' && !selectedReport && (

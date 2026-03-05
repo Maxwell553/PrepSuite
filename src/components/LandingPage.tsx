@@ -16,10 +16,11 @@ interface LandingPageProps {
     user?: SupabaseUser | null;
     onShowPrivacyPolicy?: () => void;
     onShowTermsOfService?: () => void;
+    onShowAboutPrepSuite?: () => void;
     onViewFeaturedReport?: (slug: string) => Promise<void>;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, onShowPrivacyPolicy, onShowTermsOfService, onViewFeaturedReport }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, onShowPrivacyPolicy, onShowTermsOfService, onShowAboutPrepSuite, onViewFeaturedReport }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [view, setView] = useState<'login' | 'signup' | 'success'>('login');
@@ -595,6 +596,18 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             © {new Date().getFullYear()} SoundSideDesign. All rights reserved.
                         </div>
                         <div className="flex items-center gap-6">
+                            <a
+                                href="#"
+                                className="text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 text-sm transition-colors"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    if (onShowAboutPrepSuite) {
+                                        onShowAboutPrepSuite();
+                                    }
+                                }}
+                            >
+                                Why PrepSuite
+                            </a>
                             <a
                                 href="#"
                                 className="text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 text-sm transition-colors"

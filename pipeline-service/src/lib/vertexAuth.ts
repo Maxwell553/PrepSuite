@@ -71,8 +71,8 @@ export function getVertexUrl(model: string): string {
         throw new Error('VERTEX_PROJECT_ID environment variable is required');
     }
 
-    // Gemini 3 preview models require the global endpoint
-    const useGlobal = configuredLocation === 'global' || /^gemini-3-.*-preview$/.test(model);
+    // Gemini 3.x preview models (e.g. gemini-3.1-flash-lite-preview) require the global endpoint
+    const useGlobal = configuredLocation === 'global' || /^gemini-3(\.\d+)?-.*-preview$/.test(model);
     const location = useGlobal ? 'global' : configuredLocation;
     const host =
         location === 'global'

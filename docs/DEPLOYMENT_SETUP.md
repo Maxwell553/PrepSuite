@@ -260,6 +260,25 @@ Prerequisites: `gcloud auth login`, and Secret Manager secrets `supabase-jwt-sec
 - Grant Cloud Run access: ensure the Cloud Run service account can access the secret
 - Redeploy so Cloud Run receives the secret
 
+### Delete Account Fails ("Edge Function returned a non-2xx status code")
+
+1. **Check Edge Function logs** — Supabase Dashboard → Edge Functions → `delete-user` → Logs. Look for:
+   - `Missing Supabase environment variables` → Ensure the function is deployed; Supabase auto-injects `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` for hosted projects.
+   - `401 Unauthorized` / `Authentication error` → User's JWT is expired. The app now calls `refreshSession()` before delete; if it still fails, have them log out and log back in, then try again.
+   - `Failed to delete user account` → May indicate a Supabase Auth restriction or trigger.
+
+2. **Ensure the function is deployed:**
+   ```bash
+   supabase functions deploy delete-user
+   ```
+
+3. **Local development** — When running `supabase functions serve`, secrets come from the linked project. If missing, run:
+   ```bash
+   supabase secrets list   # Verify secrets exist
+   ```
+
+4. **RLS** — The function uses the service role key (bypasses RLS). If reports/players deletion fails, the function continues and still attempts to delete the auth user; the 500 may come from `auth.admin.deleteUser` failing.
+
 ---
 
 ## 📝 Post-Deployment Verification

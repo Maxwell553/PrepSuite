@@ -8,7 +8,8 @@ import { loadPgn } from '../lib/pgnUtils';
 interface AnalysisBoardProps {
   games: GameData[];
   playerName: string;
-  playerUsername?: string; // Optional: actual username from games for better matching
+  /** Username(s) that appear in games (Lichess, Chess.com, or actualUsername) for result dot coloring */
+  playerUsername?: string | string[];
 }
 
 const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, playerUsername }) => {
@@ -31,9 +32,10 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
   }
 
   const playerLower = playerName.toLowerCase().trim();
+  const usernameList = Array.isArray(playerUsername) ? playerUsername : playerUsername ? [playerUsername] : [];
   // Use actual username from games if available, otherwise use playerName
   // Extract username from first game if not provided
-  const actualUsername = playerUsername || (() => {
+  const actualUsername = usernameList[0] || (() => {
     if (games.length > 0) {
       const firstGame = games[0];
       // Try to find which player matches - check both white and black
@@ -79,8 +81,8 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     return false;
   };
 
-  // Filter games based on selected filter - match against playerName and actualUsername
-  const identifiersForFilter = [actualUsername, playerName].filter(Boolean);
+  // Filter games based on selected filter - match against playerName and all known usernames (Lichess, Chess.com, actualUsername)
+  const identifiersForFilter = [...new Set([actualUsername, playerName, ...usernameList].filter(Boolean))];
   const filteredGames = games.filter(game => {
     const isWhite = identifiersForFilter.some((id) => namesMatch(game.white, id));
     const isBlack = identifiersForFilter.some((id) => namesMatch(game.black, id));
@@ -357,13 +359,14 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
 
   const formattedMoves = formatMovesForDisplay();
 
-  // Result dot color for game list
+  // Result dot color for game list (green=win, red=loss, amber=draw)
   const getResultDotColor = (r: string, isW: boolean, isB: boolean) => {
     const t = r.trim();
     if (isW && t === '1-0') return 'bg-green-500';
     if (isB && t === '0-1') return 'bg-green-500';
     if (isW && t === '0-1') return 'bg-red-500';
     if (isB && t === '1-0') return 'bg-red-500';
+    if ((isW || isB) && t === '1/2-1/2') return 'bg-amber-500';
     return 'bg-slate-500';
   };
 

@@ -3,21 +3,21 @@ import { logger } from '../lib/logger.js';
 import { analyzeRateLimitMiddleware } from '../middleware/rateLimit.js';
 import { validateAnalyzeRequest } from '../lib/validation.js';
 import { SSEStream } from '../lib/sse.js';
-import type { ResolvedIdentity } from '../lib/types.js';
+import type { ResolvedIdentity, PlayerMetadata } from '../lib/types.js';
+import type { PartialIdentityUpdate } from '../pipeline/identity.js';
 import type { GameData } from '../lib/types.js';
 import { resolveIdentity } from '../pipeline/identity.js';
 import { fetchGames } from '../pipeline/gameFetcher.js';
 import { fetchOtbGames } from '../pipeline/otbGames.js';
 import { parseChessComGames, parseLichessGames, standardizePgnForBoard } from '../pipeline/gameParser.js';
 import { fetchLichessPgnBatch } from '../pipeline/lichess.js';
-import { validateAndRefetchPgn } from '../pipeline/pgnValidator.js';
+import { validateAndRefetchPgn, isValidPgn } from '../pipeline/pgnValidator.js';
 import { identifyOpeningsBatch } from '../pipeline/openingClassifier.js';
 import { generateStats } from '../pipeline/statsAggregator.js';
 import { extractMostPlayedLines } from '../pipeline/moveSequenceExtractor.js';
 import { StockfishPool } from '../pipeline/enginePool.js';
 import { sampleGamesForAnalysis } from '../pipeline/engineSampler.js';
-import { buildReportPrompt, reportResponseSchema } from '../pipeline/promptBuilder.js';
-import { generateReport } from '../pipeline/geminiReport.js';
+import { generateReportParallel } from '../pipeline/geminiReport.js';
 import { postProcessReport } from '../pipeline/reportPostProcessor.js';
 
 export const analyzeRoute = new Hono();
@@ -71,6 +71,7 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
     input = validateAnalyzeRequest(body);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Invalid request';
+    c.get('releaseAnalyzeSlot')?.();
     return c.json({ error: message }, 400);
   }
 
@@ -93,6 +94,26 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
       const identityStart = Date.now();
       sse.sendPhase({ phase: 'identity', status: 'started' });
 
+      const identityToPlayer = (partial: PartialIdentityUpdate): Partial<PlayerMetadata> => {
+        const p: Partial<PlayerMetadata> = {};
+        if (partial.verifiedName) p.name = partial.verifiedName;
+        if (partial.fideId !== undefined) p.fideId = partial.fideId || undefined;
+        const uscfId = partial.uscfProfile?.id ?? partial.uscfId;
+        if (uscfId) p.uscfId = uscfId;
+        if (partial.fideProfile?.federation) p.country = partial.fideProfile.federation;
+        if (partial.fideProfile?.rating != null) p.currentRating = partial.fideProfile.rating;
+        if (partial.uscfProfile?.rating != null) p.uscfRating = partial.uscfProfile.rating;
+        const titles = [partial.fideProfile?.title, partial.uscfProfile?.title].filter((t): t is string => !!t && t.trim().length > 0);
+        if (titles.length > 0) p.titles = titles;
+        if (partial.chessComUsername !== undefined || partial.lichessUsername !== undefined) {
+          p.platforms = {
+            ...(partial.chessComUsername ? { chessCom: partial.chessComUsername } : {}),
+            ...(partial.lichessUsername ? { lichess: partial.lichessUsername } : {}),
+          };
+        }
+        return p;
+      };
+
       const identity = await resolveIdentity(
         input.name,
         input.fideId || '',
@@ -100,7 +121,15 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         input.chessComUsername || undefined,
         input.lichessUsername || undefined,
         (message) => sse.sendPhase({ phase: 'identity', status: 'progress', message }),
-        { skipOnlinePlatforms: onlineLimit === 0 },
+        {
+          skipOnlinePlatforms: onlineLimit === 0,
+          onPartialIdentity: (partial) => {
+            const player = identityToPlayer(partial);
+            if (Object.keys(player).length > 0) {
+              sse.sendEvent('identity', { player });
+            }
+          },
+        },
       );
 
       sse.sendPhase({
@@ -108,6 +137,22 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         status: 'complete',
         durationMs: Date.now() - identityStart,
       });
+
+      // Final identity event (ensures complete state)
+      const playerFromIdentity: PlayerMetadata = {
+        name: identity.verifiedName,
+        fideId: identity.fideId || undefined,
+        uscfId: identity.uscfId || undefined,
+        country: identity.fideProfile?.federation || undefined,
+        currentRating: identity.fideProfile?.rating,
+        uscfRating: identity.uscfProfile?.rating,
+        titles: [identity.fideProfile?.title, identity.uscfProfile?.title].filter((t): t is string => !!t && t.trim().length > 0),
+        platforms: {
+          chessCom: identity.chessComUsername || undefined,
+          lichess: identity.lichessUsername || undefined,
+        },
+      };
+      sse.sendEvent('identity', { player: playerFromIdentity });
 
       logger.info(
         {
@@ -183,20 +228,23 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         identity.lichessUsername,
       );
 
-      // Enrich Lichess games with PGN from export API (standard format, same as Chess.com)
+      // Only refetch PGN for Lichess games that have invalid/missing notation (NDJSON often has usable PGN)
       if (lichessGames.length > 0) {
-        const lichessIds = lichessGames.map((g) => g.id);
-        const pgnMap = await fetchLichessPgnBatch(lichessIds);
-        for (const g of lichessGames) {
-          const exportPgn = pgnMap.get(g.id);
-          if (exportPgn) {
-            g.pgn = standardizePgnForBoard(exportPgn);
+        const needPgn = lichessGames.filter((g) => !isValidPgn(g.pgn));
+        if (needPgn.length > 0) {
+          const lichessIds = needPgn.map((g) => g.id);
+          const pgnMap = await fetchLichessPgnBatch(lichessIds);
+          for (const g of needPgn) {
+            const exportPgn = pgnMap.get(g.id);
+            if (exportPgn) {
+              g.pgn = standardizePgnForBoard(exportPgn);
+            }
           }
+          logger.info(
+            { needed: needPgn.length, fetched: pgnMap.size },
+            '[Analyze] Lichess PGN refetched for games with invalid notation',
+          );
         }
-        logger.info(
-          { total: lichessGames.length, withPgn: [...pgnMap.keys()].length },
-          '[Analyze] Lichess PGN enriched from export API',
-        );
       }
 
       // Respect OTB/online split: take up to otbLimit from OTB, up to onlineLimit from online, then combine
@@ -264,6 +312,14 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         gameCount: allGames.length,
       });
 
+      // Stream parsing result for progressive report filling (openings, games)
+      sse.sendEvent('parsing', {
+        whiteOpenings: whiteStats,
+        blackDefenses: blackStats,
+        mostPlayedLines: moveSequences,
+        games: allGames,
+      });
+
       logger.info(
         { whiteOpenings: whiteStats.length, blackOpenings: blackStats.length },
         '[Analyze] Stats generated',
@@ -310,7 +366,9 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
 
 
 
-      const prompt = buildReportPrompt({
+      logger.info('[Analyze] Starting parallel report generation (strategic, tactical, white, black)');
+
+      const rawReport = await generateReportParallel({
         identity,
         allGames,
         whiteStats,
@@ -319,13 +377,6 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         engineAnalysis,
         targetUsername,
       });
-
-      logger.info(
-        { promptLength: prompt.length },
-        '[Analyze] Built report prompt',
-      );
-
-      const rawReport = await generateReport(prompt, reportResponseSchema);
 
       const report = postProcessReport(rawReport, {
         identity,

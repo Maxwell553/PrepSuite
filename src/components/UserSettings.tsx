@@ -18,11 +18,12 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onAccountDele
   const handleDeleteAccount = async () => {
     setIsDeleting(true);
     try {
-      // Get the current session to pass authentication token
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      // Refresh session to ensure we have a valid (non-expired) JWT before calling the edge function.
+      // Supabase returns 401 when the JWT is expired; getSession() returns cached data.
+      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
       
       if (sessionError || !session) {
-        alert('You must be logged in to delete your account.');
+        alert('Session expired. Please log in again and try deleting your account.');
         setIsDeleting(false);
         setShowDeleteConfirm(false);
         return;
@@ -39,14 +40,19 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onAccountDele
         },
       });
 
+      // Surface the actual error from the edge function when available
+      const serverError = data?.error ?? data?.details;
       if (error) {
         console.error('[UserSettings] Error calling delete-user function:', error);
-        throw new Error(error.message || 'Failed to delete account');
+        console.error('[UserSettings] Server response:', data);
+        throw new Error(
+          serverError || error.message || 'Failed to delete account. Check Supabase Edge Function logs for details.'
+        );
       }
 
       if (data?.error) {
         console.error('[UserSettings] Delete function returned error:', data.error);
-        throw new Error(data.error);
+        throw new Error(data.details ? `${data.error}: ${data.details}` : data.error);
       }
 
       // Sign out the user after successful deletion

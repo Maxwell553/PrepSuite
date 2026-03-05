@@ -3,7 +3,11 @@
  * Centralizes the mapping from pipeline phases to UI state updates.
  */
 
-import type { PipelineCallbacks } from '../services/pipelineClient';
+import type {
+  PipelineCallbacks,
+  IdentityEventData,
+  ParsingEventData,
+} from '../services/pipelineClient';
 
 export interface PipelineProgressState {
   scanningStatus: string;
@@ -16,6 +20,8 @@ export interface UsePipelineProgressOptions {
   setScanningStatus: (value: string) => void;
   setLoadingStage: (value: 'identity' | 'fetching' | 'analyzing' | 'generating' | null) => void;
   setLoadingProgress: (value: number) => void;
+  onIdentity?: (data: IdentityEventData) => void;
+  onParsing?: (data: ParsingEventData) => void;
 }
 
 /**
@@ -26,6 +32,8 @@ export function usePipelineProgressCallbacks({
   setScanningStatus,
   setLoadingStage,
   setLoadingProgress,
+  onIdentity,
+  onParsing,
 }: UsePipelineProgressOptions): PipelineCallbacks {
   return {
     onPhase: (phase, status, durationMs, extra) => {
@@ -71,5 +79,7 @@ export function usePipelineProgressCallbacks({
     onError: (error) => {
       console.error('[Search] Pipeline error:', error);
     },
+    onIdentity,
+    onParsing,
   };
 }

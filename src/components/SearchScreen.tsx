@@ -9,11 +9,11 @@ import { runPipeline } from '../services/pipelineClient';
 import { supabase } from '../lib/supabase';
 import { usePipelineProgressCallbacks } from '../hooks/usePipelineProgress';
 import { logger } from '../lib/logger';
-
-
+import { createEmptyReport } from '../lib/reportUtils';
 
 interface SearchScreenProps {
-  onReportGenerated: (report: ScoutingReport, options?: { fromCache?: boolean }) => void;
+  onReportGenerated: (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean }) => void;
+  onReportPartialUpdate?: (partial: Partial<ScoutingReport>) => void;
   user: SupabaseUser;
   isAnalyzing?: boolean;
   setIsAnalyzing?: (value: boolean) => void;
@@ -27,6 +27,7 @@ interface SearchScreenProps {
 
 const SearchScreen: React.FC<SearchScreenProps> = ({
   onReportGenerated,
+  onReportPartialUpdate,
   user,
   isAnalyzing: externalIsAnalyzing,
   setIsAnalyzing: externalSetIsAnalyzing,
@@ -69,6 +70,14 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
     setScanningStatus,
     setLoadingStage,
     setLoadingProgress,
+    onIdentity: (data) => onReportPartialUpdate?.({ player: data.player }),
+    onParsing: (data) =>
+      onReportPartialUpdate?.({
+        whiteOpenings: data.whiteOpenings,
+        blackDefenses: data.blackDefenses,
+        mostPlayedLines: data.mostPlayedLines,
+        games: data.games,
+      }),
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -107,6 +116,10 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
     setError(null);
 
     try {
+      // Create empty report and switch to dashboard immediately
+      const emptyReport = createEmptyReport(formData.name);
+      onReportGenerated(emptyReport, { isInitial: true });
+
       // ── Pipeline Service ──────────────────
       logger.info('Search', 'pipeline_start', { message: 'Using Pipeline Service for full analysis pipeline' });
       setScanningStatus('Step 1: Identifying Player...');
@@ -160,11 +173,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
       logger.info('Search', 'report_ready', { message: 'Pipeline report ready, calling onReportGenerated' });
       onReportGenerated(reportData);
       setScanningStatus('Report generated successfully!');
-
-      setTimeout(() => {
-        setLoading(false);
-        setScanningStatus('');
-      }, 2000);
+      setLoading(false);
+      setScanningStatus('');
 
       setFormData({
         name: '',

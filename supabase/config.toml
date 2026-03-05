@@ -220,7 +220,7 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Custom email templates with Prepsuite.ai logo (NewLogo.jpg)
+# Custom email templates with Prepsuite.ai logo (EmailLogo.jpg)
 [auth.email.template.confirmation]
 subject = "Confirm your signup"
 content_path = "./supabase/templates/confirmation.html"

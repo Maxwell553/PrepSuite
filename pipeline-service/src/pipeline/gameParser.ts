@@ -43,8 +43,8 @@ export function standardizePgnForBoard(pgn: string): string {
 
 interface ChessComGame {
   uuid?: string;
-  white: { username: string; result: string };
-  black: { username: string; result: string };
+  white: { username: string; result: string; rating?: number };
+  black: { username: string; result: string; rating?: number };
   eco?: string;
   pgn: string;
   end_time: number;
@@ -56,8 +56,8 @@ interface ChessComGame {
 interface LichessGame {
   id: string;
   players?: {
-    white?: { user?: { name?: string }; userId?: string };
-    black?: { user?: { name?: string }; userId?: string };
+    white?: { user?: { name?: string; id?: string }; userId?: string; rating?: number };
+    black?: { user?: { name?: string; id?: string }; userId?: string; rating?: number };
   };
   winner?: 'white' | 'black';
   pgn?: string;
@@ -152,17 +152,30 @@ function extractEco(raw: unknown): string {
  */
 export function parseChessComGames(games: unknown[], _targetUsername: string): GameData[] {
   const typed = games as ChessComGame[];
-    return typed.map((g) => ({
-    id: g.uuid || Math.random().toString(36),
-    source: 'chess.com' as const,
-    white: g.white.username,
-    black: g.black.username,
-    result: resolveResult(g),
-    eco: extractEco(g.eco),
-    pgn: standardizePgnForBoard(g.pgn || ''),
-    playedAt: new Date(g.end_time * 1000).toISOString(),
-    timeControl: g.time_control || '',
-  }));
+  return typed.map((g) => {
+    const pgn = standardizePgnForBoard(g.pgn || '');
+    let whiteElo = g.white?.rating;
+    let blackElo = g.black?.rating;
+    if ((whiteElo == null || blackElo == null) && pgn) {
+      const we = pgn.match(/\[\s*WhiteElo\s+"(\d+)"\s*\]/i);
+      const be = pgn.match(/\[\s*BlackElo\s+"(\d+)"\s*\]/i);
+      if (whiteElo == null && we) whiteElo = parseInt(we[1], 10);
+      if (blackElo == null && be) blackElo = parseInt(be[1], 10);
+    }
+    return {
+      id: g.uuid || Math.random().toString(36),
+      source: 'chess.com' as const,
+      white: g.white.username,
+      black: g.black.username,
+      result: resolveResult(g),
+      eco: extractEco(g.eco),
+      pgn,
+      playedAt: new Date(g.end_time * 1000).toISOString(),
+      timeControl: g.time_control || '',
+      whiteElo: whiteElo ?? undefined,
+      blackElo: blackElo ?? undefined,
+    };
+  });
 }
 
 /**
@@ -203,9 +216,18 @@ export function parseLichessGames(ndjson: string, _targetUsername: string): Game
       pgn = standardizePgnForBoard(pgn);
 
       const whiteName =
-        g.players?.white?.user?.name ?? g.players?.white?.userId ?? 'Anonymous';
+        g.players?.white?.user?.name ?? g.players?.white?.user?.id ?? g.players?.white?.userId ?? 'Anonymous';
       const blackName =
-        g.players?.black?.user?.name ?? g.players?.black?.userId ?? 'Anonymous';
+        g.players?.black?.user?.name ?? g.players?.black?.user?.id ?? g.players?.black?.userId ?? 'Anonymous';
+
+      let whiteElo = g.players?.white?.rating;
+      let blackElo = g.players?.black?.rating;
+      if ((whiteElo == null || blackElo == null) && pgn) {
+        const we = pgn.match(/\[\s*WhiteElo\s+"(\d+)"\s*\]/i);
+        const be = pgn.match(/\[\s*BlackElo\s+"(\d+)"\s*\]/i);
+        if (whiteElo == null && we) whiteElo = parseInt(we[1], 10);
+        if (blackElo == null && be) blackElo = parseInt(be[1], 10);
+      }
 
       results.push({
         id: g.id,
@@ -218,6 +240,8 @@ export function parseLichessGames(ndjson: string, _targetUsername: string): Game
         playedAt: new Date(g.createdAt).toISOString(),
         timeControl: g.speed || '',
         openingName: g.opening?.name || undefined,
+        whiteElo,
+        blackElo,
       });
     } catch (e) {
       logger.warn({ line: i, err: e }, '[GameParser] Failed to parse Lichess game');
