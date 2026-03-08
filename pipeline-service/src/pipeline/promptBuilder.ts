@@ -341,23 +341,17 @@ OPENING/DEFENSE WORDING (MANDATORY for strategicSummary, strengths, weaknesses, 
 ${openingWording}
 TASK: Generate JSON with strategicSummary (comprehensive White+Black analysis), strengths[3], weaknesses[3], tacticalProfile, endgameReliability, timeControlInsights, repertoireReliability (0-1).
 
-CONTENT QUALITY (match White/Black repertoire cards): Write RICH, DETAILED paragraphs. For EVERY opening mentioned:
-- Cite exact game counts (e.g. "Sicilian Defense with 73 games, 77% win rate")
-- Cite engine evaluations when available (e.g. "Trompowsky: +1.76 average evaluation for White")
-- Describe strategic approach, adaptability, and tactical precision
-- Include secondary lines with their stats (e.g. "French Defense — 84% win rate")
-- strategicSummary: multi-paragraph overview with primary weapons, opening strategy, classical structures, play against common responses, engine analysis results
-- strengths/weaknesses: each item must include opening name, color, game count, win rate, and when available engine eval. Use "plays" when player initiated (Black for Defense, White for Opening/Attack); "faces" when opponent initiated. Example: "plays the Modern Defense as Black with 113 games and an 87% win rate"
-- tacticalRecommendation/specificVulnerability: cite exact openings, win rates, game counts, and engine evals. No generic advice. Apply OPENING/DEFENSE wording above.`,
+LENGTH: Keep strategicSummary CONCISE — about half the length of a typical detailed analysis. Lead with key stats only (first move %, top 3–4 openings with win rates). Omit secondary lines unless critical. One focused paragraph for White, one for Black.
+
+CONTENT QUALITY: For every opening mentioned, cite exact game counts and win rates. Include engine evals when available. strengths/weaknesses: each item must include opening name, color, game count, win rate. Use "plays" when player initiated; "faces" when opponent initiated.`,
 
     tactical: `${shared}
 ${openingWording}
 TASK: Generate JSON with tacticalRecommendation, specificVulnerability, suggestedLines[3].
 
-CONTENT QUALITY (match White/Black repertoire cards): Write RICH, DETAILED paragraphs:
-- tacticalRecommendation: Multi-sentence strategic advice. Use "plays" for Defenses when Black, "faces" for Openings when Black. Example: "proficiency when playing the Modern Defense as Black" (Black plays it). "struggles when facing the Ruy Lopez as Black" (Black faces it). Name SPECIFIC lines with correct wording.
-- specificVulnerability: Multi-sentence analysis. Use "plays" for Defenses when Black (e.g. "struggles when playing the Queen's Indian Defense as Black"); "faces" for Openings when Black (e.g. "vulnerable when facing the Ruy Lopez as Black"). Cite game counts and win rates.
-- suggestedLines: format "1.e4 c5 2.Nf3 d6... (Xg, Y% WR)". Prefer 10+ games, 5-6 moves.`,
+LENGTH: Keep tacticalRecommendation and specificVulnerability CONCISE — about half the length of typical detailed advice. Lead with the top 2–3 actionable recommendations. Cite exact openings, win rates, and game counts. Omit secondary suggestions unless critical.
+
+CONTENT QUALITY: tacticalRecommendation: strategic advice with specific lines. Use "plays" for Defenses when Black, "faces" for Openings when Black. specificVulnerability: cite game counts and win rates. suggestedLines: format "1.e4 c5 2.Nf3 d6... (Xg, Y% WR)". Prefer 10+ games, 5-6 moves.`,
   };
 }
 

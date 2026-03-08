@@ -20,6 +20,8 @@ const GEMINI_CHAT_MODELS = [
 ] as const;
 const GEMINI_TIMEOUT_MS = 90_000;
 const MAX_TOOL_ROUNDS = 10;
+/** Limit get_opening_breakdown to prevent model from drilling every variation instead of synthesizing */
+const MAX_OPENING_BREAKDOWN_PER_REQUEST = 2;
 
 /** Fall back to next model on 400/404/501/429 (model/request/rate-limit issues) or when error suggests model problem */
 function shouldTryNextModel(status: number, errorText: string): boolean {
@@ -202,7 +204,7 @@ ${gamesInfo}
 
 Instructions:
 1. Answer based on the data above. Use tools when relevant: get_game/get_pgn for specific games, run_stockfish for engine analysis, and get_opening_breakdown when the user asks about performance against specific opponent responses to an opening (e.g. English vs 1...e5 vs 1...c5 vs 1...Nf6).
-2. CRITICAL — SYNTHESIZE AND RESPOND: After 1–2 tool calls, you MUST return a natural-language answer to the user. Do NOT chain get_opening_breakdown repeatedly (e.g. drilling into every variation). One call for the opening position (e.g. 1.e4 e5 2.Nf3 Nc6 3.Bb5 for Ruy Lopez) is usually enough. Synthesize the tool result into a clear, direct answer and respond. Only make additional tool calls if the user explicitly asks for deeper detail.
+2. CRITICAL — SYNTHESIZE AND RESPOND: You may call get_opening_breakdown at most TWICE per user question. After 1–2 calls, you MUST return a natural-language answer. Do NOT drill into every variation (e.g. e4 c5, then e4 c5 Nf3, then e4 c5 Nf3 Nc6, etc.). One call for the main position (e.g. 1.e4 c5 for Sicilian as Black) is usually enough. Synthesize the tool result into a clear, direct answer and respond. If you need more detail, make ONE additional call at most, then respond.
 3. Provide COMPREHENSIVE, DETAILED answers. Cite specific openings, lines, and game counts.
 4. Statistical significance: Only use "often", "typically", "usually" when a pattern appears in 10+ games. For 1–2 games, say "played once/twice".
 5. Use chess notation (e.g. 1.e4 c5 2.Nf3 d6) when discussing lines.
@@ -388,15 +390,17 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
 
       let data = await res.json();
       let round = 0;
+      let openingBreakdownCount = 0;
 
       // Tool-calling loop
       while (round < MAX_TOOL_ROUNDS) {
         const candidate = data.candidates?.[0];
         const parts = candidate?.content?.parts || [];
         let text = '';
-        let functionCall: { name: string; args: Record<string, unknown> } | null = null;
+        /** All function calls from model — Gemini 3 can return multiple in one turn */
+        const functionCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
         /** Parts from model that contain functionCall — must be passed through with thought_signature for Gemini 3 */
-        let modelPartsWithFc: Array<Record<string, unknown>> = [];
+        const modelPartsWithFc: Array<Record<string, unknown>> = [];
 
         logger.debug(
           { requestId, round, partCount: parts.length, finishReason: candidate?.finishReason },
@@ -407,30 +411,46 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
           if (part.text) text += part.text;
           const fc = part.functionCall ?? part.function_call;
           if (fc) {
-            functionCall = fc as { name: string; args: Record<string, unknown> };
+            const parsed = fc as { name: string; args: Record<string, unknown> };
+            functionCalls.push(parsed);
             // Preserve full part (including thought_signature/thoughtSignature) for Gemini 3
             modelPartsWithFc.push({ ...part } as Record<string, unknown>);
           }
         }
 
-        if (functionCall) {
-          logger.info(
-            { requestId, round, tool: functionCall.name, args: functionCall.args },
-            '[Chat] Tool call requested',
-          );
-          const result = await executeTool(functionCall.name, functionCall.args, report);
-          logger.info(
-            { requestId, round, tool: functionCall.name, resultLength: result.length, resultPreview: result.slice(0, 120) },
-            '[Chat] Tool executed',
-          );
-          // Append model parts (with thought_signature) and function response — required for Gemini 3
+        if (functionCalls.length > 0) {
+          // Execute all function calls and build one functionResponse per call (required for Gemini 3 parallel calls)
+          const functionResponseParts: Array<{ functionResponse: { name: string; response: { result: string } } }> = [];
+          for (const fc of functionCalls) {
+            const atLimit = fc.name === 'get_opening_breakdown' && openingBreakdownCount >= MAX_OPENING_BREAKDOWN_PER_REQUEST;
+            let result: string;
+            if (atLimit) {
+              result = `[Limit reached: You have already used get_opening_breakdown ${MAX_OPENING_BREAKDOWN_PER_REQUEST} times. Synthesize the data from your previous queries and respond to the user now. Do NOT make any more tool calls.]`;
+              logger.info({ requestId, round, tool: fc.name }, '[Chat] get_opening_breakdown limit reached, returning synthetic response');
+            } else {
+              logger.info(
+                { requestId, round, tool: fc.name, args: fc.args },
+                '[Chat] Tool call requested',
+              );
+              result = await executeTool(fc.name, fc.args, report);
+              if (fc.name === 'get_opening_breakdown') openingBreakdownCount++;
+              logger.info(
+                { requestId, round, tool: fc.name, resultLength: result.length, resultPreview: result.slice(0, 120) },
+                '[Chat] Tool executed',
+              );
+            }
+            functionResponseParts.push({
+              functionResponse: { name: fc.name, response: { result } },
+            });
+          }
+          // Append model parts (with thought_signature) and function responses — one response per call
           contents.push({
             role: 'model',
-            parts: modelPartsWithFc.length > 0 ? modelPartsWithFc : [{ functionCall: { name: functionCall.name, args: functionCall.args } }],
+            parts: modelPartsWithFc.length > 0 ? modelPartsWithFc : functionCalls.map((fc) => ({ functionCall: { name: fc.name, args: fc.args } })),
           });
           contents.push({
             role: 'user',
-            parts: [{ functionResponse: { name: functionCall.name, response: { result } } }],
+            parts: functionResponseParts,
           });
           requestBody.contents = contents;
 

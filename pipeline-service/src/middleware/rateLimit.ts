@@ -56,24 +56,31 @@ declare module 'hono' {
   }
 }
 
+const ANALYZE_CONCURRENT_PREMIUM = 10;
+const ANALYZE_WINDOW_MAX_PREMIUM = 20;
+
 export const analyzeRateLimitMiddleware = createMiddleware(async (c, next) => {
   const user = c.get('user');
   const userId = user.sub;
+  const isPremium = c.req.header('X-Premium') === 'true';
+
+  const concurrentMax = isPremium ? ANALYZE_CONCURRENT_PREMIUM : ANALYZE_CONCURRENT_MAX;
+  const windowMax = isPremium ? ANALYZE_WINDOW_MAX_PREMIUM : ANALYZE_WINDOW_MAX;
 
   const limit = getOrCreateLimit(analyzeLimits, userId, ANALYZE_WINDOW_MS);
 
-  if (limit.concurrent >= ANALYZE_CONCURRENT_MAX) {
-    logger.warn({ userId }, '[RateLimit] Analyze: concurrent limit exceeded');
+  if (limit.concurrent >= concurrentMax) {
+    logger.warn({ userId, isPremium }, '[RateLimit] Analyze: concurrent limit exceeded');
     return c.json(
       { error: 'Too many analyses in progress. Please wait for the current one to finish.' },
       429
     );
   }
 
-  if (limit.windowCount >= ANALYZE_WINDOW_MAX) {
-    logger.warn({ userId }, '[RateLimit] Analyze: window limit exceeded');
+  if (limit.windowCount >= windowMax) {
+    logger.warn({ userId, isPremium }, '[RateLimit] Analyze: window limit exceeded');
     return c.json(
-      { error: `Rate limit exceeded. Maximum ${ANALYZE_WINDOW_MAX} analyses per 10 minutes.` },
+      { error: `Rate limit exceeded. Maximum ${windowMax} analyses per 10 minutes.` },
       429
     );
   }

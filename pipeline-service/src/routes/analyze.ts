@@ -86,9 +86,17 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
   // we must keep the async pipeline referenced so the stream stays open.
   const pipelinePromise = (async () => {
     try {
+      const isPremium = input.isPremium === true;
       const gameLimit = input.gameLimit || 1000;
       const onlineLimit = input.onlineLimit ?? gameLimit;
       const otbLimit = input.otbLimit ?? 0;
+
+      if (!isPremium && gameLimit > 2000) {
+        sse.sendError({ error: 'Game limit cannot exceed 2,000 for free tier. Upgrade to Premium for up to 5,000 games.' });
+        sse.close();
+        c.get('releaseAnalyzeSlot')?.();
+        return;
+      }
 
       // ── Phase 1: Identity ──────────────────────────────────
       const identityStart = Date.now();
@@ -332,10 +340,13 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
       let engineAnalysis: import('../lib/types.js').GameAnalysis[] = [];
 
       const sampled = sampleGamesForAnalysis(allGames, 80);
+      const engineDepth = isPremium && typeof input.engineDepth === 'number' && input.engineDepth >= 7 && input.engineDepth <= 20
+        ? input.engineDepth
+        : 7;
       if (sampled.length > 0) {
         let pool: StockfishPool | null = null;
         try {
-          pool = new StockfishPool({ workerCount: 4, depth: 7 });
+          pool = new StockfishPool({ workerCount: 4, depth: engineDepth });
           await pool.initialize();
 
           engineAnalysis = await pool.analyzeGames(sampled, targetUsername, (current, total) => {
