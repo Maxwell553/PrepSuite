@@ -58,6 +58,17 @@ const AboutPrepSuite: React.FC<AboutPrepSuiteProps> = ({ onBack }) => {
             <p>
               Good luck with your upcoming games, and I hope that PrepSuite helps you prepare better.
             </p>
+
+            {/* Signature — handwritten style, white text */}
+            <div className="mt-16 pt-8 border-t border-slate-700/50 dark:border-slate-700/50 border-gray-200/50 flex flex-col items-end">
+              <p
+                className="text-3xl md:text-4xl font-medium text-white dark:text-white"
+                style={{ fontFamily: "'Dancing Script', cursive" }}
+              >
+                Max Ingargiola
+              </p>
+              <p className="text-sm text-slate-500 dark:text-slate-500 text-gray-500 mt-1">Creator, PrepSuite.ai</p>
+            </div>
           </div>
         </div>
       </div>

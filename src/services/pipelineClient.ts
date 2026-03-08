@@ -16,6 +16,10 @@ export interface PipelineParams {
   gameLimit?: number;
   onlineLimit?: number;
   otbLimit?: number;
+  /** Premium: customizable 7–20; free uses default */
+  engineDepth?: number;
+  /** Enables priority queue, higher limits */
+  isPremium?: boolean;
 }
 
 /** The pipeline now returns a complete ScoutingReport */
@@ -109,12 +113,14 @@ export async function runPipeline(
   const url = `${baseUrl}/api/analyze`;
 
   const PIPELINE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (params.isPremium) headers['X-Premium'] = 'true';
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers,
     body: JSON.stringify(params),
     signal: AbortSignal.timeout(PIPELINE_TIMEOUT_MS),
   });

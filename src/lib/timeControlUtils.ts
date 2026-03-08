@@ -1,0 +1,24 @@
+/** Format timeControl for display: "180" -> "3 min", "180+2" -> "3+2", "bullet" -> "Bullet" */
+export function formatTimeControlForDisplay(tc: string | undefined): string {
+  const s = (tc || '').trim();
+  if (!s) return '—';
+  const lower = s.toLowerCase();
+  if (lower.includes('bullet')) return 'Bullet';
+  if (lower.includes('blitz')) return 'Blitz';
+  if (lower.includes('rapid')) return 'Rapid';
+  if (lower.includes('classical')) return 'Classical';
+  const numMatch = s.match(/(\d+)/);
+  const incMatch = s.match(/\d+\+(\d+)/);
+  if (!numMatch) return s;
+  const num = parseInt(numMatch[1], 10);
+  const baseSeconds = num < 100 ? num * 60 : num;
+  const minutes = Math.round(baseSeconds / 60);
+  const increment = incMatch ? parseInt(incMatch[1], 10) : null;
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    const hrStr = hours > 0 ? `${hours}h ` : '';
+    return increment != null ? `${hrStr}${mins}+${increment}` : `${hrStr}${mins} min`;
+  }
+  return increment != null ? `${minutes}+${increment}` : `${minutes} min`;
+}

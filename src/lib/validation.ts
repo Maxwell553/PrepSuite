@@ -58,12 +58,12 @@ export const playerSearchSchema = z.object({
   onlineLimit: z.number()
     .int('Online limit must be an integer')
     .min(0, 'Online limit cannot be negative')
-    .max(2000, 'Online limit cannot exceed 2000')
+    .max(5000, 'Online limit cannot exceed 5000')
     .optional(),
   otbLimit: z.number()
     .int('OTB limit must be an integer')
     .min(0, 'OTB limit cannot be negative')
-    .max(2000, 'OTB limit cannot exceed 2000')
+    .max(5000, 'OTB limit cannot exceed 5000')
     .optional(),
 }).refine(
   (data) => {
@@ -96,11 +96,16 @@ export function sanitizeString(input: string): string {
     .slice(0, 1000); // Limit length
 }
 
+/** Max games per report */
+export const MAX_GAME_LIMIT = 2000;
+
 /**
- * Validates and sanitizes player search input
+ * Validates and sanitizes player search input.
+ * @param input - Raw input to validate
  */
 export function validatePlayerSearch(input: unknown): PlayerSearchInput {
-  // First sanitize string fields if they exist
+  const maxGames = MAX_GAME_LIMIT;
+
   const sanitized = typeof input === 'object' && input !== null
     ? {
         ...input,
@@ -116,7 +121,12 @@ export function validatePlayerSearch(input: unknown): PlayerSearchInput {
       }
     : input;
   
-  return playerSearchSchema.parse(sanitized);
+  const result = playerSearchSchema.parse(sanitized);
+  const total = result.gameLimit ?? 1000;
+  if (total > maxGames) {
+    throw new Error(`Game limit cannot exceed ${maxGames.toLocaleString()} games.`);
+  }
+  return result;
 }
 
 /**

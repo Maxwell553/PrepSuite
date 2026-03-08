@@ -54,6 +54,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   const setScanningStatus = externalSetScanningStatus ? (value: string) => externalSetScanningStatus(value) : setLocalScanningStatus;
 
   const [error, setError] = useState<string | null>(null);
+  const maxGames = 2000;
   const [gameLimit, setGameLimit] = useState(1000);
   const [onlineLimit, setOnlineLimit] = useState(500);
   const [otbLimit, setOtbLimit] = useState(500);
@@ -220,19 +221,19 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
 
             <div className="space-y-4">
               <div className="relative">
-                <label className="block text-sm font-bold text-indigo-400 dark:text-indigo-400 text-indigo-600 mb-2 uppercase tracking-widest">Player Name</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    disabled={loading}
-                    className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-700 dark:border-slate-700 border-gray-300 rounded-xl px-4 py-3 pl-11 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-500 focus:border-indigo-600 transition-colors font-medium text-white dark:text-white text-gray-900 shadow-inner placeholder:text-slate-600 dark:placeholder:text-slate-600 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                    placeholder="Enter Player Name"
-                  />
-                  <User className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-500 text-gray-400" />
+                  <label className="block text-sm font-bold text-indigo-400 dark:text-indigo-400 text-indigo-600 mb-2 uppercase tracking-widest">Player Name</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={e => setFormData({ ...formData, name: e.target.value })}
+                      disabled={loading}
+                      className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-700 dark:border-slate-700 border-gray-300 rounded-xl px-4 py-3 pl-11 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-500 focus:border-indigo-600 transition-colors font-medium text-white dark:text-white text-gray-900 shadow-inner placeholder:text-slate-600 dark:placeholder:text-slate-600 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                      placeholder="Enter Player Name"
+                    />
+                    <User className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-500 text-gray-400" />
+                  </div>
                 </div>
-              </div>
 
               {/* Advanced: Manually link accounts */}
               <div>
@@ -285,7 +286,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                       <input
                         type="range"
                         min={500}
-                        max={2000}
+                        max={maxGames}
                         step={250}
                         value={gameLimit}
                         onChange={(e) => {
@@ -298,7 +299,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         disabled={loading}
                         className="w-full h-2.5 bg-slate-800 dark:bg-slate-800 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{
-                          background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${((gameLimit - 500) / (2000 - 500)) * 100}%, rgb(30, 41, 59) ${((gameLimit - 500) / (2000 - 500)) * 100}%, rgb(30, 41, 59) 100%)`
+                          background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${((gameLimit - 500) / (maxGames - 500)) * 100}%, rgb(30, 41, 59) ${((gameLimit - 500) / (maxGames - 500)) * 100}%, rgb(30, 41, 59) 100%)`
                         }}
                       />
                     </div>

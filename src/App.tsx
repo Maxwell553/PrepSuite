@@ -58,7 +58,7 @@ const App: React.FC = () => {
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; reportIds: string[] }>({ isOpen: false, reportIds: [] });
   const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
   const [showUserSettings, setShowUserSettings] = useState(false);
-  const [showLandingPage, setShowLandingPage] = useState(false);
+  const [showLandingPage, setShowLandingPage] = useState(true);
   const [viewingFeaturedReport, setViewingFeaturedReport] = useState<ScoutingReport | null>(null);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const [showTermsOfService, setShowTermsOfService] = useState(false);
@@ -125,6 +125,46 @@ const App: React.FC = () => {
       window.removeEventListener('online', handleOnline);
     };
   }, []);
+
+  // History API: keep landing subpages (privacy, terms, about, featured) in-browser so back/forward work
+  const isInLandingFlow = !user || showLandingPage || showPrivacyPolicy || showTermsOfService || showAboutPrepSuite || !!viewingFeaturedReport;
+  useEffect(() => {
+    if (!isInLandingFlow) return;
+
+    const handlePopState = () => {
+      const s = window.history.state as { landingView?: string; slug?: string } | null;
+      const v = s?.landingView ?? 'main';
+      setShowPrivacyPolicy(v === 'privacy');
+      setShowTermsOfService(v === 'terms');
+      setShowAboutPrepSuite(v === 'about');
+      if (v === 'featured' && s?.slug) {
+        import('./services/featuredReports').then(({ getFeaturedReport }) => {
+          getFeaturedReport(s.slug!).then((report) => {
+            if (report) setViewingFeaturedReport(report);
+            else setViewingFeaturedReport(null);
+          });
+        });
+      } else {
+        setViewingFeaturedReport(null);
+      }
+      // When returning to main landing, ensure we show landing (not analysis) — fixes back from featured report
+      if (v === 'main') {
+        setShowLandingPage(true);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isInLandingFlow]);
+
+  // Establish landing state on first load so back from subpages stays in-app
+  useEffect(() => {
+    if (!isInLandingFlow || showPrivacyPolicy || showTermsOfService || showAboutPrepSuite || viewingFeaturedReport) return;
+    const state = window.history.state as { landingView?: string } | null;
+    if (!state?.landingView) {
+      window.history.replaceState({ landingView: 'main' }, '', window.location.pathname || '/');
+    }
+  }, [isInLandingFlow, showPrivacyPolicy, showTermsOfService, showAboutPrepSuite, viewingFeaturedReport]);
 
   // Fetch history when user is available (only once, not on every render)
   useEffect(() => {
@@ -325,11 +365,30 @@ const App: React.FC = () => {
     );
   }
 
+  const openPrivacyPolicy = () => {
+    window.history.pushState({ landingView: 'privacy' }, '', window.location.pathname || '/');
+    setShowPrivacyPolicy(true);
+  };
+
+  const openTermsOfService = () => {
+    window.history.pushState({ landingView: 'terms' }, '', window.location.pathname || '/');
+    setShowTermsOfService(true);
+  };
+
+  const openAboutPrepSuite = () => {
+    window.history.pushState({ landingView: 'about' }, '', window.location.pathname || '/');
+    setShowAboutPrepSuite(true);
+  };
+
+  const closeLandingSubpage = () => {
+    window.history.back();
+  };
+
   if (showPrivacyPolicy) {
     return (
       <ThemeProvider>
         {isOffline && <OfflineBanner />}
-        <PrivacyPolicy onBack={() => setShowPrivacyPolicy(false)} />
+        <PrivacyPolicy onBack={closeLandingSubpage} />
       </ThemeProvider>
     );
   }
@@ -338,7 +397,7 @@ const App: React.FC = () => {
     return (
       <ThemeProvider>
         {isOffline && <OfflineBanner />}
-        <TermsOfService onBack={() => setShowTermsOfService(false)} />
+        <TermsOfService onBack={closeLandingSubpage} />
       </ThemeProvider>
     );
   }
@@ -347,7 +406,7 @@ const App: React.FC = () => {
     return (
       <ThemeProvider>
         {isOffline && <OfflineBanner />}
-        <AboutPrepSuite onBack={() => setShowAboutPrepSuite(false)} />
+        <AboutPrepSuite onBack={closeLandingSubpage} />
       </ThemeProvider>
     );
   }
@@ -356,6 +415,7 @@ const App: React.FC = () => {
     const { getFeaturedReport } = await import('./services/featuredReports');
     const report = await getFeaturedReport(slug);
     if (report) {
+      window.history.pushState({ landingView: 'featured', slug }, '', window.location.pathname || '/');
       setViewingFeaturedReport(report);
       setShowLandingPage(false);
     }
@@ -368,10 +428,7 @@ const App: React.FC = () => {
         <FeaturedReportLayout
           report={viewingFeaturedReport}
           user={user}
-          onBack={() => {
-            setViewingFeaturedReport(null);
-            setShowLandingPage(true);
-          }}
+          onBack={closeLandingSubpage}
         />
       </ThemeProvider>
     );
@@ -393,9 +450,9 @@ const App: React.FC = () => {
           }} 
           onLogin={handleLogin}
           user={user}
-          onShowPrivacyPolicy={() => setShowPrivacyPolicy(true)}
-          onShowTermsOfService={() => setShowTermsOfService(true)}
-          onShowAboutPrepSuite={() => setShowAboutPrepSuite(true)}
+          onShowPrivacyPolicy={openPrivacyPolicy}
+          onShowTermsOfService={openTermsOfService}
+          onShowAboutPrepSuite={openAboutPrepSuite}
           onViewFeaturedReport={handleViewFeaturedReport}
         />
         </div>
@@ -418,8 +475,8 @@ const App: React.FC = () => {
         <main className="flex-1 overflow-y-auto relative bg-slate-950 dark:bg-slate-950 bg-gray-50 overscroll-none" style={{ overscrollBehavior: 'none' }}>
           {showUserSettings ? (
             <div className="h-full overflow-y-auto">
-              <UserSettings 
-                user={user} 
+              <UserSettings
+                user={user}
                 onBack={() => setShowUserSettings(false)}
                 onAccountDeleted={() => {
                   setShowUserSettings(false);

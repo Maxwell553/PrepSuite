@@ -4,9 +4,10 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   LineChart, Line, ResponsiveContainer,
 } from 'recharts';
-import { Shield, Target, Zap, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, Crosshair, ChevronDown, ChevronUp, Activity } from 'lucide-react';
+import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Activity } from 'lucide-react';
 import { ScoutingReport, OpeningStat } from '../types';
 import AnalysisBoard from './AnalysisBoard';
+import RecentGamesList from './RecentGamesList';
 import RepertoireChat from './RepertoireChat';
 import { aggregateOpeningsBySource } from '../lib/openingStats';
 import { supabase } from '../lib/supabase';
@@ -74,6 +75,104 @@ function SkeletonBlock({ lines = 3 }: { lines?: number }) {
       {Array.from({ length: lines }).map((_, i) => (
         <SkeletonLine key={i} width={i === lines - 1 && lines > 1 ? '75%' : '100%'} />
       ))}
+    </div>
+  );
+}
+
+/** Strategic Profile + Recent Games with right column height constrained by left */
+function StrategicProfileWithRecent({
+  report,
+  isGenerating,
+  player,
+}: {
+  report: ScoutingReport;
+  isGenerating: boolean;
+  player: ScoutingReport['player'];
+}) {
+  const leftRef = React.useRef<HTMLElement | null>(null);
+  const [maxHeight, setMaxHeight] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    const el = leftRef.current;
+    if (!el) return;
+    let rafId: number | undefined;
+    const ro = new ResizeObserver(() => {
+      rafId = requestAnimationFrame(() => setMaxHeight(el.offsetHeight));
+    });
+    ro.observe(el);
+    setMaxHeight(el.offsetHeight);
+    return () => {
+      ro.disconnect();
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
+  }, [report.strategicSummary, report.strengths, report.weaknesses, isGenerating]);
+
+  return (
+    <div className="grid lg:grid-cols-[1fr_minmax(0,380px)] gap-8 items-start">
+      <section
+        ref={leftRef}
+        className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg"
+      >
+        <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+          <Target className="w-5 h-5 text-indigo-400" />
+          Strategic Profile Analysis
+        </h3>
+        <div className="text-slate-300 space-y-4 leading-relaxed">
+          {isGenerating && !report.strategicSummary ? (
+            <SkeletonBlock lines={4} />
+          ) : (
+            <p className="text-lg font-medium">{report.strategicSummary?.replace(/\*\*/g, '')}</p>
+          )}
+
+          <div className="grid md:grid-cols-2 gap-4 mt-8">
+            <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl h-full">
+              <h4 className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-widest mb-4">
+                <CheckCircle className="w-4 h-4" /> Core Strengths
+              </h4>
+              {isGenerating && (!report.strengths || report.strengths.length === 0) ? (
+                <SkeletonBlock lines={3} />
+              ) : (
+                <ul className="space-y-3 text-sm">
+                  {report.strengths?.map((s, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="text-emerald-500/50 font-bold">•</span> {s?.replace(/\*\*/g, '')}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl h-full">
+              <h4 className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-widest mb-4">
+                <AlertTriangle className="w-4 h-4" /> Strategic Weaknesses
+              </h4>
+              {isGenerating && (!report.weaknesses || report.weaknesses.length === 0) ? (
+                <SkeletonBlock lines={3} />
+              ) : (
+                <ul className="space-y-3 text-sm">
+                  {report.weaknesses?.map((w, i) => (
+                    <li key={i} className="flex gap-2 text-slate-400">
+                      <span className="text-red-500/50 font-bold">•</span> {w?.replace(/\*\*/g, '')}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {report.games && report.games.length > 0 && (
+        <RecentGamesList
+          games={report.games}
+          playerName={player.name}
+          playerUsername={[
+            (player as { actualUsername?: string }).actualUsername,
+            player.platforms?.chessCom,
+            player.platforms?.lichess,
+          ].filter(Boolean) as string[]}
+          maxHeight={maxHeight}
+        />
+      )}
     </div>
   );
 }
@@ -319,7 +418,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
   const showMainContent = hasReportContent || !!isGenerating;
 
   return (
-    <div className={`relative space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12 ${isGenerating ? 'pointer-events-none' : ''}`}>
+    <div className={`relative space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12 print:space-y-6 ${isGenerating ? 'pointer-events-none' : ''}`}>
       {/* Dossier Header */}
       <div className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-3xl overflow-hidden shadow-2xl">
         <div className="h-44 bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-950 dark:from-indigo-900/40 dark:via-slate-900 dark:to-slate-950 from-indigo-50 via-white to-gray-50 relative p-10 flex flex-col justify-end">
@@ -407,95 +506,12 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
         {/* Main content: hide when no games and we're showing activity report only */}
         {showMainContent && (
         <>
-        {/* Top Row: Strategic Profile (left) | Tactical Rec + Specific Vulnerability (right, same width, combined height = left) */}
-        <div className="grid lg:grid-cols-3 gap-8 items-stretch">
-          <section className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
-            <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-              <Target className="w-5 h-5 text-indigo-400" />
-              Strategic Profile Analysis
-            </h3>
-            <div className="text-slate-300 space-y-4 leading-relaxed">
-              {isGenerating && !report.strategicSummary ? (
-                <SkeletonBlock lines={4} />
-              ) : (
-                <p className="text-lg font-medium">{report.strategicSummary?.replace(/\*\*/g, '')}</p>
-              )}
-
-              <div className="grid md:grid-cols-2 gap-4 mt-8">
-                <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl h-full">
-                  <h4 className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-widest mb-4">
-                    <CheckCircle className="w-4 h-4" /> Core Strengths
-                  </h4>
-                  {isGenerating && (!report.strengths || report.strengths.length === 0) ? (
-                    <SkeletonBlock lines={3} />
-                  ) : (
-                    <ul className="space-y-3 text-sm">
-                      {report.strengths?.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-emerald-500/50 font-bold">•</span> {s?.replace(/\*\*/g, '')}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl h-full">
-                  <h4 className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-widest mb-4">
-                    <AlertTriangle className="w-4 h-4" /> Strategic Weaknesses
-                  </h4>
-                  {isGenerating && (!report.weaknesses || report.weaknesses.length === 0) ? (
-                    <SkeletonBlock lines={3} />
-                  ) : (
-                    <ul className="space-y-3 text-sm">
-                      {report.weaknesses?.map((w, i) => (
-                        <li key={i} className="flex gap-2 text-slate-400">
-                          <span className="text-red-500/50 font-bold">•</span> {w?.replace(/\*\*/g, '')}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Right column: Tactical Rec + Specific Vulnerability, same width, combined height = Strategic Profile */}
-          <div className="flex flex-col gap-4 h-full min-h-0">
-            <section className="flex-1 min-h-0 flex flex-col bg-indigo-600 border border-indigo-400 rounded-2xl p-6 shadow-xl shadow-indigo-900/20 relative overflow-hidden">
-              <div className="absolute -right-4 -top-4 opacity-10">
-                <Crosshair className="w-32 h-32 text-white" />
-              </div>
-              <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-white shrink-0">
-                <Zap className="w-5 h-5" />
-                Tactical Recommendation
-              </h3>
-              <div className="text-indigo-50 text-sm leading-relaxed space-y-3 whitespace-pre-wrap min-h-0 overflow-y-auto">
-                {isGenerating && !report.tacticalRecommendation ? (
-                  <SkeletonBlock lines={4} />
-                ) : (
-                  <p className="font-semibold">{(report.tacticalRecommendation || '').replace(/\*\*/g, '')}</p>
-                )}
-              </div>
-            </section>
-
-            <section className="flex-1 min-h-0 flex flex-col bg-slate-900 dark:bg-slate-900 border border-slate-800 dark:border-slate-800 rounded-2xl p-6 shadow-lg">
-              <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-red-400 dark:text-red-400 shrink-0">
-                <AlertTriangle className="w-5 h-5" />
-                Specific Vulnerability
-              </h3>
-              <div className="text-slate-300 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap min-h-0 overflow-y-auto">
-                {isGenerating && !report.specificVulnerability ? (
-                  <div className="p-4 bg-slate-950 dark:bg-slate-950 rounded-xl border border-slate-800 dark:border-slate-800">
-                    <SkeletonBlock lines={3} />
-                  </div>
-                ) : (
-                  <p className="p-4 bg-slate-950 dark:bg-slate-950 rounded-xl border border-slate-800 dark:border-slate-800 italic">
-                    "{(report.specificVulnerability || '').replace(/\*\*/g, '')}"
-                  </p>
-                )}
-              </div>
-            </section>
-          </div>
-        </div>
+        {/* Strategic Profile (left) | Recent Games (right, height constrained by left) */}
+        <StrategicProfileWithRecent
+          report={report}
+          isGenerating={!!isGenerating}
+          player={player}
+        />
 
         {/* Repertoire Graphs - 4 when online+OTB, else 2 */}
         {hasBothSources && openingsBySource ? (
@@ -558,7 +574,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
         <ActivityReportSection player={player} />
       )}
 
-      {/* Analysis Board Section */}
+      {/* Repertoire Analysis Board (repertoire only, no game selection) */}
       {report.games && report.games.length > 0 && (
         <section className="mt-8">
           <AnalysisBoard 
@@ -569,6 +585,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
               player.platforms?.chessCom,
               player.platforms?.lichess,
             ].filter(Boolean) as string[]}
+            mode="repertoire"
           />
         </section>
       )}
