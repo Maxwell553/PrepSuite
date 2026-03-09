@@ -100,7 +100,7 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
 
       // ── Phase 1: Identity ──────────────────────────────────
       const identityStart = Date.now();
-      sse.sendPhase({ phase: 'identity', status: 'started' });
+      sse.sendPhase({ phase: 'identity', status: 'started', message: 'Identifying player...' });
 
       const identityToPlayer = (partial: PartialIdentityUpdate): Partial<PlayerMetadata> => {
         const p: Partial<PlayerMetadata> = {};
@@ -377,7 +377,7 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
 
 
 
-      logger.info('[Analyze] Starting parallel report generation (strategic, tactical, white, black)');
+      logger.info('[Analyze] Starting parallel report generation (strategicSummary, strengths, weaknesses)');
 
       const rawReport = await generateReportParallel({
         identity,

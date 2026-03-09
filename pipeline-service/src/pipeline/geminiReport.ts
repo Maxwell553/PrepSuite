@@ -61,21 +61,26 @@ export async function generateReport(
 }
 
 /**
- * Generate report in parallel: 2 Gemini calls (strategic, tactical) run concurrently.
+ * Generate report in parallel: 3 Gemini calls (strategicSummary, strengths, weaknesses) run concurrently.
+ * ONLY these are generated per Strategic Profile Analysis UI: summary paragraph, core strengths[3], strategic weaknesses[3].
+ * All other report fields (tacticalProfile, endgameReliability, timeControlInsights, repertoireReliability,
+ * tacticalRecommendation, specificVulnerability, suggestedLines, etc.) are empty defaults.
  * Model chain: 3.1-pro → flash-lite → 2.5-pro → 2.5-flash.
  */
 export async function generateReportParallel(opts: BuildReportPromptOpts): Promise<ScoutingReport> {
   const prompts = buildReportPromptsParallel(opts);
 
-  let strategic: Record<string, unknown> | undefined;
-  let tactical: Record<string, unknown> | undefined;
+  let strategicSummary: Record<string, unknown> | undefined;
+  let strengths: Record<string, unknown> | undefined;
+  let weaknesses: Record<string, unknown> | undefined;
 
   for (let i = 0; i < GEMINI_ANALYSIS_MODELS.length; i++) {
     const model = GEMINI_ANALYSIS_MODELS[i];
     try {
-      [strategic, tactical] = await Promise.all([
-        generatePartialWithModel(prompts.strategic, reportPartialSchemas.strategic, model),
-        generatePartialWithModel(prompts.tactical, reportPartialSchemas.tactical, model),
+      [strategicSummary, strengths, weaknesses] = await Promise.all([
+        generatePartialWithModel(prompts.strategicSummary, reportPartialSchemas.strategicSummary, model),
+        generatePartialWithModel(prompts.strengths, reportPartialSchemas.strengths, model),
+        generatePartialWithModel(prompts.weaknesses, reportPartialSchemas.weaknesses, model),
       ]);
       break;
     } catch (err) {
@@ -91,7 +96,7 @@ export async function generateReportParallel(opts: BuildReportPromptOpts): Promi
     }
   }
 
-  if (!strategic || !tactical) {
+  if (!strategicSummary || !strengths || !weaknesses) {
     throw new Error('Gemini report generation failed');
   }
 
@@ -100,23 +105,23 @@ export async function generateReportParallel(opts: BuildReportPromptOpts): Promi
     player: { name: opts.identity.verifiedName, platforms: {} },
     whiteOpenings: [],
     blackDefenses: [],
-    strategicSummary: String(strategic.strategicSummary ?? ''),
+    strategicSummary: String(strategicSummary.strategicSummary ?? ''),
     blackStrategicSummary: '',
-    tacticalProfile: String(strategic.tacticalProfile ?? ''),
-    endgameReliability: String(strategic.endgameReliability ?? ''),
-    timeControlInsights: String(strategic.timeControlInsights ?? ''),
-    strengths: Array.isArray(strategic.strengths) ? strategic.strengths : [],
-    weaknesses: Array.isArray(strategic.weaknesses) ? strategic.weaknesses : [],
-    specificVulnerability: String(tactical.specificVulnerability ?? ''),
-    tacticalRecommendation: String(tactical.tacticalRecommendation ?? ''),
+    tacticalProfile: '',
+    endgameReliability: '',
+    timeControlInsights: '',
+    strengths: Array.isArray(strengths.strengths) ? strengths.strengths : [],
+    weaknesses: Array.isArray(weaknesses.weaknesses) ? weaknesses.weaknesses : [],
+    specificVulnerability: '',
+    tacticalRecommendation: '',
     preparationSummary: '',
-    suggestedLines: Array.isArray(tactical.suggestedLines) ? tactical.suggestedLines : [],
-    repertoireReliability: typeof strategic.repertoireReliability === 'number' ? strategic.repertoireReliability : 0,
+    suggestedLines: [],
+    repertoireReliability: 0,
     mostPlayedLines: { white: [], black: [] },
     lastUpdated: new Date().toISOString(),
   };
 
-  logger.info('[GeminiReport] Parallel generation complete, merged 2 partial responses');
+  logger.info('[GeminiReport] Parallel generation complete, merged 3 partial responses');
   return merged;
 }
 

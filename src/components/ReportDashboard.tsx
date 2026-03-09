@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   LineChart, Line, ResponsiveContainer,
 } from 'recharts';
-import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Activity } from 'lucide-react';
+import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Activity, Download } from 'lucide-react';
 import { ScoutingReport, OpeningStat } from '../types';
 import AnalysisBoard from './AnalysisBoard';
 import RecentGamesList from './RecentGamesList';
@@ -418,7 +418,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
   const showMainContent = hasReportContent || !!isGenerating;
 
   return (
-    <div className={`relative space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12 print:space-y-6 ${isGenerating ? 'pointer-events-none' : ''}`}>
+    <div className={`relative space-y-8 pb-12 print:space-y-6 ${isGenerating ? 'pointer-events-none' : ''}`}>
       {/* Dossier Header */}
       <div className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-3xl overflow-hidden shadow-2xl">
         <div className="h-44 bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-950 dark:from-indigo-900/40 dark:via-slate-900 dark:to-slate-950 from-indigo-50 via-white to-gray-50 relative p-10 flex flex-col justify-end">
@@ -430,16 +430,35 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
               </div>
               <h2 className="text-5xl font-serif font-bold tracking-tight text-white dark:text-white text-gray-900 mb-2">{player.name}</h2>
               <div className="flex items-center gap-4 text-slate-400 dark:text-slate-400 text-gray-600 font-medium">
-                <span className="bg-slate-800 dark:bg-slate-800 bg-gray-100 px-3 py-1 rounded text-sm text-indigo-300 dark:text-indigo-300 text-indigo-600 border border-slate-700 dark:border-slate-700 border-gray-200">
-                  {player.titles?.join(', ') || 'Professional'}
-                </span>
-                <span>{player.country}</span>
+                {player.titles?.length ? (
+                  <span className="bg-slate-800 dark:bg-slate-800 bg-gray-100 px-3 py-1 rounded text-sm text-indigo-300 dark:text-indigo-300 text-indigo-600 border border-slate-700 dark:border-slate-700 border-gray-200">
+                    {player.titles.join(', ')}
+                  </span>
+                ) : null}
+                {player.country ? <span>{player.country}</span> : null}
                 <div className="flex gap-4">
                   <span className="text-indigo-400 dark:text-indigo-400 text-indigo-600 font-bold">FIDE: {player.currentRating != null && player.currentRating > 0 ? player.currentRating : 'Not found'}</span>
                   <span className="text-emerald-400 dark:text-emerald-400 text-emerald-600 font-bold">USCF: {player.uscfRating != null && player.uscfRating > 0 ? player.uscfRating : 'Not found'}</span>
                 </div>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                const slug = player.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'report';
+                const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${slug}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium transition-colors shrink-0"
+            >
+              <Download className="w-4 h-4" />
+              Download JSON
+            </button>
           </div>
         </div>
         <div className="py-8 px-10 grid grid-cols-2 md:grid-cols-4 gap-8 bg-slate-950/30 dark:bg-slate-950/30 bg-gray-50 border-t border-slate-800 dark:border-slate-800 border-gray-200">

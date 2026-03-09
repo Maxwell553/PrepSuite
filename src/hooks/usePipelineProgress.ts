@@ -38,10 +38,10 @@ export function usePipelineProgressCallbacks({
   return {
     onPhase: (phase, status, durationMs, extra) => {
       if (phase === 'identity' && status === 'started') {
-        setScanningStatus('Step 1: Identifying Player...');
+        setScanningStatus(extra?.message ? `Step 1: ${extra.message}` : 'Step 1: Identifying Player...');
         setLoadingStage('identity');
       } else if (phase === 'identity' && status === 'progress' && extra?.message) {
-        setScanningStatus('Step 1: Identifying Player...');
+        setScanningStatus(`Step 1: ${extra.message}`);
       } else if (phase === 'identity' && status === 'complete') {
         setScanningStatus('Step 1: Identifying Player...');
       } else if (phase === 'games' && status === 'started') {

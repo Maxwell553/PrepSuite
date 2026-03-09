@@ -322,10 +322,11 @@ ${moveListSample
 ${engineText ? `${engineText}\n` : ''}`;
 }
 
-/** Partial prompts for parallel generation (strategic, tactical). White/Black sections removed for now. */
+/** Partial prompts for parallel generation. Summary, strengths, weaknesses run in parallel. Tactical fields are not generated. */
 export function buildReportPromptsParallel(opts: BuildReportPromptOpts): {
-  strategic: string;
-  tactical: string;
+  strategicSummary: string;
+  strengths: string;
+  weaknesses: string;
 } {
   const shared = buildSharedContext(opts);
 
@@ -337,21 +338,25 @@ OPENING/DEFENSE WORDING (MANDATORY for strategicSummary, strengths, weaknesses, 
 `;
 
   return {
-    strategic: `${shared}
+    strategicSummary: `${shared}
 ${openingWording}
-TASK: Generate JSON with strategicSummary (comprehensive White+Black analysis), strengths[3], weaknesses[3], tacticalProfile, endgameReliability, timeControlInsights, repertoireReliability (0-1).
+TASK: Generate JSON with strategicSummary ONLY — a comprehensive White+Black analysis paragraph.
 
 LENGTH: Keep strategicSummary CONCISE — about half the length of a typical detailed analysis. Lead with key stats only (first move %, top 3–4 openings with win rates). Omit secondary lines unless critical. One focused paragraph for White, one for Black.
 
-CONTENT QUALITY: For every opening mentioned, cite exact game counts and win rates. Include engine evals when available. strengths/weaknesses: each item must include opening name, color, game count, win rate. Use "plays" when player initiated; "faces" when opponent initiated.`,
+CONTENT QUALITY: For every opening mentioned, cite exact game counts and win rates. Include engine evals when available. Use "plays" when player initiated; "faces" when opponent initiated.`,
 
-    tactical: `${shared}
+    strengths: `${shared}
 ${openingWording}
-TASK: Generate JSON with tacticalRecommendation, specificVulnerability, suggestedLines[3].
+TASK: Generate JSON with strengths[3] — exactly 3 bullet points of core strengths.
 
-LENGTH: Keep tacticalRecommendation and specificVulnerability CONCISE — about half the length of typical detailed advice. Lead with the top 2–3 actionable recommendations. Cite exact openings, win rates, and game counts. Omit secondary suggestions unless critical.
+CONTENT QUALITY: Each item must include opening name, color, game count, win rate. Use "plays" when player initiated; "faces" when opponent initiated. Example: "${opts.identity.verifiedName} faces the Caro-Kann Defense as White with exceptional success, achieving an 81% win rate across 16 games."`,
 
-CONTENT QUALITY: tacticalRecommendation: strategic advice with specific lines. Use "plays" for Defenses when Black, "faces" for Openings when Black. specificVulnerability: cite game counts and win rates. suggestedLines: format "1.e4 c5 2.Nf3 d6... (Xg, Y% WR)". Prefer 10+ games, 5-6 moves.`,
+    weaknesses: `${shared}
+${openingWording}
+TASK: Generate JSON with weaknesses[3] — exactly 3 bullet points of strategic weaknesses.
+
+CONTENT QUALITY: Each item must include opening name, color, game count, win rate. Use "plays" when player initiated; "faces" when opponent initiated. Example: "${opts.identity.verifiedName} plays the King's Indian Defense as Black with poor results, managing only a 31% win rate across 16 games."`,
   };
 }
 
@@ -598,27 +603,20 @@ export const reportResponseSchema = {
 
 /** Partial schemas for parallel generation */
 export const reportPartialSchemas = {
-  strategic: {
+  strategicSummary: {
     type: 'OBJECT',
-    properties: {
-      strategicSummary: { type: 'STRING' },
-      strengths: { type: 'ARRAY', items: { type: 'STRING' } },
-      weaknesses: { type: 'ARRAY', items: { type: 'STRING' } },
-      tacticalProfile: { type: 'STRING' },
-      endgameReliability: { type: 'STRING' },
-      timeControlInsights: { type: 'STRING' },
-      repertoireReliability: { type: 'NUMBER' },
-    },
-    required: ['strategicSummary', 'strengths', 'weaknesses', 'tacticalProfile', 'endgameReliability', 'timeControlInsights', 'repertoireReliability'],
+    properties: { strategicSummary: { type: 'STRING' } },
+    required: ['strategicSummary'],
   },
-  tactical: {
+  strengths: {
     type: 'OBJECT',
-    properties: {
-      tacticalRecommendation: { type: 'STRING' },
-      specificVulnerability: { type: 'STRING' },
-      suggestedLines: { type: 'ARRAY', items: { type: 'STRING' } },
-    },
-    required: ['tacticalRecommendation', 'specificVulnerability', 'suggestedLines'],
+    properties: { strengths: { type: 'ARRAY', items: { type: 'STRING' } } },
+    required: ['strengths'],
+  },
+  weaknesses: {
+    type: 'OBJECT',
+    properties: { weaknesses: { type: 'ARRAY', items: { type: 'STRING' } } },
+    required: ['weaknesses'],
   },
   white: {
     type: 'OBJECT',

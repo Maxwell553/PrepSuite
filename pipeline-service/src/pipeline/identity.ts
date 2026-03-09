@@ -79,6 +79,8 @@ export async function resolveIdentity(
 
   const onPartial = options?.onPartialIdentity;
 
+  onProgress?.('Identifying player...');
+
   if (hasFideId && hasUscfId && hasChessCom && hasLichess && !skipOnline) {
     onProgress?.('Fetching FIDE & USCF profiles...');
     logger.info({ name: inputName }, '[Identity] Fast path: all IDs provided, skipping search');

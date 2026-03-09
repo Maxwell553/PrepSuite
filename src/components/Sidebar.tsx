@@ -6,9 +6,10 @@ interface SidebarProps {
   activeTab: 'search' | 'dashboard' | 'history';
   setActiveTab: (tab: 'search' | 'dashboard' | 'history') => void;
   onLogoClick?: () => void;
+  isAnalyzing?: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogoClick }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogoClick, isAnalyzing }) => {
   const menuItems = [
     { id: 'search', icon: Search, label: 'Search Opponent' },
     { id: 'dashboard', icon: LayoutDashboard, label: 'Active Report' },
@@ -37,19 +38,23 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogoClick 
         </div>
 
         <nav className="space-y-1">
-          {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === item.id
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40'
-                  : 'text-slate-400 dark:text-slate-400 text-gray-600 hover:text-white dark:hover:text-white hover:text-gray-900 hover:bg-slate-800 dark:hover:bg-slate-800 hover:bg-gray-100'
-                }`}
-            >
-              <item.icon className="w-5 h-5" />
-              {item.label}
-            </button>
-          ))}
+          {menuItems.map((item) => {
+            const isDisabled = isAnalyzing && (item.id === 'search' || item.id === 'history');
+            return (
+              <button
+                key={item.id}
+                onClick={() => !isDisabled && setActiveTab(item.id)}
+                disabled={isDisabled}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === item.id
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40'
+                    : 'text-slate-400 dark:text-slate-400 text-gray-600 hover:text-white dark:hover:text-white hover:text-gray-900 hover:bg-slate-800 dark:hover:bg-slate-800 hover:bg-gray-100'
+                  } ${isDisabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+              >
+                <item.icon className="w-5 h-5" />
+                {item.label}
+              </button>
+            );
+          })}
         </nav>
       </div>
 

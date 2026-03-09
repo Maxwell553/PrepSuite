@@ -67,10 +67,9 @@ vi.mock('../../src/pipeline/geminiReport.js', () => ({
 
 vi.mock('../../src/pipeline/promptBuilder.js', () => ({
   buildReportPromptsParallel: vi.fn().mockReturnValue({
-    strategic: 'mock strategic',
-    tactical: 'mock tactical',
-    white: 'mock white',
-    black: 'mock black',
+    strategicSummary: 'mock strategicSummary',
+    strengths: 'mock strengths',
+    weaknesses: 'mock weaknesses',
   }),
 }));
 

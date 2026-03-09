@@ -475,6 +475,7 @@ const App: React.FC = () => {
             activeTab={activeTab} 
             setActiveTab={setActiveTab}
             onLogoClick={() => setShowLandingPage(true)}
+            isAnalyzing={isAnalyzing}
           />
         )}
 
@@ -529,12 +530,17 @@ const App: React.FC = () => {
                   />
                 )}
 
-                {activeTab === 'dashboard' && selectedReport && (
-                  <ReportDashboard
-                    report={selectedReport}
-                    isGenerating={isAnalyzing}
-                    generatingStatus={scanningStatus}
-                  />
+                {selectedReport && (
+                  <div
+                    className={activeTab === 'dashboard' ? 'block' : 'hidden'}
+                    aria-hidden={activeTab !== 'dashboard'}
+                  >
+                    <ReportDashboard
+                      report={selectedReport}
+                      isGenerating={isAnalyzing}
+                      generatingStatus={scanningStatus}
+                    />
+                  </div>
                 )}
 
                 {activeTab === 'dashboard' && !selectedReport && (
