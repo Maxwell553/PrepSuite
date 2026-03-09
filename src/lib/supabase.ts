@@ -11,7 +11,13 @@ if (!isSupabaseConfigured()) {
 
 export const supabase = createClient(
     config.supabaseUrl,
-    config.supabaseAnonKey
+    config.supabaseAnonKey,
+    {
+        auth: {
+            detectSessionInUrl: true,
+            flowType: 'pkce',
+        },
+    }
 );
 
 export const authActions = {

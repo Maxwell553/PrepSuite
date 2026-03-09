@@ -357,6 +357,7 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
     await authActions.signOut();
+    setShowUserSettings(false);
   };
 
   if (loadingAuth) {
@@ -483,6 +484,7 @@ const App: React.FC = () => {
               <UserSettings
                 user={user}
                 onBack={() => setShowUserSettings(false)}
+                onLogout={handleLogout}
                 onAccountDeleted={() => {
                   setShowUserSettings(false);
                   setShowLandingPage(true);

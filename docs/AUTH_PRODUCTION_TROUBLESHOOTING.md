@@ -34,9 +34,9 @@ When a user signs in via OAuth, the app now automatically dismisses the landing 
 
 ## Email signup: Emails not sent or confirmation links broken
 
-### 1. Custom SMTP (required for production)
+### 1. Custom SMTP (required for production — most common cause of "no email")
 
-Supabase's built-in email provider is limited to **3 emails per hour** and is for testing only. In production, configure custom SMTP:
+Supabase's built-in email provider is limited to **3 emails per hour** and is for testing only. If confirmation emails are not arriving, you almost certainly need custom SMTP:
 
 **Supabase Dashboard → Project Settings → Auth → SMTP Settings**
 

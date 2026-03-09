@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, User, Mail, Shield, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, User, Mail, Trash2, AlertTriangle, LogOut } from 'lucide-react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { getEnvConfig } from '../lib/env';
@@ -8,10 +8,11 @@ import ConfirmationModal from './ConfirmationModal';
 interface UserSettingsProps {
   user: SupabaseUser;
   onBack: () => void;
+  onLogout?: () => void;
   onAccountDeleted?: () => void;
 }
 
-const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onAccountDeleted }) => {
+const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onLogout, onAccountDeleted }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -115,10 +116,16 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onAccountDele
 
           <div className="bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
-              <Shield className="w-5 h-5 text-indigo-400 dark:text-indigo-400 text-indigo-600" />
-              <h2 className="text-lg font-semibold text-white dark:text-white text-gray-900">Security</h2>
+              <LogOut className="w-5 h-5 text-indigo-400 dark:text-indigo-400 text-indigo-600" />
+              <h2 className="text-lg font-semibold text-white dark:text-white text-gray-900">Session</h2>
             </div>
-            <p className="text-slate-400 dark:text-slate-400 text-gray-600 text-sm mb-4">Security settings will be available here in a future update.</p>
+            <button
+              onClick={() => (onLogout ? onLogout() : supabase.auth.signOut())}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Log out
+            </button>
           </div>
 
           <div className="bg-red-600/10 dark:bg-red-600/10 bg-red-50 border border-red-500/20 dark:border-red-500/20 border-red-200 rounded-2xl p-6">
