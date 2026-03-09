@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   LineChart, Line, ResponsiveContainer,
 } from 'recharts';
-import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Activity, Download } from 'lucide-react';
+import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Activity } from 'lucide-react';
 import { ScoutingReport, OpeningStat } from '../types';
 import AnalysisBoard from './AnalysisBoard';
 import RecentGamesList from './RecentGamesList';
@@ -442,23 +442,6 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                const slug = player.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'report';
-                const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${slug}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium transition-colors shrink-0"
-            >
-              <Download className="w-4 h-4" />
-              Download JSON
-            </button>
           </div>
         </div>
         <div className="py-8 px-10 grid grid-cols-2 md:grid-cols-4 gap-8 bg-slate-950/30 dark:bg-slate-950/30 bg-gray-50 border-t border-slate-800 dark:border-slate-800 border-gray-200">

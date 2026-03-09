@@ -18,11 +18,12 @@ interface Message {
 }
 
 const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requiresSignIn }) => {
+  const playerName = report.player?.name ?? 'this player';
   const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: `Hi! I can help you analyze ${report.player.name}'s repertoire. Ask me about specific openings, lines, or positions. For example: "What does ${report.player.name} play against the Yugoslav Attack?" or "What's their response to 1.e4 c5 2.Nf3 d6 3.d4?"`,
+      content: `Hi! I can help you analyze ${playerName}'s repertoire. Ask me about specific openings, lines, or positions.`,
       timestamp: new Date()
     }
   ]);
@@ -34,6 +35,17 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  // Reset greeting when report changes (e.g. user switches to different report from history)
+  useEffect(() => {
+    setMessages([
+      {
+        role: 'assistant',
+        content: `Hi! I can help you analyze ${playerName}'s repertoire. Ask me about specific openings, lines, or positions.`,
+        timestamp: new Date()
+      }
+    ]);
+  }, [report.id, playerName]);
 
   useEffect(() => {
     scrollToBottom();
