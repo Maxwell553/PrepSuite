@@ -30,8 +30,16 @@ Supabase enables Email Magic Links by default with a built-in SMTP provider (lim
 
 ## 3. URL Configuration (CRITICAL)
 In Supabase Dashboard, go to **Authentication > URL Configuration** and ensure:
+
+**For local development:**
 - **Site URL**: `http://localhost:3002`
 - **Redirect URLs**: Add `http://localhost:3002/**` to the list.
+
+**For production (prepsuite.ai):**
+- **Site URL**: `https://prepsuite.ai` (no trailing slash)
+- **Redirect URLs**: Add `https://prepsuite.ai` and `https://prepsuite.ai/**` to the list.
+
+**Google Cloud Console** (production): Add `https://prepsuite.ai` to Authorized JavaScript origins.
 
 ## Why These Methods?
 - **Google**: Fastest login for most users, instantly links to their professional identity.

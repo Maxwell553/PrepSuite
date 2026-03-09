@@ -97,9 +97,14 @@ const App: React.FC = () => {
     });
 
     // Listen for changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
+      
+      // When user just signed in (OAuth or email link), take them straight to the dashboard
+      if (event === 'SIGNED_IN' && currentUser) {
+        setShowLandingPage(false);
+      }
       
       // Update Sentry user context
       if (currentUser) {

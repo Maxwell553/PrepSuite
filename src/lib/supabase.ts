@@ -36,6 +36,9 @@ export const authActions = {
         const res = await supabase.auth.signUp({
             email,
             password: pass,
+            options: {
+                emailRedirectTo: window.location.origin,
+            },
         });
         if (res.error) throw res.error;
         return res;
