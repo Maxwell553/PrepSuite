@@ -88,6 +88,8 @@ export interface GameData {
   /** OTB: chess titles (GM, IM, etc.) */
   whiteTitle?: string;
   blackTitle?: string;
+  /** Pre-computed SAN move history (avoids client-side PGN parsing) */
+  history?: string[];
 }
 
 /** Opening statistics per side */
@@ -178,6 +180,11 @@ export interface ScoutingReport {
     black: MoveSequence[];
   };
   games?: GameData[];
+  /** Pre-computed openings by source (online vs OTB) */
+  openingsBySource?: {
+    online: { white: OpeningStat[]; black: OpeningStat[] };
+    otb: { white: OpeningStat[]; black: OpeningStat[] };
+  };
   engineDepth?: number;
   lastUpdated: string;
 }

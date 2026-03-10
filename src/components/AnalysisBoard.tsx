@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useCallback, startTransition } from 'react';
-import { Database, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { Database, ChevronLeft, ChevronRight, RotateCcw, Loader2 } from 'lucide-react';
 import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
 import { GameData } from '../types';
-import { parseGameHistories, type ParsedGame } from '../lib/repertoireUtils';
+import { type ParsedGame } from '../lib/repertoireUtils';
+import { useParsedGames } from '../hooks/useParsedGames';
 
 /** Parse move label to SAN: "1. e4" -> "e4", "1. ... c5" -> "c5" */
 function parseMoveLabelToSan(label: string): string {
@@ -128,38 +129,20 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
   const [path, setPath] = useState<string[]>([]);
   const [repertoireSide, setRepertoireSide] = useState<'white' | 'black'>('white');
 
-  // Early returns for empty games
-  if (!games || games.length === 0) {
-    return (
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
-        <Database className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-        <p className="text-slate-400">No games available for analysis</p>
-      </div>
-    );
-  }
+  const gamesSafe = games ?? [];
+  const { parsed: parsedGames, loading: parsingGames } = useParsedGames(gamesSafe);
 
   const usernameList = Array.isArray(playerUsername) ? playerUsername : playerUsername ? [playerUsername] : [];
-  // Use actual username from games if available, otherwise use playerName
-  // Extract username from first game if not provided
   const actualUsername = usernameList[0] || (() => {
-    if (games.length > 0) {
-      const firstGame = games[0];
-      // Try to find which player matches - check both white and black
+    if (gamesSafe.length > 0) {
+      const firstGame = gamesSafe[0];
       const whiteLower = firstGame.white.toLowerCase().trim();
       const blackLower = firstGame.black.toLowerCase().trim();
       const nameLower = playerName.toLowerCase().trim();
-      
-      // Check if white matches
-      if (whiteLower === nameLower || whiteLower.includes(nameLower) || nameLower.includes(whiteLower)) {
-        return firstGame.white;
-      }
-      // Check if black matches
-      if (blackLower === nameLower || blackLower.includes(nameLower) || nameLower.includes(blackLower)) {
-        return firstGame.black;
-      }
-      // Fallback: return the one that's closer (has more matching characters)
-      const whiteMatch = whiteLower.split('').filter(c => nameLower.includes(c)).length;
-      const blackMatch = blackLower.split('').filter(c => nameLower.includes(c)).length;
+      if (whiteLower === nameLower || whiteLower.includes(nameLower) || nameLower.includes(whiteLower)) return firstGame.white;
+      if (blackLower === nameLower || blackLower.includes(nameLower) || nameLower.includes(blackLower)) return firstGame.black;
+      const whiteMatch = whiteLower.split('').filter((c) => nameLower.includes(c)).length;
+      const blackMatch = blackLower.split('').filter((c) => nameLower.includes(c)).length;
       return whiteMatch > blackMatch ? firstGame.white : firstGame.black;
     }
     return playerName;
@@ -167,14 +150,11 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
 
   const identifiersForFilter = [...new Set([actualUsername, playerName, ...usernameList].filter(Boolean))];
 
-  const parsedGames = useMemo(() => parseGameHistories(games), [games]);
-
   const moveStats = useMemo(() => {
-    if (path.length === 0) {
-      return aggregateByFirstMove(parsedGames, games, identifiersForFilter, repertoireSide);
-    }
-    return aggregateMovesAtPosition(parsedGames, games, identifiersForFilter, repertoireSide, path);
-  }, [parsedGames, games, identifiersForFilter, repertoireSide, path]);
+    if (!gamesSafe.length || !parsedGames.length) return [];
+    if (path.length === 0) return aggregateByFirstMove(parsedGames, gamesSafe, identifiersForFilter, repertoireSide);
+    return aggregateMovesAtPosition(parsedGames, gamesSafe, identifiersForFilter, repertoireSide, path);
+  }, [parsedGames, gamesSafe, identifiersForFilter, repertoireSide, path]);
 
   const displayPosition = useMemo(() => {
     if (path.length === 0) return 'start';
@@ -202,6 +182,26 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     const top = moveStats[0];
     if (top) startTransition(() => setPath((p) => [...p, top.move]));
   }, [moveStats]);
+
+  if (!gamesSafe.length) {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
+        <Database className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+        <p className="text-slate-400">No games available for analysis</p>
+      </div>
+    );
+  }
+
+  if (parsingGames) {
+    return (
+      <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-6 lg:p-8 shadow-xl flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4 text-slate-400">
+          <Loader2 className="w-10 h-10 animate-spin text-indigo-400" />
+          <span>Loading repertoire analysis…</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-6 lg:p-8 shadow-xl">

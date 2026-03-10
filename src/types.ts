@@ -55,6 +55,8 @@ export interface GameData {
   /** OTB: chess titles (GM, IM, etc.) */
   whiteTitle?: string;
   blackTitle?: string;
+  /** Pre-computed SAN move history (avoids client-side PGN parsing) */
+  history?: string[];
 }
 
 export interface ScoutingReport {
@@ -79,6 +81,11 @@ export interface ScoutingReport {
     black: MoveSequence[];
   };
   games?: GameData[]; // All games for analysis board
+  /** Pre-computed openings by source (online vs OTB) - avoids client aggregation */
+  openingsBySource?: {
+    online: { white: OpeningStat[]; black: OpeningStat[] };
+    otb: { white: OpeningStat[]; black: OpeningStat[] };
+  };
   engineDepth?: number; // Stockfish engine depth used for analysis
   lastUpdated: string;
 }

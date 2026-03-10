@@ -376,7 +376,9 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
   }, [report.games]);
 
   const openingsBySource = useMemo(() => {
-    if (!report.games || report.games.length === 0 || !hasBothSources) return null;
+    if (!hasBothSources) return null;
+    if (report.openingsBySource) return report.openingsBySource;
+    if (!report.games || report.games.length === 0) return null;
     const baseTargets = [
       player.name,
       player.platforms?.chessCom,
@@ -384,7 +386,6 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
       (player as { actualUsername?: string }).actualUsername,
       (player as { fideName?: string }).fideName,
     ].filter(Boolean) as string[];
-    // OTB games use different name formats (e.g. "Gukesh D" vs "Gukesh Dommaraju"). Include names from OTB games that share a significant word with base targets.
     const games = report.games as { source?: string; openingName?: string; eco?: string; white: string; black: string; result: string }[];
     const otbGames = games.filter((g) => (g.source || '').toLowerCase() === 'otb');
     const baseWords = new Set(baseTargets.flatMap((t) => t.toLowerCase().replace(/,/g, ' ').split(/\s+/).filter((w) => w.length >= 2)));
@@ -400,7 +401,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
     }
     const targetNames = [...new Set([...baseTargets, ...otbNames])];
     return aggregateOpeningsBySource(games, targetNames);
-  }, [report.games, hasBothSources, player]);
+  }, [report.games, report.openingsBySource, hasBothSources, player]);
 
   // Prevent auto-scroll to chat section on mount
   React.useEffect(() => {

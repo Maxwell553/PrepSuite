@@ -10,6 +10,8 @@ import type {
   MoveSequence,
   GameData,
 } from '../lib/types.js';
+import { parsePGNMoves } from './moveSequenceExtractor.js';
+import { aggregateOpeningsBySource } from './statsAggregator.js';
 
 export interface PostProcessOpts {
   identity: ResolvedIdentity;
@@ -135,8 +137,28 @@ export function postProcessReport(
   // Set timestamp
   reportData.lastUpdated = new Date().toISOString();
 
+  // Enrich games with pre-computed history (avoids client-side PGN parsing)
+  for (const g of allGames) {
+    if (g.pgn && g.pgn.trim().length >= 10) {
+      (g as GameData & { history?: string[] }).history = parsePGNMoves(g.pgn);
+    }
+  }
+
   // Attach games for AnalysisBoard
   reportData.games = allGames;
+
+  // Pre-compute openings by source (online vs OTB) to avoid client aggregation
+  const targetNames = [
+    actualUsername,
+    identity.verifiedName,
+    identity.fideProfile?.name,
+    identity.chessComUsername,
+    identity.lichessUsername,
+  ].filter(Boolean) as string[];
+  if (allGames.length > 0 && targetNames.length > 0) {
+    (reportData as ScoutingReport & { openingsBySource?: unknown }).openingsBySource =
+      aggregateOpeningsBySource(allGames, targetNames);
+  }
 
   return reportData;
 }

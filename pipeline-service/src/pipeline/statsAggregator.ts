@@ -166,3 +166,84 @@ export function generateStats(
 
   return filtered;
 }
+
+/** Normalize name for matching (handles "Last, First" and "First Last" formats) */
+function normalizeName(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/,/g, ' ')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter((p) => p.length > 0);
+}
+
+function namesMatch(name: string, targets: string[]): boolean {
+  const nameParts = normalizeName(name);
+  if (nameParts.length === 0) return false;
+  return targets.some((t) => {
+    const targetParts = normalizeName(t);
+    if (targetParts.length === 0) return false;
+    const partsMatch = (a: string, b: string) => {
+      if (a.length < 3 || b.length < 3) return a === b;
+      return a.includes(b) || b.includes(a);
+    };
+    const matchingCount = nameParts.filter((np) =>
+      targetParts.some((tp) => partsMatch(np, tp)),
+    ).length;
+    const firstPartMatch = nameParts[0] && targetParts.some((tp) => partsMatch(nameParts[0], tp));
+    const secondPartInitial = nameParts.length === 2 && nameParts[1].length <= 2 && targetParts.some(
+      (tp) => tp.length >= 3 && tp.startsWith(nameParts[1]),
+    );
+    return (
+      matchingCount >= Math.min(2, nameParts.length) ||
+      (nameParts.length === 1 && targetParts.some((tp) => partsMatch(nameParts[0], tp))) ||
+      (firstPartMatch && (matchingCount >= 1 || secondPartInitial))
+    );
+  });
+}
+
+function aggregateOpeningsForTargets(
+  games: GameData[],
+  targetNames: string[],
+  side: 'white' | 'black',
+): OpeningStat[] {
+  const relevantGames = games.filter((g) => {
+    if (side === 'white') return namesMatch(g.white, targetNames);
+    return namesMatch(g.black, targetNames);
+  });
+  if (relevantGames.length === 0) return [];
+  // Use first matching name for generateStats (it does exact match internally; we've pre-filtered)
+  const primaryName = relevantGames[0]
+    ? (side === 'white' ? relevantGames[0].white : relevantGames[0].black)
+    : targetNames[0] || '';
+  return generateStats(relevantGames, primaryName, side);
+}
+
+export interface OpeningsBySource {
+  online: { white: OpeningStat[]; black: OpeningStat[] };
+  otb: { white: OpeningStat[]; black: OpeningStat[] };
+}
+
+/** Pre-compute openings by source (online vs OTB) for frontend display. */
+export function aggregateOpeningsBySource(
+  games: GameData[],
+  targetNames: string[],
+): OpeningsBySource {
+  const onlineGames = games.filter(
+    (g) => g.source === 'lichess' || g.source === 'chess.com',
+  );
+  const otbGames = games.filter((g) => g.source === 'otb');
+
+  return {
+    online: {
+      white: aggregateOpeningsForTargets(onlineGames, targetNames, 'white'),
+      black: aggregateOpeningsForTargets(onlineGames, targetNames, 'black'),
+    },
+    otb: {
+      white: aggregateOpeningsForTargets(otbGames, targetNames, 'white'),
+      black: aggregateOpeningsForTargets(otbGames, targetNames, 'black'),
+    },
+  };
+}

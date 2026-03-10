@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Search, History, Shield, Database, LayoutDashboard, ChevronRight, ChevronLeft, User, Loader2, Trash2, Square, CheckSquare } from 'lucide-react';
 import SearchScreen from './components/SearchScreen';
-import ReportDashboard from './components/ReportDashboard';
+const ReportDashboard = lazy(() => import('./components/ReportDashboard'));
 import Sidebar from './components/Sidebar';
 import OfflineBanner from './components/OfflineBanner';
 import { ScoutingReport } from './types';
@@ -42,7 +42,9 @@ function FeaturedReportLayout({
         <span className="text-slate-400 text-sm">Featured Report — No sign-in required</span>
       </header>
       <main className="max-w-6xl mx-auto p-6">
-        <ReportDashboard report={report} requiresSignInForChat={!user} />
+        <Suspense fallback={<div className="flex items-center justify-center min-h-[400px]"><Loader2 className="w-10 h-10 animate-spin text-indigo-400" /></div>}>
+          <ReportDashboard report={report} requiresSignInForChat={!user} />
+        </Suspense>
       </main>
     </div>
   );
@@ -535,11 +537,17 @@ const App: React.FC = () => {
                     className={activeTab === 'dashboard' ? 'block' : 'hidden'}
                     aria-hidden={activeTab !== 'dashboard'}
                   >
-                    <ReportDashboard
-                      report={selectedReport}
-                      isGenerating={isAnalyzing}
-                      generatingStatus={scanningStatus}
-                    />
+                    <Suspense fallback={
+                      <div className="flex items-center justify-center min-h-[400px]">
+                        <Loader2 className="w-10 h-10 animate-spin text-indigo-400" />
+                      </div>
+                    }>
+                      <ReportDashboard
+                        report={selectedReport}
+                        isGenerating={isAnalyzing}
+                        generatingStatus={scanningStatus}
+                      />
+                    </Suspense>
                   </div>
                 )}
 
