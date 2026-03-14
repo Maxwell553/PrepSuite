@@ -265,3 +265,33 @@ export async function chatWithPipeline(
   return data.text || '';
 }
 
+/** Support category for filtering */
+export type SupportCategory = 'question' | 'bug' | 'feature';
+
+/** Support chat: bug reports, feature requests, site questions. No report context. */
+export async function supportChatWithPipeline(
+  messages: ChatMessage[],
+  accessToken: string,
+  category?: SupportCategory,
+): Promise<string> {
+  const baseUrl = import.meta.env.VITE_PIPELINE_SERVICE_URL || '';
+  const url = `${baseUrl}/api/support-chat`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ messages, category }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(errorBody.error || `Support chat error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.text || '';
+}
+

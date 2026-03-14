@@ -15,6 +15,7 @@ import { loggerMiddleware } from './middleware/logger.js';
 import { healthRoute } from './routes/health.js';
 import { analyzeRoute } from './routes/analyze.js';
 import { chatRoute } from './routes/chat.js';
+import { supportChatRoute } from './routes/supportChat.js';
 import { practiceMoveRoute } from './routes/practiceMove.js';
 import { fideRatingHistoryRoute } from './routes/fideRatingHistory.js';
 import { logger } from './lib/logger.js';
@@ -34,6 +35,7 @@ app.route('/health', healthRoute);
 app.use('/api/*', authMiddleware);
 app.route('/api', analyzeRoute);
 app.route('/api', chatRoute);
+app.route('/api', supportChatRoute);
 app.route('/api', practiceMoveRoute);
 app.route('/api', fideRatingHistoryRoute);
 

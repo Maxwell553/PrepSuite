@@ -16,6 +16,7 @@ import UserSettings from './components/UserSettings';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 import AboutPrepSuite from './components/AboutPrepSuite';
+import SupportChat from './components/SupportChat';
 import { ThemeProvider } from './lib/themeContext';
 import { setSentryUser, clearSentryUser } from './lib/sentry';
 import { mergeReport } from './lib/reportUtils';
@@ -397,6 +398,7 @@ const App: React.FC = () => {
       <ThemeProvider>
         {isOffline && <OfflineBanner />}
         <PrivacyPolicy onBack={closeLandingSubpage} />
+        <SupportChat isLoggedIn={!!user} />
       </ThemeProvider>
     );
   }
@@ -406,6 +408,7 @@ const App: React.FC = () => {
       <ThemeProvider>
         {isOffline && <OfflineBanner />}
         <TermsOfService onBack={closeLandingSubpage} />
+        <SupportChat isLoggedIn={!!user} />
       </ThemeProvider>
     );
   }
@@ -415,6 +418,7 @@ const App: React.FC = () => {
       <ThemeProvider>
         {isOffline && <OfflineBanner />}
         <AboutPrepSuite onBack={closeLandingSubpage} />
+        <SupportChat isLoggedIn={!!user} />
       </ThemeProvider>
     );
   }
@@ -438,6 +442,7 @@ const App: React.FC = () => {
           user={user}
           onBack={closeLandingSubpage}
         />
+        <SupportChat isLoggedIn={!!user} />
       </ThemeProvider>
     );
   }
@@ -464,6 +469,7 @@ const App: React.FC = () => {
           onViewFeaturedReport={handleViewFeaturedReport}
         />
         </div>
+        <SupportChat isLoggedIn={!!user} />
       </ThemeProvider>
     );
   }
@@ -647,6 +653,8 @@ const App: React.FC = () => {
             onClose={() => setToast(null)}
           />
         )}
+
+        <SupportChat isLoggedIn={!!user} />
       </div>
     </ThemeProvider>
   );
