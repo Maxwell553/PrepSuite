@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { AlertCircle, Loader2, Play, Cpu, User, Shield, AlertTriangle, GitBranch, ChevronDown, ChevronUp, Users, Coins } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { AlertCircle, Loader2, Play, Cpu, User, Shield, AlertTriangle, GitBranch, ChevronDown, ChevronUp, Users, FolderPlus } from 'lucide-react';
 import { ScoutingReport } from '../types';
 import { playerRepository } from '../services/playerRepository';
+import { folderRepository } from '../services/folderRepository';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { getUserFriendlyError, logError } from '../lib/errorUtils';
 import { validatePlayerSearch } from '../lib/validation';
@@ -12,7 +13,7 @@ import { logger } from '../lib/logger';
 import { createEmptyReport } from '../lib/reportUtils';
 
 interface SearchScreenProps {
-  onReportGenerated: (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean }) => void;
+  onReportGenerated: (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean; fromBatch?: boolean; batchItemStart?: boolean; folderId?: string }) => void;
   onReportPartialUpdate?: (partial: Partial<ScoutingReport>) => void;
   user: SupabaseUser;
   credits?: number;
@@ -74,7 +75,13 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
     { name: '', chessComUsername: '', lichessUsername: '' },
     { name: '', chessComUsername: '', lichessUsername: '' },
   ]);
+  const BATCH_MAX_GAMES = 2500;
   const [batchGameLimit, setBatchGameLimit] = useState(1000);
+  const [saveToFolder, setSaveToFolder] = useState(false);
+  const [folderName, setFolderName] = useState('');
+  useEffect(() => {
+    if (batchGameLimit > BATCH_MAX_GAMES) setBatchGameLimit(BATCH_MAX_GAMES);
+  }, [batchGameLimit, BATCH_MAX_GAMES]);
 
   const pipelineCallbacks = usePipelineProgressCallbacks({
     gameLimit,
@@ -101,18 +108,28 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
     }
 
     if (batchMode) {
-      const validBatch = batchPlayers.filter((p) => p.name.trim().length > 0);
+      const validBatch = batchPlayers.filter((p) => p.name.trim().length > 0).slice(0, 5);
       if (validBatch.length === 0) {
         setError('Add at least one player with a name.');
         return;
       }
-      const batchCreditsNeeded = validBatch.length * Math.ceil(batchGameLimit / 5);
-      if (!hasEnoughCredits(batchCreditsNeeded)) {
-        setError(`Insufficient credits. This batch needs ~${batchCreditsNeeded.toLocaleString()} credits (1 per 5 games). You have ${credits.toLocaleString()}. Buy more in Settings.`);
-        return;
-      }
+      // MONETIZATION_DISABLED: Credit check bypassed for deployment
+      // const batchCreditsNeeded = validBatch.length * Math.ceil(batchGameLimit / 5);
+      // if (!hasEnoughCredits(batchCreditsNeeded)) { setError(...); return; }
       setLoading(true);
       setError(null);
+      let batchFolderId: string | undefined;
+      if (saveToFolder && user?.id) {
+        try {
+          const folder = await folderRepository.createFolder(user.id, folderName.trim() || `Batch ${new Date().toLocaleDateString()}`);
+          batchFolderId = folder.id;
+        } catch (err) {
+          logError(err, { operation: 'create folder', source: 'SearchScreen' });
+          setError(getUserFriendlyError(err, { operation: 'create folder' }));
+          setLoading(false);
+          return;
+        }
+      }
       for (let i = 0; i < validBatch.length; i++) {
         const p = validBatch[i];
         setScanningStatus(`Analyzing ${p.name} (${i + 1} of ${validBatch.length})...`);
@@ -141,7 +158,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
               onParsing: (d) => onReportPartialUpdate?.({ whiteOpenings: d.whiteOpenings, blackDefenses: d.blackDefenses, mostPlayedLines: d.mostPlayedLines, games: d.games }),
             },
           );
-          if (result.report) onReportGenerated(result.report, { fromBatch: true });
+          if (result.report) onReportGenerated(result.report, { fromBatch: true, folderId: batchFolderId });
         } catch (err) {
           logError(err, { operation: 'batch analysis', source: 'SearchScreen' });
           setError(getUserFriendlyError(err, { operation: `analysis of ${p.name}` }));
@@ -153,12 +170,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
       return;
     }
 
-    // Single player mode - check credits first (1 credit per 5 games)
-    const creditsNeeded = Math.ceil(gameLimit / 5);
-    if (!hasEnoughCredits(creditsNeeded)) {
-      setError(`Insufficient credits. This report needs up to ${creditsNeeded.toLocaleString()} credits (1 per 5 games). You have ${credits.toLocaleString()}. Buy more in Settings.`);
-      return;
-    }
+    // MONETIZATION_DISABLED: Credit check bypassed for deployment
+    // const creditsNeeded = Math.ceil(gameLimit / 5);
+    // if (!hasEnoughCredits(creditsNeeded)) { setError(...); return; }
 
     try {
       const validatedInput = validatePlayerSearch(
@@ -234,7 +248,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
         console.warn("Failed to persist report to DB (Demo Mode?):", dbErr);
       }
 
-      onReportGenerated(reportData, { creditsDeducted: pipelineResult.creditsDeducted });
+      onReportGenerated(reportData, { creditsDeducted: undefined /* MONETIZATION_DISABLED */ });
       setScanningStatus('Report generated successfully!');
       setLoading(false);
       setScanningStatus('');
@@ -265,7 +279,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   return (
     <div className="w-full max-w-6xl mx-auto py-8 px-4 sm:px-6">
       <div className="text-center mb-12">
-        <h2 className="text-4xl font-serif mb-4 text-white dark:text-white text-gray-900">Opponent Analysis</h2>
+        <h2 className="text-4xl font-sans font-bold tracking-tight mb-4 text-white dark:text-white text-gray-900">Opponent Analysis</h2>
         <p className="text-slate-400 dark:text-slate-400 text-gray-600 text-lg italic">Verified search across online platforms and OTB tournament databases.</p>
       </div>
 
@@ -276,17 +290,11 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
               <Cpu className="w-24 h-24" />
             </div>
 
-            <div className="flex items-center justify-between mb-2 px-3 py-2 rounded-lg bg-slate-800/60 dark:bg-slate-800/60 border border-slate-700/50">
-              <span className="text-sm font-medium text-amber-400 dark:text-amber-400 flex items-center gap-1.5">
-                <Coins className="w-4 h-4" />
-                {credits.toLocaleString()} credits
-              </span>
-              {!batchMode && (
-                <span className="text-xs text-slate-300 dark:text-slate-300">
-                  ~{Math.ceil(gameLimit / 5).toLocaleString()} credits (1 per 5 games)
-                </span>
-              )}
+            {/* MONETIZATION_DISABLED: Credits display commented out for deployment
+            <div className="flex items-center justify-between mb-2 ...">
+              {credits.toLocaleString()} credits, ~X credits (1 per 5 games)
             </div>
+            */}
 
             {/* Batch mode toggle */}
             <div className="flex items-center justify-between mb-4 p-3 rounded-xl bg-slate-950/50 border border-slate-800">
@@ -365,7 +373,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 mb-2">
                     <Users className="w-4 h-4 text-amber-400" />
-                    <span className="text-sm font-bold text-amber-400">Up to 10 players</span>
+                    <span className="text-sm font-bold text-amber-400">Up to 5 players</span>
                   </div>
                   {batchPlayers.map((player, i) => (
                     <div key={i} className="flex gap-2 items-center">
@@ -403,7 +411,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                       </button>
                     </div>
                   ))}
-                  {batchPlayers.length < 10 && (
+                  {batchPlayers.length < 5 && (
                     <button
                       type="button"
                       onClick={() => setBatchPlayers((p) => [...p, { name: '', chessComUsername: '', lichessUsername: '' }])}
@@ -413,6 +421,29 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                       + Add player
                     </button>
                   )}
+                  <div className="mt-4 pt-4 border-t border-slate-800 space-y-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={saveToFolder}
+                        onChange={(e) => setSaveToFolder(e.target.checked)}
+                        disabled={loading}
+                        className="rounded border-slate-600 bg-slate-950 text-amber-500 focus:ring-amber-500/50"
+                      />
+                      <FolderPlus className="w-4 h-4 text-amber-400" />
+                      <span className="text-sm font-medium text-slate-300">Save to folder</span>
+                    </label>
+                    {saveToFolder && (
+                      <input
+                        type="text"
+                        placeholder="Folder name (e.g. Olympiad 2025)"
+                        value={folderName}
+                        onChange={(e) => setFolderName(e.target.value)}
+                        disabled={loading}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500"
+                      />
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -514,14 +545,14 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                     <input
                       type="range"
                       min={500}
-                      max={5000}
+                      max={BATCH_MAX_GAMES}
                       step={250}
-                      value={batchGameLimit}
+                      value={Math.min(batchGameLimit, BATCH_MAX_GAMES)}
                       onChange={(e) => setBatchGameLimit(Number(e.target.value))}
                       disabled={loading}
                       className="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{
-                        background: `linear-gradient(to right, rgb(245, 158, 11) 0%, rgb(245, 158, 11) ${((batchGameLimit - 500) / 4500) * 100}%, rgb(30, 41, 59) ${((batchGameLimit - 500) / 4500) * 100}%, rgb(30, 41, 59) 100%)`
+                        background: `linear-gradient(to right, rgb(245, 158, 11) 0%, rgb(245, 158, 11) ${((Math.min(batchGameLimit, BATCH_MAX_GAMES) - 500) / (BATCH_MAX_GAMES - 500)) * 100}%, rgb(30, 41, 59) ${((Math.min(batchGameLimit, BATCH_MAX_GAMES) - 500) / (BATCH_MAX_GAMES - 500)) * 100}%, rgb(30, 41, 59) 100%)`
                       }}
                     />
                   </div>

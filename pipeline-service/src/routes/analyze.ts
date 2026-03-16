@@ -19,7 +19,7 @@ import { StockfishPool } from '../pipeline/enginePool.js';
 import { sampleGamesForAnalysis } from '../pipeline/engineSampler.js';
 import { generateReportParallel } from '../pipeline/geminiReport.js';
 import { postProcessReport } from '../pipeline/reportPostProcessor.js';
-import { hasEnoughCredits, deductCredits } from '../lib/credits.js';
+// MONETIZATION_DISABLED: import { hasEnoughCredits, deductCredits } from '../lib/credits.js';
 
 export const analyzeRoute = new Hono();
 
@@ -92,17 +92,10 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
       const onlineLimit = input.onlineLimit ?? gameLimit;
       const otbLimit = input.otbLimit ?? 0;
 
-      // Credit check: 1 credit = 5 games
-      const creditsNeeded = Math.ceil(gameLimit / 5);
-      const enoughCredits = await hasEnoughCredits(userId, creditsNeeded);
-      if (!enoughCredits) {
-        sse.sendError({
-          error: `Insufficient credits. This report requires up to ${creditsNeeded} credits (1 credit per 5 games). Buy more credits in Settings.`,
-        });
-        sse.close();
-        c.get('releaseAnalyzeSlot')?.();
-        return;
-      }
+      // MONETIZATION_DISABLED: Credit check bypassed for deployment
+      // const creditsNeeded = Math.ceil(gameLimit / 5);
+      // const enoughCredits = await hasEnoughCredits(userId, creditsNeeded);
+      // if (!enoughCredits) { sse.sendError(...); return; }
 
       // ── Phase 1: Identity ──────────────────────────────────
       const identityStart = Date.now();
@@ -425,22 +418,13 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         '[Analyze] Report generated',
       );
 
-      // ── Deduct credits (1 credit per 5 games) ───────────────
-      const creditsToDeduct = Math.ceil(allGames.length / 5);
-      const deducted = await deductCredits(userId, creditsToDeduct);
-      if (!deducted) {
-        logger.error({ userId, creditsToDeduct }, '[Analyze] Credit deduction failed after report');
-        sse.sendError({
-          error: 'Report generated but credit deduction failed. Please contact support.',
-        });
-        sse.close();
-        c.get('releaseAnalyzeSlot')?.();
-        return;
-      }
-      logger.info({ userId, creditsToDeduct, gamesAnalyzed: allGames.length }, '[Analyze] Credits deducted');
+      // MONETIZATION_DISABLED: Credit deduction bypassed for deployment
+      // const creditsToDeduct = Math.ceil(allGames.length / 5);
+      // const deducted = await deductCredits(userId, creditsToDeduct);
+      // if (!deducted) { sse.sendError(...); return; }
 
       // ── Complete ───────────────────────────────────────────
-      sse.sendComplete({ report, creditsDeducted: creditsToDeduct });
+      sse.sendComplete({ report /* creditsDeducted omitted when monetization disabled */ });
 
       logger.info('[Analyze] Pipeline complete, sent complete event');
     } catch (err) {

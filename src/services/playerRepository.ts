@@ -197,9 +197,9 @@ export const playerRepository = {
     },
 
     /**
-     * Saves a new scouting report.
+     * Saves a new scouting report. Optionally associates with a folder.
      */
-    async saveReport(playerId: string, report: ScoutingReport, userId: string) {
+    async saveReport(playerId: string, report: ScoutingReport, userId: string, folderId?: string | null) {
         console.log(`[Repository] Attempting to save report for player ${playerId} and user ${userId}`);
         console.log(`[Repository] Report ID: ${report.id}, Report keys:`, Object.keys(report));
         
@@ -208,13 +208,18 @@ export const playerRepository = {
             throw new Error(`Missing required fields: playerId=${!!playerId}, userId=${!!userId}, reportId=${!!report.id}`);
         }
         
+        const insertPayload: Record<string, unknown> = {
+            player_id: playerId,
+            report_data: report,
+            user_id: userId
+        };
+        if (folderId) {
+            insertPayload.folder_id = folderId;
+        }
+        
         const { data, error } = await supabase
             .from('scouting_reports')
-            .insert({
-                player_id: playerId,
-                report_data: report,
-                user_id: userId
-            })
+            .insert(insertPayload)
             .select()
             .single();
 
@@ -279,6 +284,7 @@ export const playerRepository = {
 
     /**
      * Fetches the complete report history for a specific user.
+     * Reports include folderId and folderName when saved to a folder.
      */
     async getUserHistory(userId: string) {
         console.log(`[Repository] Fetching history for user ${userId}`);
@@ -286,7 +292,8 @@ export const playerRepository = {
             .from('scouting_reports')
             .select(`
                 *,
-                players (*)
+                players (*),
+                report_folders (id, name)
             `)
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
@@ -297,9 +304,14 @@ export const playerRepository = {
         }
 
         console.log(`[Repository] Successfully fetched ${data?.length || 0} history records`);
-        return data.map(row => ({
-            ...(row.report_data as ScoutingReport),
-            id: row.id // Use the DB row ID
-        }));
+        return data.map(row => {
+            const folder = row.report_folders as { id: string; name: string } | null;
+            return {
+                ...(row.report_data as ScoutingReport),
+                id: row.id, // Use the DB row ID
+                folderId: row.folder_id ?? undefined,
+                folderName: folder?.name ?? undefined,
+            };
+        });
     }
 };

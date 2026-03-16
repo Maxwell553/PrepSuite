@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { Search, History, Shield, Database, LayoutDashboard, ChevronRight, ChevronLeft, User, Loader2, Trash2, Square, CheckSquare } from 'lucide-react';
+import React, { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react';
+import { Search, History, Shield, Database, LayoutDashboard, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, User, Loader2, Trash2, Square, CheckSquare, FolderOpen } from 'lucide-react';
 import SearchScreen from './components/SearchScreen';
 const ReportDashboard = lazy(() => import('./components/ReportDashboard'));
 import Sidebar from './components/Sidebar';
@@ -61,6 +61,8 @@ const App: React.FC = () => {
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; reportIds: string[] }>({ isOpen: false, reportIds: [] });
   const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+  const [historyView, setHistoryView] = useState<'folders' | 'individual'>('folders');
   const [showUserSettings, setShowUserSettings] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(true);
   const [viewingFeaturedReport, setViewingFeaturedReport] = useState<ScoutingReport | null>(null);
@@ -79,6 +81,7 @@ const App: React.FC = () => {
   const [scanningStatus, setScanningStatus] = useState<string>('');
   const [creditsDeductedForReport, setCreditsDeductedForReport] = useState<number | null>(null);
 
+  // MONETIZATION_DISABLED: useCredits commented out for deployment
   const { credits, hasEnoughCredits, refetch: refetchCredits } = useCredits(user?.id);
 
   const showToast = (message: string, type: ToastType) => {
@@ -205,7 +208,7 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const handleReportGenerated = (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean; fromBatch?: boolean; batchItemStart?: boolean }) => {
+  const handleReportGenerated = (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean; fromBatch?: boolean; batchItemStart?: boolean; folderId?: string }) => {
     setSelectedReport(report);
     setActiveTab('dashboard');
     if (options?.isInitial) {
@@ -225,7 +228,7 @@ const App: React.FC = () => {
     } else {
       // fromBatch: completed one report; keep isAnalyzing (batch still running); save
       if (!options?.fromCache) {
-        handleSaveReport(report);
+        handleSaveReport(report, options?.folderId);
       }
     }
   };
@@ -236,7 +239,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSaveReport = async (reportToSave?: ScoutingReport) => {
+  const handleSaveReport = async (reportToSave?: ScoutingReport, folderId?: string) => {
     const report = reportToSave ?? selectedReport;
     if (!report || !user) return;
 
@@ -275,8 +278,8 @@ const App: React.FC = () => {
 
       console.log('[Save] Player record created/updated:', player.id);
 
-      // 2. Save the report
-      await playerRepository.saveReport(player.id, report, user.id);
+      // 2. Save the report (optionally to folder)
+      await playerRepository.saveReport(player.id, report, user.id, folderId);
 
       console.log('[Save] Report saved successfully');
 
@@ -352,6 +355,52 @@ const App: React.FC = () => {
     } finally {
       setConfirmModal({ isOpen: false, reportIds: [] });
     }
+  };
+
+  const { standaloneReports, folderGroups, allReportsFlat } = useMemo(() => {
+    const standalone: ScoutingReport[] = [];
+    const folderMap = new Map<string, { folderName: string; reports: ScoutingReport[] }>();
+    for (const h of history) {
+      if (!h.folderId) {
+        standalone.push(h);
+      } else {
+        const existing = folderMap.get(h.folderId);
+        const name = h.folderName ?? 'Untitled Folder';
+        if (existing) {
+          existing.reports.push(h);
+        } else {
+          folderMap.set(h.folderId, { folderName: name, reports: [h] });
+        }
+      }
+    }
+    const folders = Array.from(folderMap.entries()).map(([folderId, { folderName, reports }]) => ({
+      folderId,
+      folderName,
+      reports,
+    }));
+    const allFlat = [...standalone, ...folders.flatMap((f) => f.reports)];
+    return { standaloneReports: standalone, folderGroups: folders, allReportsFlat: allFlat };
+  }, [history]);
+
+  const folderIdsKey = useMemo(() => folderGroups.map((f) => f.folderId).sort().join(','), [folderGroups]);
+  useEffect(() => {
+    if (folderIdsKey) {
+      const ids = folderIdsKey.split(',').filter(Boolean);
+      setExpandedFolderIds((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.add(id);
+        return next;
+      });
+    }
+  }, [folderIdsKey]);
+
+  const toggleFolderExpanded = (folderId: string) => {
+    setExpandedFolderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      return next;
+    });
   };
 
   const selectFromHistory = (report: ScoutingReport) => {
@@ -510,7 +559,7 @@ const App: React.FC = () => {
           />
         )}
 
-        <main className="flex-1 overflow-y-auto relative bg-slate-950 dark:bg-slate-950 bg-gray-50 overscroll-none" style={{ overscrollBehavior: 'none' }}>
+        <main className="flex-1 overflow-y-auto relative bg-slate-950 dark:bg-slate-950 bg-gray-50 overscroll-none before:absolute before:inset-0 before:pointer-events-none before:bg-[radial-gradient(ellipse_80%_50%_at_50%_0%,rgba(99,102,241,0.08)_0%,transparent_50%)]" style={{ overscrollBehavior: 'none' }}>
           {showUserSettings ? (
             <div className="h-full overflow-y-auto">
               <UserSettings
@@ -553,7 +602,7 @@ const App: React.FC = () => {
                     onReportPartialUpdate={handleReportPartialUpdate}
                     user={user}
                     credits={credits}
-                    hasEnoughCredits={hasEnoughCredits}
+                    hasEnoughCredits={() => true}
                     isAnalyzing={isAnalyzing}
                     setIsAnalyzing={setIsAnalyzing}
                     loadingProgress={loadingProgress}
@@ -579,7 +628,7 @@ const App: React.FC = () => {
                         report={selectedReport}
                         isGenerating={isAnalyzing}
                         generatingStatus={scanningStatus}
-                        creditsDeducted={creditsDeductedForReport ?? undefined}
+                        creditsDeducted={undefined}
                         onGoToSearch={() => setActiveTab('search')}
                       />
                     </Suspense>
@@ -607,6 +656,31 @@ const App: React.FC = () => {
                     <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                       <h2 className="text-2xl font-bold text-white dark:text-white text-gray-900">Search History</h2>
                       {history.length > 0 && (
+                        <div className="flex items-center gap-4">
+                        <div className="flex rounded-lg border border-slate-700 dark:border-slate-700 bg-slate-900/50 p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setHistoryView('individual')}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                              historyView === 'individual'
+                                ? 'bg-amber-500/20 text-amber-400'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            Individual
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHistoryView('folders')}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                              historyView === 'folders'
+                                ? 'bg-amber-500/20 text-amber-400'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            Folders
+                          </button>
+                        </div>
                         <div className="flex items-center gap-3">
                           <button onClick={toggleSelectAll} className="text-sm text-slate-400 hover:text-indigo-400 transition-colors">
                             {selectedReportIds.size === history.length ? 'Clear selection' : 'Select all'}
@@ -618,13 +692,14 @@ const App: React.FC = () => {
                             </button>
                           )}
                         </div>
+                        </div>
                       )}
                     </div>
                     {history.length === 0 ? (
                       <p className="text-slate-500 dark:text-slate-500 text-gray-600 italic">No historical searches available.</p>
-                    ) : (
-                      <div className="grid gap-4">
-                        {history.map((h) => (
+                    ) : historyView === 'individual' ? (
+                      <div className="space-y-4">
+                        {allReportsFlat.map((h) => (
                           <div
                             key={h.id}
                             onClick={() => selectFromHistory(h)}
@@ -638,7 +713,9 @@ const App: React.FC = () => {
                               </button>
                               <div className="min-w-0">
                                 <h3 className="text-lg font-semibold group-hover:text-indigo-400 dark:group-hover:text-indigo-400 group-hover:text-indigo-600 transition-colors text-white dark:text-white text-gray-900 truncate">{h.player.name}</h3>
-                                <p className="text-sm text-slate-400 dark:text-slate-400 text-gray-600">{h.player.country} • Rating: {h.player.currentRating || 'Unrated'}</p>
+                                <p className="text-sm text-slate-400 dark:text-slate-400 text-gray-600">
+                                  {h.folderName ? `${h.folderName} • ` : ''}{h.player.country} • Rating: {h.player.currentRating || 'Unrated'}
+                                </p>
                               </div>
                             </div>
                             <div className="flex items-center gap-4 flex-shrink-0">
@@ -652,6 +729,63 @@ const App: React.FC = () => {
                               </button>
                               <ChevronRight className="w-5 h-5 text-slate-600 dark:text-slate-600 text-gray-400" />
                             </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : folderGroups.length === 0 ? (
+                      <p className="text-slate-500 dark:text-slate-500 text-gray-600 italic">No folders yet. Save a batch report to a folder to see them here.</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {folderGroups.map(({ folderId, folderName, reports }) => (
+                          <div key={folderId} className="border border-slate-800 dark:border-slate-800 rounded-xl overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => toggleFolderExpanded(folderId)}
+                              className="w-full flex items-center gap-3 p-4 bg-slate-900/60 dark:bg-slate-900/60 hover:bg-slate-800/60 text-left"
+                            >
+                              {expandedFolderIds.has(folderId) ? (
+                                <ChevronDown className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                              ) : (
+                                <ChevronRight className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                              )}
+                              <FolderOpen className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                              <span className="font-semibold text-white dark:text-white text-gray-900">{folderName}</span>
+                              <span className="text-sm text-slate-500 dark:text-slate-500 text-gray-600">({reports.length} reports)</span>
+                            </button>
+                            {expandedFolderIds.has(folderId) && (
+                              <div className="divide-y divide-slate-800 dark:divide-slate-800">
+                                {reports.map((h) => (
+                                  <div
+                                    key={h.id}
+                                    onClick={() => selectFromHistory(h)}
+                                    className={`group flex justify-between items-center gap-4 p-4 pl-12 cursor-pointer transition-all hover:bg-slate-800/40 dark:hover:bg-slate-800/40 ${
+                                      selectedReportIds.has(h.id!) ? 'bg-indigo-500/10 border-l-4 border-l-indigo-500' : ''
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                      <button onClick={(e) => toggleReportSelection(h.id!, e)} className="flex-shrink-0 p-1 text-slate-500 hover:text-indigo-400 transition-colors" title={selectedReportIds.has(h.id!) ? 'Deselect' : 'Select'}>
+                                        {selectedReportIds.has(h.id!) ? <CheckSquare className="w-5 h-5 text-indigo-400" /> : <Square className="w-5 h-5" />}
+                                      </button>
+                                      <div className="min-w-0">
+                                        <h3 className="text-lg font-semibold group-hover:text-indigo-400 dark:group-hover:text-indigo-400 group-hover:text-indigo-600 transition-colors text-white dark:text-white text-gray-900 truncate">{h.player.name}</h3>
+                                        <p className="text-sm text-slate-400 dark:text-slate-400 text-gray-600">{h.player.country} • Rating: {h.player.currentRating || 'Unrated'}</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-4 flex-shrink-0">
+                                      <span className="text-xs text-slate-500 dark:text-slate-500 text-gray-600">Report: {new Date(h.lastUpdated).toLocaleDateString()}</span>
+                                      <button
+                                        onClick={(e) => handleDeleteClick(h.id!, e)}
+                                        className="p-2 text-slate-500 dark:text-slate-500 text-gray-600 hover:text-red-400 dark:hover:text-red-400 hover:text-red-600 hover:bg-red-500/10 dark:hover:bg-red-500/10 hover:bg-red-50 rounded-lg transition-all"
+                                        title="Delete dossier"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                      <ChevronRight className="w-5 h-5 text-slate-600 dark:text-slate-600 text-gray-400" />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

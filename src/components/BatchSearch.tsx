@@ -13,7 +13,7 @@ import { validatePlayerSearch } from '../lib/validation';
 import { getUserFriendlyError, logError } from '../lib/errorUtils';
 import { createEmptyReport } from '../lib/reportUtils';
 
-const BATCH_MAX = 10;
+const BATCH_MAX = 5;
 const BATCH_GAME_LIMIT = 1000; // Per player in batch
 
 interface BatchPlayer {
@@ -130,7 +130,7 @@ export const BatchSearch: React.FC<BatchSearchProps> = ({
         );
 
         if (result.report) {
-          onReportGenerated(result.report, { fromBatch: true, creditsDeducted: result.creditsDeducted });
+          onReportGenerated(result.report, { fromBatch: true, creditsDeducted: undefined /* MONETIZATION_DISABLED */ });
           // Parent's handleReportGenerated saves via handleSaveReport when fromBatch
         }
       } catch (err) {
@@ -151,7 +151,7 @@ export const BatchSearch: React.FC<BatchSearchProps> = ({
       <div className="flex items-center gap-2 mb-4">
         <Users className="w-5 h-5 text-amber-400" />
         <h3 className="text-lg font-semibold text-white">Batch Reports (Premium)</h3>
-        <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded">Up to 10</span>
+        <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded">Up to 5</span>
       </div>
       <p className="text-sm text-slate-400 mb-4">
         Analyze multiple opponents at once. Each report is saved to your history.

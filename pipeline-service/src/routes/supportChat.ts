@@ -36,7 +36,9 @@ PrepSuite features:
 - Integrates with Chess.com, Lichess, FIDE, and USCF data sources
 - Users can save reports to their history and chat with an AI about specific reports
 
-Billing: PrepSuite uses a credit system. You are charged 1 credit per 5 games analyzed. You only pay for games that are actually found and analyzed. If no games are found for a player (e.g., wrong username or no matching data), no credits are deducted.
+/* MONETIZATION_DISABLED: Billing info commented out for deployment
+Billing: PrepSuite uses a credit system. You are charged 1 credit per 5 games analyzed...
+*/
 
 IMPORTANT - When users ask why they can't find online games and haven't entered a Chess.com or Lichess username:
 PrepSuite needs the player's platform username to fetch online games. If the user searched by name only and no online games appear, the most common reason is that the player has not put their real name in their profile bio on Chess.com or Lichess—PrepSuite matches the player's name to the bio to find their account. Ask if they can manually provide the player's Chess.com or Lichess username; they can add it to the search form to fetch online games.

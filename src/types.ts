@@ -61,6 +61,9 @@ export interface GameData {
 
 export interface ScoutingReport {
   id: string;
+  /** When saved from batch into a folder */
+  folderId?: string;
+  folderName?: string;
   player: PlayerMetadata;
   whiteOpenings: OpeningStat[];
   blackDefenses: OpeningStat[];
