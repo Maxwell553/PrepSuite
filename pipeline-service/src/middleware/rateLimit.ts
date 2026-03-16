@@ -13,9 +13,9 @@ interface UserLimit {
   windowCount: number;
 }
 
-const ANALYZE_CONCURRENT_MAX = 2;
+const ANALYZE_CONCURRENT_MAX = 10;
 const ANALYZE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
-const ANALYZE_WINDOW_MAX = 5;
+const ANALYZE_WINDOW_MAX = 20;
 
 const CHAT_WINDOW_MS = 60 * 1000; // 1 minute
 const CHAT_WINDOW_MAX = 10;
@@ -56,21 +56,17 @@ declare module 'hono' {
   }
 }
 
-const ANALYZE_CONCURRENT_PREMIUM = 10;
-const ANALYZE_WINDOW_MAX_PREMIUM = 20;
-
 export const analyzeRateLimitMiddleware = createMiddleware(async (c, next) => {
   const user = c.get('user');
   const userId = user.sub;
-  const isPremium = c.req.header('X-Premium') === 'true';
 
-  const concurrentMax = isPremium ? ANALYZE_CONCURRENT_PREMIUM : ANALYZE_CONCURRENT_MAX;
-  const windowMax = isPremium ? ANALYZE_WINDOW_MAX_PREMIUM : ANALYZE_WINDOW_MAX;
+  const concurrentMax = ANALYZE_CONCURRENT_MAX;
+  const windowMax = ANALYZE_WINDOW_MAX;
 
   const limit = getOrCreateLimit(analyzeLimits, userId, ANALYZE_WINDOW_MS);
 
   if (limit.concurrent >= concurrentMax) {
-    logger.warn({ userId, isPremium }, '[RateLimit] Analyze: concurrent limit exceeded');
+    logger.warn({ userId }, '[RateLimit] Analyze: concurrent limit exceeded');
     return c.json(
       { error: 'Too many analyses in progress. Please wait for the current one to finish.' },
       429
@@ -78,7 +74,7 @@ export const analyzeRateLimitMiddleware = createMiddleware(async (c, next) => {
   }
 
   if (limit.windowCount >= windowMax) {
-    logger.warn({ userId, isPremium }, '[RateLimit] Analyze: window limit exceeded');
+    logger.warn({ userId }, '[RateLimit] Analyze: window limit exceeded');
     return c.json(
       { error: `Rate limit exceeded. Maximum ${windowMax} analyses per 10 minutes.` },
       429

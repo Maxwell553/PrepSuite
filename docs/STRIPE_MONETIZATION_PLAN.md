@@ -2,154 +2,148 @@
 
 ## Overview
 
-**Pricing:** $9.99/month subscription  
+**Model:** Credit-based pay-per-use (replaces subscription)  
 **Stripe account:** Soundside Design LLC  
-**Free tier:** Current limits (up to 2,000 games, single report at a time, fixed Stockfish depth)  
-**Premium tier:** Enhanced limits and features
+**Initial credits:** ~3,000 per user on signup  
+**Usage:** 1 credit per game analyzed in a report  
+**Purchase:** One-time credit packs (no recurring subscription)
 
 ---
 
-## Premium Features
+## Credit System
 
-| Feature | Free | Premium |
-|---------|------|---------|
-| Max games per report | 2,000 | **5,000** |
-| Concurrent reports | 1 | **10 (batch)** |
-| Generation priority | Standard | **Priority queue** |
-| Export to PDF | — | **Yes** |
-| Practice vs AI opponent | — | **Mimics opponent playing style** |
-| Preparatory content matching | — | **Links to videos/sites for weaknesses** |
-| Stockfish depth | Fixed (default) | **Customizable 7–20** |
+| Concept | Value |
+|---------|-------|
+| Initial credits | 3,000 |
+| Credits per 5 games | 1 |
+| Max games per report | 5,000 (all users) |
+| Batch reports | Available to all (consumes credits per game) |
 
-### Feature Details
+### Feature Access
 
-- **Max games per report:** Free users capped at 2,000; premium up to 5,000.
-- **Concurrent reports:** Premium can run up to 10 reports in a batch.
-- **Priority generation:** Premium requests jump the queue for faster turnaround.
-- **Export to PDF:** Download full scouting reports for offline prep.
-- **Practice vs AI opponent:** AI plays in the style of the analyzed opponent for realistic prep.
-- **Preparatory content matching:** When the AI identifies an opening weakness (e.g. "Weak against the Caro-Kann Advance Variation"), premium users get curated links to YouTube videos and websites for that specific line.
-- **Customizable Stockfish depth:** Free = fixed depth; premium = choose depth 7–20 for deeper analysis.
+All users have **full access** to all features. The only gate is credits:
+
+- **Analysis:** 1 credit per 5 games in a report
+- **Batch creation:** Everyone can run batch; 1 credit per 5 games (less efficient without credits = fewer reports before running out)
+- **Practice vs AI opponent:** Free (uses existing report data)
+- **PDF export:** Free
+- **Custom Stockfish depth (7–20):** Available to all
+- **Prep resources / curated links:** Available to all
+
+---
+
+## Credit Packs (Stripe Products)
+
+Create one-time payment products in Stripe:
+
+| Pack | Credits | Suggested Price |
+|------|---------|-----------------|
+| Starter | 1,000 | $4.99 |
+| Standard | 5,000 | $19.99 |
+| Pro | 15,000 | $49.99 |
+
+Use Stripe **Price IDs** for one-time payments (not recurring). Store mapping: `price_id` → `credits` in env or metadata.
 
 ---
 
 ## Implementation Plan
 
-### Phase 1: Stripe + Subscription (≈3–4 days)
+### Phase 1: Database + Credits Logic
 
-1. **Stripe setup**
-   - Create Stripe account, products, and price ($9.99/month)
-   - Use Stripe Checkout or Customer Portal for subscription flow
-   - Webhook: `customer.subscription.created`, `updated`, `deleted`, `invoice.paid`
+1. **Migration:** Add `credits` column to `profiles` (INTEGER DEFAULT 3000)
+2. **handle_new_user:** Set `credits = 3000` for new users
+3. **Pipeline:** Before analysis: check `credits >= ceil(gameLimit/5)`. After completion: deduct `ceil(actualGames/5)` (atomic UPDATE)
 
-2. **Database**
-   - Add `subscriptions` table or `user_metadata` column:
-     - `stripe_customer_id`, `stripe_subscription_id`, `subscription_status`, `current_period_end`
-   - Migration to add columns to `auth.users` metadata or a new `profiles` table
+### Phase 2: Stripe Credit Purchases
 
-3. **Backend**
-   - Supabase Edge Function or pipeline-service endpoint: create Checkout Session, handle webhooks
-   - Middleware: check `subscription_status === 'active'` before premium features
+1. **stripe-credits-checkout** edge function:
+   - Accept `price_id` (or `pack` enum) in body
+   - Create Stripe Checkout Session in `payment` mode (one-time)
+   - `metadata.credits` = amount to add
+   - `metadata.supabase_user_id` = user id
 
-4. **Frontend**
-   - “Upgrade” / “Manage subscription” in UserSettings
-   - Redirect to Stripe Checkout; return URL to app after success
+2. **stripe-webhook:** Handle `checkout.session.completed` for `mode === 'payment'`:
+   - Read `metadata.credits` and `metadata.supabase_user_id`
+   - `UPDATE profiles SET credits = credits + $1 WHERE id = $2`
 
-### Phase 2: Feature Gating (≈2–3 days)
+3. **Stripe products:** Create 3 products with one-time prices; add Price IDs to Supabase secrets
 
-1. **Game limit**
-   - Update `validation.ts`: free max 2000, premium max 5000
-   - Pass `isPremium` (from JWT custom claim or DB lookup) to pipeline
-   - SearchScreen: show 500–5000 slider for premium, 500–2000 for free
+### Phase 3: Frontend Updates
 
-2. **Batch reports**
-   - New UI: “Batch mode” — enter up to 10 player names
-   - Pipeline: accept array of players, process in parallel (with concurrency limit)
-   - Queue/worker: process N at a time (e.g. 3–5), return as each completes
-   - Requires SSE or polling for multiple streams
+1. **useCredits** hook: Fetch `credits` from profile; expose `credits`, `hasEnoughCredits(gameLimit)`, `loading`
+2. **UserSettings:** Replace "Upgrade to Premium" with "Buy Credits" + credit balance display
+3. **SearchScreen:** Remove isPremium gate; show credit cost (e.g. "This report will use ~X credits"); block if insufficient
+4. **BatchSearch:** Remove Premium gate; available to all; show credit cost per batch
+5. **Landing page:** Update pricing section to credit packs
+6. **ReportDashboard / PracticeOpponent:** Remove isPremium checks (all features available)
 
-3. **Fast generation priority**
-   - Option A: Separate Cloud Run service with higher CPU/memory for premium
-   - Option B: In-memory priority queue — premium requests jump the queue
-   - Option C: Dedicated “fast” pipeline instance; route premium traffic there
-   - Simplest: Option B with a small queue in the pipeline service
+### Phase 4: Pipeline Updates
 
-### Phase 3: Polish + Edge Cases (≈1–2 days)
-
-- Handle failed payments, grace period, dunning
-- Cancel flow: downgrade to free, retain data until period end
-- Trial period (e.g. 7 days) if desired
-
----
-
-## Time Estimate
-
-| Phase | Duration |
-|-------|----------|
-| Phase 1: Stripe + subscription | 3–4 days |
-| Phase 2: Feature gating | 2–3 days |
-| Phase 3: Polish | 1–2 days |
-| **Total** | **~7–9 days** |
+1. **Remove isPremium:** No more X-Premium header or subscription checks
+2. **Credits middleware:** At analyze start: verify `credits >= gameLimit` (call Supabase or new credits API)
+3. **Credits deduct:** After report complete: deduct `allGames.length` via atomic UPDATE
+4. **Rate limits:** Consider unified limits (or keep slightly higher for users with credits? Optional)
 
 ---
 
 ## Technical Notes
 
-### Stripe Integration Options
+### Credits Deduction (Pipeline)
 
-- **Stripe Checkout** — Hosted page, minimal code, handles PCI
-- **Stripe Customer Portal** — Manage/cancel subscription
-- **Stripe Billing** — Subscriptions, invoices, usage-based if needed later
+The pipeline has `SUPABASE_SERVICE_ROLE_KEY` and can update `profiles`. Use:
 
-### Where to Put Webhook Logic
+```sql
+UPDATE profiles
+SET credits = credits - $actualGames, updated_at = now()
+WHERE id = $userId AND credits >= $actualGames
+RETURNING credits;
+```
 
-- **Supabase Edge Function** — `stripe-webhook` function, verify signature, update DB
-- Or **pipeline-service** — Add `/api/webhooks/stripe` if you prefer one backend
+If no row returned, user didn't have enough (race condition) — fail the request. Deduct only at the **end** after successful report generation.
 
-### JWT Custom Claims
+### Pre-check (Pipeline Start)
 
-- After webhook confirms subscription, set `app_metadata.subscription_status = 'active'`
-- Frontend/pipeline reads JWT; no extra DB call per request for `isPremium`
+Before starting the pipeline, verify `credits >= gameLimit`. Fail fast with a clear error: "Insufficient credits. You need X credits for this report. Buy more credits in Settings."
 
-### Batch Reports Architecture
+### Stripe Checkout (One-Time)
 
-- **Option A:** Single SSE with multiple `phase` events — one stream, multiple reports
-- **Option B:** Multiple parallel `/api/analyze` calls — frontend manages N streams
-- **Option C:** New `/api/analyze-batch` — returns job IDs, poll for status
-- Recommended: Option B for MVP (simplest); Option C if you need server-side queue
+```javascript
+// mode: 'payment' (not 'subscription')
+line_items: [{ price: priceId, quantity: 1 }]
+metadata: { supabase_user_id, credits }
+```
+
+### Webhook Events
+
+- **Subscription flow (legacy):** Keep `customer.subscription.*` and `invoice.paid` handlers for existing subscribers during migration (or remove if migrating all users)
+- **Credit purchases:** `checkout.session.completed` when `mode === 'payment'`
 
 ---
 
-## Is It Implementable?
+## Migration from Subscription
 
-**Yes.** The stack (React, Supabase, Node/Hono pipeline) supports this well:
+If you have existing Premium subscribers:
 
-- Supabase Auth + RLS for user-scoped data
-- Stripe has solid Node/Supabase examples
-- Pipeline already has `gameLimit`; extending to 5000 is a validation change
-- Batch = parallel pipeline invocations with a concurrency cap
-- Priority = in-memory queue or separate deployment
-
-Main dependencies: Stripe account, webhook endpoint (public URL for local dev: Stripe CLI), and a `profiles` or metadata table for subscription state.
+1. **Option A:** Grandfather them — add a large credit balance (e.g. 50,000) and discontinue subscription
+2. **Option B:** Run both models temporarily — subscription users get "unlimited" (skip credit check/deduct)
+3. **Option C:** Migrate all — cancel subscriptions, grant one-time credit bonus, switch to credits-only
 
 ---
 
 ## Implementation Status
 
-### Implemented
-- **Profiles table** — `supabase/migrations/20260308_profiles_subscription.sql`
-- **Stripe checkout** — `supabase/functions/stripe-checkout` (create subscription session)
-- **Stripe webhook** — `supabase/functions/stripe-webhook` (update profile on subscription events)
-- **Game limit** — Free: 2,000; Premium: 5,000 (validation + SearchScreen slider)
-- **Engine depth** — Premium: customizable 7–20; Free: fixed depth
-- **Landing page** — Premium features & pricing section (Soundside Design)
-- **UserSettings** — Upgrade to Premium button
-- **PDF export** — Print / Save as PDF (Premium only)
+### Implemented (Subscription — to be replaced)
+- Profiles table, stripe-checkout, stripe-webhook, stripe-portal
+- Game limits, batch, practice opponent, PDF export
 
-### Implemented (Phase 2)
-- **Batch reports** — Premium: up to 10 players, 3 concurrent pipelines
-- **Priority queue** — Premium: 10 concurrent, 20 per window (vs 2/5 for free)
-- **AI practice opponent** — `/api/practice-move` + PracticeOpponent component
-- **Preparatory content matching** — Prep Resources section with curated links
+### To Implement (Credit-based)
+- [ ] Migration: `credits` column, default 3000
+- [ ] Pipeline: credits check at start, deduct at end
+- [ ] stripe-credits-checkout edge function
+- [ ] Webhook: checkout.session.completed for payments
+- [ ] useCredits hook, UserSettings credits UI
+- [ ] SearchScreen/BatchSearch credit cost display
+- [ ] Landing page credit packs pricing
+- [ ] Remove isPremium gates across app
 
-See [STRIPE_SETUP.md](./STRIPE_SETUP.md) for Stripe configuration steps.
+See [STRIPE_SETUP.md](./STRIPE_SETUP.md) for Stripe configuration.

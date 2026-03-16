@@ -17,7 +17,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogoClick,
   ] as const;
 
   return (
-    <aside className="w-64 bg-slate-900 dark:bg-slate-900 bg-white border-r border-slate-800 dark:border-slate-800 border-gray-200 flex flex-col hidden md:flex">
+    <aside className="w-64 flex flex-col hidden md:flex border-r border-slate-800/80 dark:border-slate-800/80 border-gray-200" style={{ backgroundColor: '#0f0f1a' }}>
       <div className="p-6">
         <div className="mb-10 flex justify-start -ml-1 py-1">
           {onLogoClick ? (

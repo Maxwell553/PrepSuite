@@ -1,6 +1,6 @@
 # Stripe Setup for PrepSuite (Soundside Design LLC)
 
-This guide walks you through connecting Stripe to PrepSuite so the "Upgrade to Premium" button works.
+This guide walks you through connecting Stripe to PrepSuite for credit-based purchases.
 
 ## Prerequisites
 
@@ -9,15 +9,17 @@ This guide walks you through connecting Stripe to PrepSuite so the "Upgrade to P
 
 ---
 
-## Step 1: Create Product & Price in Stripe
+## Step 1: Create Credit Pack Products in Stripe
+
+Create **one-time** payment products (not recurring):
 
 1. Go to [Stripe Dashboard](https://dashboard.stripe.com) → **Products** → **Add product**
-2. **Name:** PrepSuite Premium
-3. **Pricing:**
-   - **Recurring** → Monthly
-   - **Price:** $9.99 USD
-4. Click **Save product**
-5. Copy the **Price ID** (starts with `price_`) — you'll need it for `STRIPE_PRICE_ID`
+2. Create three products:
+   - **Starter:** 1,000 credits — one-time price (e.g. $4.99)
+   - **Standard:** 5,000 credits — one-time price (e.g. $19.99)
+   - **Pro:** 15,000 credits — one-time price (e.g. $49.99)
+3. For each product: **Pricing** → **One time** → set price
+4. Copy each **Price ID** (starts with `price_`)
 
 ---
 
@@ -26,17 +28,19 @@ This guide walks you through connecting Stripe to PrepSuite so the "Upgrade to P
 Set these secrets for your Supabase project:
 
 ```bash
-# Required for stripe-checkout
+# Required for all Stripe functions
 supabase secrets set STRIPE_SECRET_KEY=sk_live_...   # or sk_test_... for testing
-supabase secrets set STRIPE_PRICE_ID=price_...
-
-# Required for stripe-webhook
 supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Credit pack price IDs (one-time payments)
+supabase secrets set STRIPE_CREDITS_PRICE_STARTER=price_...
+supabase secrets set STRIPE_CREDITS_PRICE_STANDARD=price_...
+supabase secrets set STRIPE_CREDITS_PRICE_PRO=price_...
 ```
 
 **Where to find these:**
 - **STRIPE_SECRET_KEY:** Stripe Dashboard → Developers → API keys → Secret key
-- **STRIPE_PRICE_ID:** From Step 1 (the Price ID of your $9.99/month product)
+- **STRIPE_CREDITS_PRICE_***:** From Step 1 (Price IDs of your credit pack products)
 - **STRIPE_WEBHOOK_SECRET:** From Step 3 below
 
 ---
@@ -47,9 +51,10 @@ supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
 2. **Endpoint URL:**  
    `https://<YOUR_PROJECT_REF>.supabase.co/functions/v1/stripe-webhook`
    
-   Replace `<YOUR_PROJECT_REF>` with your Supabase project reference (e.g. `abcdefghij` from `https://abcdefghij.supabase.co`).
+   Replace `<YOUR_PROJECT_REF>` with your Supabase project reference.
 3. **Events to send:** Select:
-   - `customer.subscription.created`
+   - `checkout.session.completed` (for credit pack purchases)
+   - `customer.subscription.created` (legacy, if migrating)
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
    - `invoice.paid`
@@ -61,21 +66,24 @@ supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
 ## Step 4: Deploy Edge Functions
 
 ```bash
-supabase functions deploy stripe-checkout
+supabase functions deploy stripe-credits-checkout
 supabase functions deploy stripe-webhook
+supabase functions deploy stripe-portal
 ```
+
+The `stripe-credits-checkout` function creates one-time payment sessions for credit packs. The `stripe-portal` function lets users manage payment methods.
 
 ---
 
 ## Step 5: Run Database Migration
 
-Ensure the `profiles` table exists:
+Ensure the `profiles` table exists and has the `credits` column:
 
 ```bash
 supabase db push
 ```
 
-Or apply the migration manually: `supabase/migrations/20260308_profiles_subscription.sql`
+Migrations: `20260308_profiles_subscription.sql`, `20260316_profiles_credits.sql`
 
 ---
 
@@ -96,10 +104,10 @@ Or apply the migration manually: `supabase/migrations/20260308_profiles_subscrip
 
 1. Sign in to PrepSuite
 2. Go to **User Settings** (profile icon)
-3. Click **Upgrade to Premium — $9.99/mo**
-4. You should be redirected to Stripe Checkout
+3. You should see your credit balance (3,000 to start)
+4. Click a credit pack (e.g. "5,000 credits") to buy
 5. Complete the payment (use test card `4242 4242 4242 4242` in test mode)
-6. After success, you're redirected back; your profile should show Premium
+6. After success, you're redirected back; your credit balance should increase
 
 ---
 
@@ -107,13 +115,16 @@ Or apply the migration manually: `supabase/migrations/20260308_profiles_subscrip
 
 | Issue | Fix |
 |-------|-----|
-| "Stripe not configured" | Ensure `STRIPE_SECRET_KEY` and `STRIPE_PRICE_ID` are set in Supabase secrets |
+| "Stripe not configured" | Ensure `STRIPE_SECRET_KEY` and credit pack price IDs are set in Supabase secrets |
+| "Invalid pack" | Ensure `STRIPE_CREDITS_PRICE_STARTER`, `_STANDARD`, `_PRO` are set |
 | "Invalid signature" on webhook | Verify `STRIPE_WEBHOOK_SECRET` matches the webhook's signing secret |
-| Checkout redirects to wrong URL | Pass `success_url` and `cancel_url` in the request body to `stripe-checkout` |
+| Credits not added after purchase | Check webhook logs; ensure `checkout.session.completed` is configured |
 | Profile not updating after payment | Check webhook logs in Stripe Dashboard; ensure endpoint URL is correct |
 
 ---
 
-## Customer Portal (Optional)
+## Customer Portal
 
-To let users manage/cancel their subscription, you can add a "Manage subscription" link that opens Stripe Customer Portal. Create a `stripe-portal` edge function that creates a portal session and redirects the user.
+The `stripe-portal` edge function lets users manage payment methods (add/remove cards). It creates a Stripe Customer if the user doesn't have one yet.
+
+**Enable in Stripe:** Dashboard → Settings → Billing → Customer portal.

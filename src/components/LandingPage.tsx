@@ -38,6 +38,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
     const featuresRef = useScrollAnimation();
     const howItWorksRef = useScrollAnimation();
     const benefitsRef = useScrollAnimation();
+    const pricingRef = useScrollAnimation();
     const loginRef = useScrollAnimation();
 
     const previewImages = [
@@ -440,6 +441,73 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                 </div>
                             );
                         })}
+                    </div>
+                </div>
+            </section>
+
+            {/* Pricing Section */}
+            <section
+                id="pricing"
+                ref={pricingRef.ref}
+                className={`py-20 px-6 bg-slate-900/30 dark:bg-slate-900/30 bg-slate-50 relative overflow-hidden ${
+                    pricingRef.isVisible ? 'animate-fade-in-up' : ''
+                }`}
+                style={pricingRef.isVisible ? {} : { opacity: 0 }}
+            >
+                <div className="max-w-4xl mx-auto">
+                    <div className="text-center mb-12">
+                        <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-400 dark:from-white dark:to-slate-400 from-gray-900 to-gray-600">
+                            Simple, Transparent Pricing
+                        </h2>
+                        <p className="text-slate-400 dark:text-slate-400 text-gray-600 text-lg">
+                            Start with 3,000 free credits. Pay only for what you use.
+                        </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+                        {/* Free credits */}
+                        <div className="bg-slate-900/50 dark:bg-slate-900/50 bg-white border border-slate-700/80 dark:border-slate-700/80 border-gray-200 rounded-2xl p-8">
+                            <h3 className="text-xl font-bold text-white dark:text-white text-gray-900 mb-2">Get Started</h3>
+                            <p className="text-3xl font-bold text-emerald-400 dark:text-emerald-400 text-emerald-600 mb-6">3,000<span className="text-base font-normal text-slate-500"> free credits</span></p>
+                            <ul className="space-y-3 text-slate-400 dark:text-slate-400 text-gray-600 text-sm mb-8">
+                                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" /> 1 credit per 5 games analyzed</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" /> All features included</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" /> Up to 5,000 games per report</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" /> Batch reports (10 players at once)</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" /> Playable AI opponent</li>
+                            </ul>
+                            <button
+                                onClick={onGetStarted}
+                                className="w-full py-3 rounded-xl font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+                            >
+                                Get Started Free
+                            </button>
+                        </div>
+
+                        {/* Credit packs */}
+                        <div className="bg-slate-900/50 dark:bg-slate-900/50 bg-white border-2 border-amber-500/50 dark:border-amber-500/50 rounded-2xl p-8 relative">
+                            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-amber-500/20 text-amber-400 text-xs font-bold uppercase rounded-full">
+                                Buy Credits
+                            </div>
+                            <div className="flex items-center gap-2 mb-2">
+                                <Crown className="w-5 h-5 text-amber-400" />
+                                <h3 className="text-xl font-bold text-white dark:text-white text-gray-900">Credit Packs</h3>
+                            </div>
+                            <p className="text-slate-400 dark:text-slate-400 text-gray-600 text-sm mb-6">Buy more when you run low. No subscription.</p>
+                            <ul className="space-y-3 text-slate-400 dark:text-slate-400 text-gray-600 text-sm mb-8">
+                                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-amber-400 shrink-0" /> 1,000 credits</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-amber-400 shrink-0" /> 5,000 credits</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-amber-400 shrink-0" /> 15,000 credits</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-amber-400 shrink-0" /> Same features — just more games</li>
+                            </ul>
+                            <button
+                                onClick={onGetStarted}
+                                className="w-full py-3 rounded-xl font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Crown className="w-4 h-4" />
+                                Get Started
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>

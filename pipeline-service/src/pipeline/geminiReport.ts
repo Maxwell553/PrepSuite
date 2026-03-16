@@ -8,7 +8,6 @@ import { logger } from '../lib/logger.js';
 import { getAccessToken, getVertexUrl, invalidateAccessTokenCache } from '../lib/vertexAuth.js';
 import { parseLLMJson } from '../lib/jsonRepair.js';
 import type { ScoutingReport } from '../lib/types.js';
-import { buildReportPromptsParallel, reportPartialSchemas } from './promptBuilder.js';
 import type { BuildReportPromptOpts } from './promptBuilder.js';
 
 /** Analysis model chain: Pro → Flash-Lite → 2.5 Pro → 2.5 Flash */
@@ -61,67 +60,44 @@ export async function generateReport(
 }
 
 /**
- * Generate report in parallel: 3 Gemini calls (strategicSummary, strengths, weaknesses) run concurrently.
- * ONLY these are generated per Strategic Profile Analysis UI: summary paragraph, core strengths[3], strategic weaknesses[3].
- * All other report fields (tacticalProfile, endgameReliability, timeControlInsights, repertoireReliability,
- * tacticalRecommendation, specificVulnerability, suggestedLines, etc.) are empty defaults.
- * Model chain: 3.1-pro → flash-lite → 2.5-pro → 2.5-flash.
+ * Generate report without LLM: uses rule-based study priorities and engine-derived stats.
+ * Replaces strategicSummary, strengths, weaknesses with instant data-driven content.
  */
 export async function generateReportParallel(opts: BuildReportPromptOpts): Promise<ScoutingReport> {
-  const prompts = buildReportPromptsParallel(opts);
+  const { aggregateEngineStats } = await import('./engineStatsAggregator.js');
 
-  let strategicSummary: Record<string, unknown> | undefined;
-  let strengths: Record<string, unknown> | undefined;
-  let weaknesses: Record<string, unknown> | undefined;
-
-  for (let i = 0; i < GEMINI_ANALYSIS_MODELS.length; i++) {
-    const model = GEMINI_ANALYSIS_MODELS[i];
-    try {
-      [strategicSummary, strengths, weaknesses] = await Promise.all([
-        generatePartialWithModel(prompts.strategicSummary, reportPartialSchemas.strategicSummary, model),
-        generatePartialWithModel(prompts.strengths, reportPartialSchemas.strengths, model),
-        generatePartialWithModel(prompts.weaknesses, reportPartialSchemas.weaknesses, model),
-      ]);
-      break;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const status = (err as { status?: number }).status;
-      const errorText = (err as { errorText?: string })?.errorText ?? msg;
-      const shouldTryNext = status ? shouldFallbackTo25(status, errorText) : /404|501|model.*not found/i.test(msg);
-      if (shouldTryNext && i < GEMINI_ANALYSIS_MODELS.length - 1) {
-        logger.warn({ model, nextModel: GEMINI_ANALYSIS_MODELS[i + 1], err: msg }, '[GeminiReport] Model failed, trying next in chain');
-        continue;
-      }
-      throw err;
-    }
-  }
-
-  if (!strategicSummary || !strengths || !weaknesses) {
-    throw new Error('Gemini report generation failed');
-  }
+  const engineStats =
+    opts.engineAnalysis.length > 0
+      ? aggregateEngineStats(
+          opts.engineAnalysis,
+          opts.allGames,
+          opts.targetUsername,
+        )
+      : null;
 
   const merged: ScoutingReport = {
     id: `report-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     player: { name: opts.identity.verifiedName, platforms: {} },
     whiteOpenings: [],
     blackDefenses: [],
-    strategicSummary: String(strategicSummary.strategicSummary ?? ''),
+    strategicSummary: '',
     blackStrategicSummary: '',
     tacticalProfile: '',
     endgameReliability: '',
     timeControlInsights: '',
-    strengths: Array.isArray(strengths.strengths) ? strengths.strengths : [],
-    weaknesses: Array.isArray(weaknesses.weaknesses) ? weaknesses.weaknesses : [],
+    strengths: [],
+    weaknesses: [],
     specificVulnerability: '',
     tacticalRecommendation: '',
     preparationSummary: '',
     suggestedLines: [],
     repertoireReliability: 0,
     mostPlayedLines: { white: [], black: [] },
+    engineStats: engineStats ?? undefined,
     lastUpdated: new Date().toISOString(),
   };
 
-  logger.info('[GeminiReport] Parallel generation complete, merged 3 partial responses');
+  logger.info('[GeminiReport] Report generated (rule-based + engine stats, no LLM)');
   return merged;
 }
 

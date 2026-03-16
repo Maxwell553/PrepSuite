@@ -111,6 +111,31 @@ serve(async (req) => {
         }
         break;
       }
+      case "checkout.session.completed": {
+        const session = event.data.object;
+        if (session.mode !== "payment") break;
+        const userId = session.metadata?.supabase_user_id ?? session.client_reference_id;
+        const creditsStr = session.metadata?.credits;
+        if (!userId || !creditsStr) {
+          console.warn("[stripe-webhook] checkout.session.completed missing metadata", session.id);
+          break;
+        }
+        const credits = parseInt(creditsStr, 10);
+        if (isNaN(credits) || credits <= 0) {
+          console.warn("[stripe-webhook] Invalid credits in metadata", creditsStr);
+          break;
+        }
+        const { error } = await supabase.rpc("add_credits", {
+          p_user_id: userId,
+          p_amount: credits,
+        });
+        if (error) {
+          console.error("[stripe-webhook] add_credits failed", error);
+          break;
+        }
+        console.log("[stripe-webhook] Added credits", userId, credits);
+        break;
+      }
       case "invoice.paid": {
         const invoice = event.data.object;
         const subId = invoice.subscription;

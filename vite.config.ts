@@ -23,6 +23,7 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://localhost:8080',
           changeOrigin: true,
+          proxyTimeout: 300000, // 5 min — avoid socket hang up on long pipeline requests (FIDE, analyze)
         },
         '/lichess-export': {
           target: 'https://lichess.org',

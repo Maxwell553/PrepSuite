@@ -1,20 +1,54 @@
 import React, { useState } from 'react';
-import { ArrowLeft, User, Mail, Trash2, AlertTriangle, LogOut } from 'lucide-react';
+import { ArrowLeft, User, Mail, Trash2, AlertTriangle, LogOut, Coins, ExternalLink, Loader2 } from 'lucide-react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { getEnvConfig } from '../lib/env';
 import ConfirmationModal from './ConfirmationModal';
+import { createCreditsCheckoutSession, createPortalSession } from '../services/subscriptionService';
 
 interface UserSettingsProps {
   user: SupabaseUser;
   onBack: () => void;
   onLogout?: () => void;
   onAccountDeleted?: () => void;
+  credits?: number;
+  onCreditsPurchased?: () => void;
 }
 
-const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onLogout, onAccountDeleted }) => {
+const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onLogout, onAccountDeleted, credits = 0, onCreditsPurchased }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const handleBuyCredits = async (pack: 'starter' | 'standard' | 'pro') => {
+    setCheckoutLoading(true);
+    try {
+      const { url } = await createCreditsCheckoutSession(
+        pack,
+        `${window.location.origin}/?credits=success`,
+        `${window.location.origin}/#pricing`
+      );
+      window.location.href = url;
+    } catch (err) {
+      console.error('[UserSettings] Checkout error:', err);
+      alert(err instanceof Error ? err.message : 'Failed to start checkout');
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
+  const handleManagePaymentMethods = async () => {
+    setCheckoutLoading(true);
+    try {
+      const { url } = await createPortalSession(window.location.href);
+      window.location.href = url;
+    } catch (err) {
+      console.error('[UserSettings] Portal error:', err);
+      alert(err instanceof Error ? err.message : 'Failed to open payment management');
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
 
   const handleDeleteAccount = async () => {
     setIsDeleting(true);
@@ -111,6 +145,53 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onLogout, onA
                 <label className="text-xs text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold mb-1 block">User ID</label>
                 <p className="text-slate-400 dark:text-slate-400 text-gray-600 font-mono text-sm">{user.id}</p>
               </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Coins className="w-5 h-5 text-amber-400 dark:text-amber-400 text-amber-600" />
+              <h2 className="text-lg font-semibold text-white dark:text-white text-gray-900">Credits</h2>
+            </div>
+            <div className="space-y-4">
+              <p className="text-2xl font-bold text-amber-400 dark:text-amber-400 text-amber-600">
+                {credits.toLocaleString()} <span className="text-sm font-normal text-slate-500">credits</span>
+              </p>
+              <p className="text-slate-400 dark:text-slate-400 text-gray-600 text-sm">
+                1 credit per 5 games analyzed. Buy more when you run low.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => handleBuyCredits('starter')}
+                  disabled={checkoutLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
+                >
+                  {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  1,000 credits
+                </button>
+                <button
+                  onClick={() => handleBuyCredits('standard')}
+                  disabled={checkoutLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
+                >
+                  5,000 credits
+                </button>
+                <button
+                  onClick={() => handleBuyCredits('pro')}
+                  disabled={checkoutLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
+                >
+                  15,000 credits
+                </button>
+              </div>
+              <button
+                onClick={handleManagePaymentMethods}
+                disabled={checkoutLoading}
+                className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-white text-sm transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Manage payment methods
+              </button>
             </div>
           </div>
 

@@ -30,10 +30,13 @@ describe('parsePGNMoves', () => {
     expect(parsePGNMoves('   ')).toEqual([]);
   });
 
-  it('handles castling notation', () => {
+  it('handles castling notation (O-O and 0-0)', () => {
     const pgn = '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. O-O Be7 5. d4 O-O';
     const moves = parsePGNMoves(pgn);
     expect(moves).toContain('O-O');
+    const pgnZero = '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. 0-0 Be7 5. d4 0-0';
+    const movesZero = parsePGNMoves(pgnZero);
+    expect(movesZero).toContain('0-0');
   });
 
   it('handles longer games with many moves', () => {
@@ -97,11 +100,11 @@ function makeGame(
   };
 }
 
-// A PGN with at least 10 half-moves so it passes the default sequenceLength filter
+// PGNs with at least 16 half-moves for default sequenceLength
 const ITALIAN_PGN =
-  '1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. c3 Nf6 5. d4 exd4 6. cxd4 Bb4';
+  '1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. c3 Nf6 5. d4 exd4 6. cxd4 Bb4 7. Nc3 Nxe4 8. O-O Bxc3 9. bxc3';
 const SICILIAN_PGN =
-  '1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Be3 e5';
+  '1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Be3 e5 7. Nb3 Be6 8. f3 Be7';
 
 describe('extractMostPlayedLines', () => {
   it('separates games by color for the target player', () => {
@@ -171,15 +174,10 @@ describe('extractMostPlayedLines', () => {
   });
 
   it('respects the maxSequences parameter', () => {
-    // Create 15 distinct openings for white
-    const baseMoves = [
-      'e4', 'c5', 'Nf3', 'd6', 'd4', 'cxd4', 'Nxd4', 'Nf6', 'Nc3', 'a6',
-    ];
+    // Create 15 distinct openings for white (need 16+ half-moves for default sequenceLength)
     const games: GameData[] = [];
     for (let i = 0; i < 15; i++) {
-      // Vary move 11 to produce distinct sequences
-      const suffix = ` 6. Be3 e${i % 8 === 5 ? '6' : String(i % 8)}`;
-      // Build a PGN long enough — at least 10 half-moves
+      const suffix = ` 6. Be3 e${i % 8 === 5 ? '6' : String(i % 8)} 7. Qd2 O-O`;
       const pgn =
         '1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6' + suffix;
       games.push(
@@ -199,9 +197,9 @@ describe('extractMostPlayedLines', () => {
     const result = extractMostPlayedLines(games, 'Player1');
     const seq = result.white[0];
 
-    // notation should be the formatted first 10 half-moves
+    // notation should be the formatted first 16 half-moves (default sequenceLength)
     expect(seq.notation).toBe(
-      formatMoveSequence(parsePGNMoves(ITALIAN_PGN).slice(0, 10)),
+      formatMoveSequence(parsePGNMoves(ITALIAN_PGN).slice(0, 16)),
     );
     // moves array should contain the notation string
     expect(seq.moves).toEqual([seq.notation]);

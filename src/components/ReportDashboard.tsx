@@ -4,9 +4,10 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   LineChart, Line, ResponsiveContainer,
 } from 'recharts';
-import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Activity } from 'lucide-react';
+import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, ChevronRight, Activity, Crown, X, BarChart3, Coins } from 'lucide-react';
 import { ScoutingReport, OpeningStat } from '../types';
 import AnalysisBoard from './AnalysisBoard';
+import PracticeOpponent from './PracticeOpponent';
 import RecentGamesList from './RecentGamesList';
 import RepertoireChat from './RepertoireChat';
 import { aggregateOpeningsBySource } from '../lib/openingStats';
@@ -20,6 +21,12 @@ interface ReportDashboardProps {
   isGenerating?: boolean;
   /** Status message to show in overlay (e.g. "Step 2: Fetching Games...") */
   generatingStatus?: string;
+  /** Credits deducted for this report (shown in top right when set) */
+  creditsDeducted?: number;
+  /** Hide credits badge (e.g. for featured reports) */
+  hideCreditsBadge?: boolean;
+  /** Called when user wants to retry with usernames (no games found) */
+  onGoToSearch?: () => void;
 }
 
 function OpeningList({ openings, defaultExpanded = false, id }: { openings: OpeningStat[]; defaultExpanded?: boolean; id?: string }) {
@@ -79,6 +86,130 @@ function SkeletonBlock({ lines = 3 }: { lines?: number }) {
   );
 }
 
+/** Practice bar + modal flow: bar under strategic summary, color picker modal, then game modal */
+function PracticeBarWithModals({
+  report,
+  playerName,
+}: {
+  report: ScoutingReport;
+  playerName: string;
+}) {
+  const [showColorModal, setShowColorModal] = useState(false);
+  const [showGameModal, setShowGameModal] = useState(false);
+  const [playerColor, setPlayerColor] = useState<'white' | 'black'>('white');
+  // Lift game state: moveHistory for display+API (chess.js load(fen) clears history)
+  const [moveHistory, setMoveHistory] = useState<string[]>([]);
+
+  const handleStart = () => {
+    setShowColorModal(false);
+    setShowGameModal(true);
+    setMoveHistory([]);
+  };
+
+  const handleCloseGame = () => {
+    setShowGameModal(false);
+    setMoveHistory([]);
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setShowColorModal(true)}
+        className="mt-6 w-full py-3 px-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl flex items-center justify-between text-amber-400 transition-colors"
+      >
+        <span className="flex items-center gap-2 font-semibold">
+          <Crown className="w-4 h-4" />
+          Practice against {playerName}
+        </span>
+        <ChevronRight className="w-4 h-4" />
+      </button>
+
+      {/* Modal 1: Choose color */}
+      {showColorModal && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/90 backdrop-blur-md">
+          <div className="relative bg-gradient-to-b from-slate-800/95 to-slate-900/95 border border-amber-500/30 rounded-2xl p-8 max-w-sm w-full mx-4 shadow-2xl shadow-amber-500/10 ring-1 ring-white/5">
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-amber-500/5 via-transparent to-transparent pointer-events-none" />
+            <div className="flex justify-between items-center mb-6 relative">
+              <h4 className="text-xl font-bold bg-gradient-to-r from-amber-400 to-amber-200 bg-clip-text text-transparent">Choose your color</h4>
+              <button
+                type="button"
+                onClick={() => setShowColorModal(false)}
+                className="p-2 rounded-xl hover:bg-slate-700/80 text-slate-400 hover:text-white transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-3 mb-6 relative">
+              <button
+                type="button"
+                onClick={() => setPlayerColor('white')}
+                className={`w-full py-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-3 ${
+                  playerColor === 'white'
+                    ? 'bg-gradient-to-r from-slate-100 to-slate-200 text-slate-900 shadow-lg shadow-slate-400/20 ring-2 ring-amber-400/50'
+                    : 'bg-slate-800/80 text-slate-400 hover:bg-slate-700/80 hover:text-slate-200 border border-slate-700'
+                }`}
+              >
+                <Crown className={`w-5 h-5 shrink-0 ${playerColor === 'white' ? 'text-amber-600' : 'text-slate-500'}`} />
+                You play White
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlayerColor('black')}
+                className={`w-full py-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-3 ${
+                  playerColor === 'black'
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-900 text-slate-100 shadow-lg shadow-slate-900/50 ring-2 ring-amber-400/50 border border-slate-600'
+                    : 'bg-slate-800/80 text-slate-400 hover:bg-slate-700/80 hover:text-slate-200 border border-slate-700'
+                }`}
+              >
+                <Crown className={`w-5 h-5 shrink-0 ${playerColor === 'black' ? 'text-amber-400' : 'text-slate-500'}`} />
+                You play Black
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleStart}
+              className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-bold rounded-xl shadow-lg shadow-amber-500/25 transition-all duration-200 hover:shadow-amber-500/40"
+            >
+              Start game
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Game */}
+      {showGameModal && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
+          <div className="relative bg-gradient-to-b from-slate-800/95 to-slate-900/95 border border-amber-500/30 rounded-2xl p-6 w-full max-w-3xl shadow-2xl shadow-amber-500/10 ring-1 ring-white/5 max-h-[90vh] overflow-auto">
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-amber-500/5 via-transparent to-transparent pointer-events-none" />
+            <div className="flex justify-between items-center mb-4 relative">
+              <h4 className="text-xl font-bold bg-gradient-to-r from-amber-400 to-amber-200 bg-clip-text text-transparent">Practice vs {playerName}</h4>
+              <button
+                type="button"
+                onClick={handleCloseGame}
+                className="p-2 rounded-xl hover:bg-slate-700/80 text-slate-400 hover:text-white transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="relative">
+              <PracticeOpponent
+                report={report}
+                initialColor={playerColor}
+                onClose={handleCloseGame}
+                moveHistory={moveHistory}
+                onMovePlayed={setMoveHistory}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 /** Strategic Profile + Recent Games with right column height constrained by left */
 function StrategicProfileWithRecent({
   report,
@@ -91,6 +222,22 @@ function StrategicProfileWithRecent({
 }) {
   const leftRef = React.useRef<HTMLElement | null>(null);
   const [maxHeight, setMaxHeight] = React.useState<number | null>(null);
+
+  /** Strong openings: 20+ games, ≥50% win rate — variations they perform well in */
+  const strongOpenings = React.useMemo(() => {
+    const filter = (op: OpeningStat) => (op.totalGames ?? 0) >= 20 && (op.winRate ?? 0) >= 0.5;
+    const white = (report.whiteOpenings || []).filter(filter).map((op) => ({ ...op, side: 'white' as const }));
+    const black = (report.blackDefenses || []).filter(filter).map((op) => ({ ...op, side: 'black' as const }));
+    return [...white, ...black].sort((a, b) => (b.winRate ?? 0) - (a.winRate ?? 0));
+  }, [report.whiteOpenings, report.blackDefenses]);
+
+  /** Weak openings: 20+ games, <50% win rate — variations to improve */
+  const weakOpenings = React.useMemo(() => {
+    const filter = (op: OpeningStat) => (op.totalGames ?? 0) >= 20 && (op.winRate ?? 0) < 0.5;
+    const white = (report.whiteOpenings || []).filter(filter).map((op) => ({ ...op, side: 'white' as const }));
+    const black = (report.blackDefenses || []).filter(filter).map((op) => ({ ...op, side: 'black' as const }));
+    return [...white, ...black].sort((a, b) => (a.winRate ?? 0) - (b.winRate ?? 0));
+  }, [report.whiteOpenings, report.blackDefenses]);
 
   React.useEffect(() => {
     const el = leftRef.current;
@@ -105,7 +252,7 @@ function StrategicProfileWithRecent({
       ro.disconnect();
       if (rafId != null) cancelAnimationFrame(rafId);
     };
-  }, [report.strategicSummary, report.strengths, report.weaknesses, isGenerating]);
+  }, [strongOpenings, weakOpenings, isGenerating]);
 
   return (
     <div className="grid lg:grid-cols-[1fr_minmax(0,380px)] gap-8 items-start">
@@ -117,47 +264,114 @@ function StrategicProfileWithRecent({
           <Target className="w-5 h-5 text-indigo-400" />
           Strategic Profile Analysis
         </h3>
-        <div className="text-slate-300 space-y-4 leading-relaxed">
-          {isGenerating && !report.strategicSummary ? (
-            <SkeletonBlock lines={4} />
-          ) : (
-            <p className="text-lg font-medium">{report.strategicSummary?.replace(/\*\*/g, '')}</p>
-          )}
-
-          <div className="grid md:grid-cols-2 gap-4 mt-8">
-            <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl h-full">
-              <h4 className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-widest mb-4">
-                <CheckCircle className="w-4 h-4" /> Core Strengths
-              </h4>
-              {isGenerating && (!report.strengths || report.strengths.length === 0) ? (
-                <SkeletonBlock lines={3} />
-              ) : (
-                <ul className="space-y-3 text-sm">
-                  {report.strengths?.map((s, i) => (
-                    <li key={i} className="flex gap-2">
-                      <span className="text-emerald-500/50 font-bold">•</span> {s?.replace(/\*\*/g, '')}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl h-full">
-              <h4 className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-widest mb-4">
-                <AlertTriangle className="w-4 h-4" /> Strategic Weaknesses
-              </h4>
-              {isGenerating && (!report.weaknesses || report.weaknesses.length === 0) ? (
-                <SkeletonBlock lines={3} />
-              ) : (
-                <ul className="space-y-3 text-sm">
-                  {report.weaknesses?.map((w, i) => (
-                    <li key={i} className="flex gap-2 text-slate-400">
-                      <span className="text-red-500/50 font-bold">•</span> {w?.replace(/\*\*/g, '')}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+        <div className="text-slate-300 space-y-6 leading-relaxed">
+          {/* Strong openings: 20+ games, ≥50% win rate — good variations */}
+          <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl">
+            <h4 className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-widest mb-4">
+              <CheckCircle className="w-4 h-4" /> Strong openings (20+ games, ≥50% WR)
+            </h4>
+            {isGenerating && strongOpenings.length === 0 ? (
+              <SkeletonBlock lines={3} />
+            ) : strongOpenings.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {strongOpenings.map((op) => {
+                  const winRate = typeof op.winRate === 'number' && !isNaN(op.winRate) ? op.winRate : 0;
+                  const winPercent = (winRate * 100).toFixed(0);
+                  const totalGames = Math.round(op.totalGames || 0);
+                  return (
+                    <div
+                      key={`${op.name}-${op.side}`}
+                      className="bg-slate-900/80 border border-emerald-500/20 rounded-xl p-3 hover:border-emerald-500/40 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className="font-semibold text-slate-200 text-sm truncate" title={op.name}>
+                          {op.name}
+                        </span>
+                        <span
+                          className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                            op.side === 'white'
+                              ? 'bg-slate-600/60 text-slate-200'
+                              : 'bg-slate-700/60 text-slate-300'
+                          }`}
+                        >
+                          {op.side === 'white' ? 'W' : 'B'}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-emerald-500/70 transition-all"
+                            style={{ width: `${winRate * 100}%` }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-emerald-400/90">
+                          {winPercent}% WR · {totalGames} games
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">No openings with 20+ games and ≥50% win rate.</p>
+            )}
           </div>
+
+          {/* Weak openings: 20+ games, &lt;50% win rate — variations to improve */}
+          <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl">
+            <h4 className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-widest mb-4">
+              <AlertTriangle className="w-4 h-4" /> Weak openings (20+ games, &lt;50% WR)
+            </h4>
+            {isGenerating && weakOpenings.length === 0 ? (
+              <SkeletonBlock lines={4} />
+            ) : weakOpenings.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {weakOpenings.map((op) => {
+                  const winRate = typeof op.winRate === 'number' && !isNaN(op.winRate) ? op.winRate : 0;
+                  const winPercent = (winRate * 100).toFixed(0);
+                  const totalGames = Math.round(op.totalGames || 0);
+                  return (
+                    <div
+                      key={`${op.name}-${op.side}`}
+                      className="bg-slate-900/80 border border-red-500/20 rounded-xl p-3 hover:border-red-500/40 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className="font-semibold text-slate-200 text-sm truncate" title={op.name}>
+                          {op.name}
+                        </span>
+                        <span
+                          className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                            op.side === 'white'
+                              ? 'bg-slate-600/60 text-slate-200'
+                              : 'bg-slate-700/60 text-slate-300'
+                          }`}
+                        >
+                          {op.side === 'white' ? 'W' : 'B'}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-red-500/70 transition-all"
+                            style={{ width: `${winRate * 100}%` }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-red-400/90">
+                          {winPercent}% WR · {totalGames} games
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">No openings with 20+ games and below 50% win rate.</p>
+            )}
+          </div>
+
+          {report.games && report.games.length > 0 && (
+            <PracticeBarWithModals report={report} playerName={player.name} />
+          )}
         </div>
       </section>
 
@@ -167,6 +381,7 @@ function StrategicProfileWithRecent({
           playerName={player.name}
           playerUsername={[
             (player as { actualUsername?: string }).actualUsername,
+            (player as { fideName?: string }).fideName,
             player.platforms?.chessCom,
             player.platforms?.lichess,
           ].filter(Boolean) as string[]}
@@ -364,7 +579,17 @@ function ActivityReportSection({ player }: { player: ScoutingReport['player'] })
   );
 }
 
-const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignInForChat, isGenerating, generatingStatus }) => {
+const ReportDashboard: React.FC<ReportDashboardProps> = ({
+  report,
+  requiresSignInForChat,
+  isGenerating,
+  generatingStatus,
+  creditsDeducted: creditsDeductedProp,
+  hideCreditsBadge = false,
+  onGoToSearch,
+}) => {
+  // Fallback: compute from games if pipeline didn't send creditsDeducted (0 when no games)
+  const creditsDeducted = creditsDeductedProp ?? (report.games?.length ? Math.ceil(report.games.length / 5) : 0);
   const { player, whiteOpenings, blackDefenses } = report;
 
   const hasBothSources = useMemo(() => {
@@ -423,6 +648,12 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
       {/* Dossier Header */}
       <div className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-3xl overflow-hidden shadow-2xl">
         <div className="h-44 bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-950 dark:from-indigo-900/40 dark:via-slate-900 dark:to-slate-950 from-indigo-50 via-white to-gray-50 relative p-10 flex flex-col justify-end">
+          {!hideCreditsBadge && creditsDeducted != null && (
+            <div className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 dark:bg-amber-500/20 border border-amber-500/40 rounded-lg text-amber-400 dark:text-amber-400 text-sm font-medium">
+              <Coins className="w-4 h-4" />
+              −{creditsDeducted.toLocaleString()} credits
+            </div>
+          )}
           <div className="flex justify-between items-end">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 text-indigo-400 dark:text-indigo-400 text-indigo-600 font-bold text-xs uppercase tracking-[0.2em] mb-2">
@@ -445,6 +676,20 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({ report, requiresSignI
             </div>
           </div>
         </div>
+        {hasNoGames && !isGenerating && !hideCreditsBadge && onGoToSearch && (
+          <div className="px-10 py-4 bg-amber-500/10 border-t border-amber-500/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p className="text-sm text-amber-200/90">
+              We cannot find the player automatically. Can you please provide Chess.com or Lichess usernames?
+            </p>
+            <button
+              type="button"
+              onClick={onGoToSearch}
+              className="shrink-0 px-4 py-2 bg-amber-500/30 hover:bg-amber-500/50 border border-amber-500/50 rounded-lg text-sm font-medium text-amber-200 transition-colors"
+            >
+              Add usernames and retry
+            </button>
+          </div>
+        )}
         <div className="py-8 px-10 grid grid-cols-2 md:grid-cols-4 gap-8 bg-slate-950/30 dark:bg-slate-950/30 bg-gray-50 border-t border-slate-800 dark:border-slate-800 border-gray-200">
           <div className="space-y-1">
             <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Chess.com</div>

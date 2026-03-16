@@ -5,9 +5,19 @@ import { formatTimeControlForDisplay } from '../lib/timeControlUtils';
 import GamesModal from './GamesModal';
 import GameAnalysisModal from './GameAnalysisModal';
 
+/** Normalize name for matching: "Poliannikov, Danila" <-> "Danila Poliannikov" */
+function normalizeNameForMatch(name: string): string {
+  const s = name.trim();
+  if (s.includes(',')) {
+    const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
+    if (parts.length >= 2) return `${parts[1]} ${parts[0]}`.toLowerCase();
+  }
+  return s.toLowerCase();
+}
+
 function namesMatch(a: string, b: string): boolean {
-  const x = a.toLowerCase().trim();
-  const y = b.toLowerCase().trim();
+  const x = normalizeNameForMatch(a);
+  const y = normalizeNameForMatch(b);
   return x === y || x.includes(y) || y.includes(x);
 }
 

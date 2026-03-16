@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, Loader2, Play, Cpu, User, Shield, AlertTriangle, GitBranch, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertCircle, Loader2, Play, Cpu, User, Shield, AlertTriangle, GitBranch, ChevronDown, ChevronUp, Users, Coins } from 'lucide-react';
 import { ScoutingReport } from '../types';
 import { playerRepository } from '../services/playerRepository';
 import { User as SupabaseUser } from '@supabase/supabase-js';
@@ -15,6 +15,8 @@ interface SearchScreenProps {
   onReportGenerated: (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean }) => void;
   onReportPartialUpdate?: (partial: Partial<ScoutingReport>) => void;
   user: SupabaseUser;
+  credits?: number;
+  hasEnoughCredits?: (required: number) => boolean;
   isAnalyzing?: boolean;
   setIsAnalyzing?: (value: boolean) => void;
   loadingProgress?: number;
@@ -29,6 +31,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   onReportGenerated,
   onReportPartialUpdate,
   user,
+  credits = 0,
+  hasEnoughCredits = () => true,
   isAnalyzing: externalIsAnalyzing,
   setIsAnalyzing: externalSetIsAnalyzing,
   loadingProgress: externalLoadingProgress,
@@ -54,7 +58,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   const setScanningStatus = externalSetScanningStatus ? (value: string) => externalSetScanningStatus(value) : setLocalScanningStatus;
 
   const [error, setError] = useState<string | null>(null);
-  const maxGames = 2000;
+  const maxGames = 2500;
   const [gameLimit, setGameLimit] = useState(1000);
   const [onlineLimit, setOnlineLimit] = useState(500);
   const [otbLimit, setOtbLimit] = useState(500);
@@ -65,6 +69,12 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [tipsExpanded, setTipsExpanded] = useState(false);
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchPlayers, setBatchPlayers] = useState<{ name: string; chessComUsername: string; lichessUsername: string }[]>([
+    { name: '', chessComUsername: '', lichessUsername: '' },
+    { name: '', chessComUsername: '', lichessUsername: '' },
+  ]);
+  const [batchGameLimit, setBatchGameLimit] = useState(1000);
 
   const pipelineCallbacks = usePipelineProgressCallbacks({
     gameLimit,
@@ -84,18 +94,86 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate and sanitize input
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      setError('Authentication required. Please log in and try again.');
+      return;
+    }
+
+    if (batchMode) {
+      const validBatch = batchPlayers.filter((p) => p.name.trim().length > 0);
+      if (validBatch.length === 0) {
+        setError('Add at least one player with a name.');
+        return;
+      }
+      const batchCreditsNeeded = validBatch.length * Math.ceil(batchGameLimit / 5);
+      if (!hasEnoughCredits(batchCreditsNeeded)) {
+        setError(`Insufficient credits. This batch needs ~${batchCreditsNeeded.toLocaleString()} credits (1 per 5 games). You have ${credits.toLocaleString()}. Buy more in Settings.`);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      for (let i = 0; i < validBatch.length; i++) {
+        const p = validBatch[i];
+        setScanningStatus(`Analyzing ${p.name} (${i + 1} of ${validBatch.length})...`);
+        try {
+          const batchOnline = Math.floor(batchGameLimit / 2);
+          const batchOtb = batchGameLimit - batchOnline;
+          const validated = validatePlayerSearch(
+            { name: p.name.trim(), fideId: '', uscfId: '', chessComUsername: p.chessComUsername.trim() || undefined, lichessUsername: p.lichessUsername.trim() || undefined, gameLimit: batchGameLimit, onlineLimit: batchOnline, otbLimit: batchOtb },
+            true
+          );
+          const emptyReport = createEmptyReport(validated.name);
+          onReportGenerated(emptyReport, { isInitial: i === 0, batchItemStart: i > 0 });
+          const result = await runPipeline(
+            {
+              name: validated.name,
+              chessComUsername: validated.chessComUsername || undefined,
+              lichessUsername: validated.lichessUsername || undefined,
+              gameLimit: batchGameLimit,
+              onlineLimit: batchOnline,
+              otbLimit: batchOtb,
+            },
+            session.access_token,
+            {
+              ...pipelineCallbacks,
+              onIdentity: (d) => onReportPartialUpdate?.({ player: d.player }),
+              onParsing: (d) => onReportPartialUpdate?.({ whiteOpenings: d.whiteOpenings, blackDefenses: d.blackDefenses, mostPlayedLines: d.mostPlayedLines, games: d.games }),
+            },
+          );
+          if (result.report) onReportGenerated(result.report, { fromBatch: true });
+        } catch (err) {
+          logError(err, { operation: 'batch analysis', source: 'SearchScreen' });
+          setError(getUserFriendlyError(err, { operation: `analysis of ${p.name}` }));
+          break;
+        }
+      }
+      setScanningStatus('');
+      setLoading(false);
+      return;
+    }
+
+    // Single player mode - check credits first (1 credit per 5 games)
+    const creditsNeeded = Math.ceil(gameLimit / 5);
+    if (!hasEnoughCredits(creditsNeeded)) {
+      setError(`Insufficient credits. This report needs up to ${creditsNeeded.toLocaleString()} credits (1 per 5 games). You have ${credits.toLocaleString()}. Buy more in Settings.`);
+      return;
+    }
+
     try {
-      const validatedInput = validatePlayerSearch({
-        name: formData.name,
-        fideId: '',
-        uscfId: '',
-        chessComUsername: formData.chessComUsername,
-        lichessUsername: formData.lichessUsername,
-        gameLimit,
-        onlineLimit,
-        otbLimit,
-      });
+      const validatedInput = validatePlayerSearch(
+        {
+          name: formData.name,
+          fideId: '',
+          uscfId: '',
+          chessComUsername: formData.chessComUsername,
+          lichessUsername: formData.lichessUsername,
+          gameLimit,
+          onlineLimit,
+          otbLimit,
+        },
+        true
+      );
 
       setFormData({
         name: validatedInput.name,
@@ -107,7 +185,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
       if (validatedInput.onlineLimit != null) setOnlineLimit(validatedInput.onlineLimit);
       if (validatedInput.otbLimit != null) setOtbLimit(validatedInput.otbLimit);
     } catch (validationError: any) {
-      // Handle validation errors
       const errorMessage = validationError.errors?.[0]?.message || validationError.message || 'Invalid input. Please check your entries.';
       setError(errorMessage);
       return;
@@ -117,19 +194,12 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
     setError(null);
 
     try {
-      // Create empty report and switch to dashboard immediately
       const emptyReport = createEmptyReport(formData.name);
       onReportGenerated(emptyReport, { isInitial: true });
 
-      // ── Pipeline Service ──────────────────
       logger.info('Search', 'pipeline_start', { message: 'Using Pipeline Service for full analysis pipeline' });
       setScanningStatus('Step 1: Identifying Player...');
       setLoadingStage('identity');
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('Authentication required. Please log in and try again.');
-      }
 
       const pipelineResult = await runPipeline(
         {
@@ -144,7 +214,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
         pipelineCallbacks,
       );
 
-      // Pipeline must return a complete report
       if (!pipelineResult.report) {
         throw new Error('Pipeline did not return a report. Please try again.');
       }
@@ -153,35 +222,23 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
       logger.info('Search', 'pipeline_complete', { metadata: { reportId: reportData.id } });
 
       try {
-        const player = await playerRepository.createVerifiedPlayer({
+        await playerRepository.createVerifiedPlayer({
           full_name: reportData.player.name,
           fide_id: reportData.player.fideId || '',
           uscf_id: reportData.player.uscfId || '',
           chess_com_username: reportData.player.platforms?.chessCom || '',
           lichess_username: reportData.player.platforms?.lichess || '',
-          metadata: {
-            country: reportData.player.country
-          }
+          metadata: { country: reportData.player.country },
         });
-
-        if (player && user) {
-          logger.info('Search', 'persist_success', { message: 'Persisted new report to Supabase' });
-        }
       } catch (dbErr) {
         console.warn("Failed to persist report to DB (Demo Mode?):", dbErr);
       }
 
-      logger.info('Search', 'report_ready', { message: 'Pipeline report ready, calling onReportGenerated' });
-      onReportGenerated(reportData);
+      onReportGenerated(reportData, { creditsDeducted: pipelineResult.creditsDeducted });
       setScanningStatus('Report generated successfully!');
       setLoading(false);
       setScanningStatus('');
-
-      setFormData({
-        name: '',
-        chessComUsername: '',
-        lichessUsername: ''
-      });
+      setFormData({ name: '', chessComUsername: '', lichessUsername: '' });
 
     } catch (err: unknown) {
       logError(err, { operation: 'player analysis', source: 'SearchScreen' });
@@ -219,23 +276,54 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
               <Cpu className="w-24 h-24" />
             </div>
 
-            <div className="space-y-4">
-              <div className="relative">
-                  <label className="block text-sm font-bold text-indigo-400 dark:text-indigo-400 text-indigo-600 mb-2 uppercase tracking-widest">Player Name</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={e => setFormData({ ...formData, name: e.target.value })}
-                      disabled={loading}
-                      className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-700 dark:border-slate-700 border-gray-300 rounded-xl px-4 py-3 pl-11 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-500 focus:border-indigo-600 transition-colors font-medium text-white dark:text-white text-gray-900 shadow-inner placeholder:text-slate-600 dark:placeholder:text-slate-600 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                      placeholder="Enter Player Name"
-                    />
-                    <User className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-500 text-gray-400" />
-                  </div>
-                </div>
+            <div className="flex items-center justify-between mb-2 px-3 py-2 rounded-lg bg-slate-800/60 dark:bg-slate-800/60 border border-slate-700/50">
+              <span className="text-sm font-medium text-amber-400 dark:text-amber-400 flex items-center gap-1.5">
+                <Coins className="w-4 h-4" />
+                {credits.toLocaleString()} credits
+              </span>
+              {!batchMode && (
+                <span className="text-xs text-slate-300 dark:text-slate-300">
+                  ~{Math.ceil(gameLimit / 5).toLocaleString()} credits (1 per 5 games)
+                </span>
+              )}
+            </div>
 
-              {/* Advanced: Manually link accounts */}
+            {/* Batch mode toggle */}
+            <div className="flex items-center justify-between mb-4 p-3 rounded-xl bg-slate-950/50 border border-slate-800">
+              <span className="flex items-center gap-2 text-sm font-semibold text-amber-400">
+                <Users className="w-4 h-4" />
+                Batch reports
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={batchMode}
+                onClick={() => setBatchMode(!batchMode)}
+                className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer rounded-full border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:ring-offset-2 focus:ring-offset-slate-900 ${batchMode ? 'bg-amber-500 border-amber-400/50 shadow-lg shadow-amber-500/25' : 'bg-slate-700 border-slate-600'}`}
+              >
+                <span className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-200 ${batchMode ? 'translate-x-7' : 'translate-x-1'}`} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {!batchMode ? (
+                <>
+                  <div className="relative">
+                    <label className="block text-sm font-bold text-indigo-400 dark:text-indigo-400 text-indigo-600 mb-2 uppercase tracking-widest">Player Name</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                        disabled={loading}
+                        className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-700 dark:border-slate-700 border-gray-300 rounded-xl px-4 py-3 pl-11 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-500 focus:border-indigo-600 transition-colors font-medium text-white dark:text-white text-gray-900 shadow-inner placeholder:text-slate-600 dark:placeholder:text-slate-600 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                        placeholder="Enter Player Name"
+                      />
+                      <User className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-500 text-gray-400" />
+                    </div>
+                  </div>
+
+                  {/* Advanced: Manually link accounts */}
               <div>
                 <button
                   type="button"
@@ -272,8 +360,65 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                   </div>
                 )}
               </div>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Users className="w-4 h-4 text-amber-400" />
+                    <span className="text-sm font-bold text-amber-400">Up to 10 players</span>
+                  </div>
+                  {batchPlayers.map((player, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        placeholder="Player name"
+                        value={player.name}
+                        onChange={(e) => setBatchPlayers((p) => { const n = [...p]; n[i] = { ...n[i], name: e.target.value }; return n; })}
+                        disabled={loading}
+                        className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Chess.com"
+                        value={player.chessComUsername}
+                        onChange={(e) => setBatchPlayers((p) => { const n = [...p]; n[i] = { ...n[i], chessComUsername: e.target.value }; return n; })}
+                        disabled={loading}
+                        className="w-24 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Lichess"
+                        value={player.lichessUsername}
+                        onChange={(e) => setBatchPlayers((p) => { const n = [...p]; n[i] = { ...n[i], lichessUsername: e.target.value }; return n; })}
+                        disabled={loading}
+                        className="w-24 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setBatchPlayers((p) => p.length > 1 ? p.filter((_, j) => j !== i) : p)}
+                        disabled={batchPlayers.length <= 1 || loading}
+                        className="p-2 text-slate-500 hover:text-red-400 disabled:opacity-50"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {batchPlayers.length < 10 && (
+                    <button
+                      type="button"
+                      onClick={() => setBatchPlayers((p) => [...p, { name: '', chessComUsername: '', lichessUsername: '' }])}
+                      disabled={loading}
+                      className="text-sm text-indigo-400 hover:text-indigo-300"
+                    >
+                      + Add player
+                    </button>
+                  )}
+                </div>
+              )}
 
-              {/* Game sliders - always visible */}
+              {/* Game sliders - only in single mode */}
+              {!batchMode && (
+              <>
               <div className="relative group space-y-3 pt-4">
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-3 uppercase tracking-widest">Number of Games to Analyze</label>
 
@@ -354,6 +499,34 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                       />
                     </div>
                   </div>
+
+              </>
+              )}
+
+              {/* Batch: game limit */}
+              {batchMode && (
+                <div className="space-y-4 pt-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Games per player</span>
+                      <span className="font-bold text-amber-400">{batchGameLimit.toLocaleString()}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={500}
+                      max={5000}
+                      step={250}
+                      value={batchGameLimit}
+                      onChange={(e) => setBatchGameLimit(Number(e.target.value))}
+                      disabled={loading}
+                      className="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{
+                        background: `linear-gradient(to right, rgb(245, 158, 11) 0%, rgb(245, 158, 11) ${((batchGameLimit - 500) / 4500) * 100}%, rgb(30, 41, 59) ${((batchGameLimit - 500) / 4500) * 100}%, rgb(30, 41, 59) 100%)`
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="pt-4" />
@@ -371,7 +544,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                 disabled={loading}
                 className={`w-full py-4 rounded-xl flex items-center justify-center gap-3 font-bold text-lg transition-all px-4 ${loading
                   ? 'bg-slate-800 dark:bg-slate-800 bg-gray-200 text-slate-500 dark:text-slate-500 text-gray-500 cursor-not-allowed'
-                  : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-500/20'
+                  : batchMode ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xl shadow-amber-500/20' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-500/20'
                   } `}
               >
                 {loading ? (
@@ -380,6 +553,11 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                     <div className="flex-1 min-w-0 text-center">
                       <div className="text-sm font-semibold break-words">{scanningStatus || 'Analyzing Databases...'}</div>
                     </div>
+                  </>
+                ) : batchMode ? (
+                  <>
+                    <Play className="w-5 h-5 fill-current" />
+                    Run batch ({batchPlayers.filter((p) => p.name.trim()).length} players)
                   </>
                 ) : (
                   <>
@@ -392,7 +570,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
           </form>
         </div>
 
-        <div className="space-y-6 w-full lg:w-52 shrink-0">
+        <div className="space-y-6 w-full lg:w-[12.65rem] shrink-0">
           <div className="bg-slate-800/50 dark:bg-slate-800/50 border border-slate-700/80 dark:border-slate-700/80 rounded-2xl overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
             <button
               type="button"

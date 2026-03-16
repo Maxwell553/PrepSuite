@@ -19,6 +19,7 @@ import { StockfishPool } from '../pipeline/enginePool.js';
 import { sampleGamesForAnalysis } from '../pipeline/engineSampler.js';
 import { generateReportParallel } from '../pipeline/geminiReport.js';
 import { postProcessReport } from '../pipeline/reportPostProcessor.js';
+import { hasEnoughCredits, deductCredits } from '../lib/credits.js';
 
 export const analyzeRoute = new Hono();
 
@@ -86,13 +87,18 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
   // we must keep the async pipeline referenced so the stream stays open.
   const pipelinePromise = (async () => {
     try {
-      const isPremium = input.isPremium === true;
+      const userId = user.sub;
       const gameLimit = input.gameLimit || 1000;
       const onlineLimit = input.onlineLimit ?? gameLimit;
       const otbLimit = input.otbLimit ?? 0;
 
-      if (!isPremium && gameLimit > 2000) {
-        sse.sendError({ error: 'Game limit cannot exceed 2,000 for free tier. Upgrade to Premium for up to 5,000 games.' });
+      // Credit check: 1 credit = 5 games
+      const creditsNeeded = Math.ceil(gameLimit / 5);
+      const enoughCredits = await hasEnoughCredits(userId, creditsNeeded);
+      if (!enoughCredits) {
+        sse.sendError({
+          error: `Insufficient credits. This report requires up to ${creditsNeeded} credits (1 credit per 5 games). Buy more credits in Settings.`,
+        });
         sse.close();
         c.get('releaseAnalyzeSlot')?.();
         return;
@@ -174,9 +180,21 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
       );
 
       // Only treat as "has online" when user actually requested online games (onlineLimit > 0)
-      const hasOnline =
+      let hasOnline =
         onlineLimit > 0 && !!(identity.chessComUsername || identity.lichessUsername);
-      const hasOtb = otbLimit > 0 && !!identity.fideId;
+      let effectiveOtbLimit = otbLimit;
+      let hasOtb = otbLimit > 0 && !!identity.fideId;
+
+      // When we have FIDE ID but no Chess.com/Lichess: use OTB games instead of failing.
+      // User may have requested online-only (otbLimit=0) but we can still deliver via OTB.
+      if (!hasOnline && identity.fideId && gameLimit > 0) {
+        effectiveOtbLimit = gameLimit;
+        hasOtb = true;
+        logger.info(
+          { fideId: identity.fideId, effectiveOtbLimit },
+          '[Analyze] No online platforms; using OTB games via FIDE ID',
+        );
+      }
 
       if (!hasOnline && !hasOtb) {
         const msg = 'Could not find Chess.com, Lichess username, or FIDE ID. Please provide at least one.';
@@ -195,8 +213,8 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
 
       // 1. OTB first: wait for all OTB games to complete before any online fetch
       let otbGames: import('../lib/types.js').GameData[] = [];
-      if (otbLimit > 0 && identity.fideId) {
-        otbGames = await fetchOtbGames(identity.fideId, otbLimit);
+      if (effectiveOtbLimit > 0 && identity.fideId) {
+        otbGames = await fetchOtbGames(identity.fideId, effectiveOtbLimit);
       }
 
       // 2. Online only when requested; do NOT fill-in (preserve requested OTB/online split)
@@ -340,9 +358,7 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
       let engineAnalysis: import('../lib/types.js').GameAnalysis[] = [];
 
       const sampled = sampleGamesForAnalysis(allGames, 80);
-      const engineDepth = isPremium && typeof input.engineDepth === 'number' && input.engineDepth >= 7 && input.engineDepth <= 20
-        ? input.engineDepth
-        : 7;
+      const engineDepth = 7;
       if (sampled.length > 0) {
         let pool: StockfishPool | null = null;
         try {
@@ -377,7 +393,7 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
 
 
 
-      logger.info('[Analyze] Starting parallel report generation (strategicSummary, strengths, weaknesses)');
+      logger.info('[Analyze] Generating report (rule-based + engine stats)');
 
       const rawReport = await generateReportParallel({
         identity,
@@ -409,8 +425,22 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         '[Analyze] Report generated',
       );
 
+      // ── Deduct credits (1 credit per 5 games) ───────────────
+      const creditsToDeduct = Math.ceil(allGames.length / 5);
+      const deducted = await deductCredits(userId, creditsToDeduct);
+      if (!deducted) {
+        logger.error({ userId, creditsToDeduct }, '[Analyze] Credit deduction failed after report');
+        sse.sendError({
+          error: 'Report generated but credit deduction failed. Please contact support.',
+        });
+        sse.close();
+        c.get('releaseAnalyzeSlot')?.();
+        return;
+      }
+      logger.info({ userId, creditsToDeduct, gamesAnalyzed: allGames.length }, '[Analyze] Credits deducted');
+
       // ── Complete ───────────────────────────────────────────
-      sse.sendComplete({ report });
+      sse.sendComplete({ report, creditsDeducted: creditsToDeduct });
 
       logger.info('[Analyze] Pipeline complete, sent complete event');
     } catch (err) {

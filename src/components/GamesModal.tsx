@@ -11,13 +11,23 @@ interface GamesModalProps {
   onClose: () => void;
 }
 
+/** Normalize name for matching: "Poliannikov, Danila" <-> "Danila Poliannikov" */
+function normalizeNameForMatch(name: string): string {
+  const s = name.trim();
+  if (s.includes(',')) {
+    const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
+    if (parts.length >= 2) return `${parts[1]} ${parts[0]}`.toLowerCase();
+  }
+  return s.toLowerCase();
+}
+
 function namesMatch(a: string, b: string): boolean {
-  const x = a.toLowerCase().trim();
-  const y = b.toLowerCase().trim();
+  const x = normalizeNameForMatch(a);
+  const y = normalizeNameForMatch(b);
   return x === y || x.includes(y) || y.includes(x);
 }
 
-/** Parse timeControl to speed category for ONLINE games only. OTB is always classical. */
+/** Parse timeControl to speed category. OTB is always classical. Online: bullet/blitz/rapid/classical by time. */
 function getSpeedFromTimeControl(tc: string, source?: string): 'bullet' | 'blitz' | 'rapid' | 'classical' | null {
   const src = (source || '').toLowerCase();
   if (src === 'otb') return 'classical';
@@ -25,6 +35,7 @@ function getSpeedFromTimeControl(tc: string, source?: string): 'bullet' | 'blitz
   if (s.includes('bullet')) return 'bullet';
   if (s.includes('blitz')) return 'blitz';
   if (s.includes('rapid')) return 'rapid';
+  if (s.includes('classical')) return 'classical';
   const numMatch = s.match(/(\d+)/);
   if (!numMatch) return null;
   const num = parseInt(numMatch[1], 10);
@@ -32,7 +43,7 @@ function getSpeedFromTimeControl(tc: string, source?: string): 'bullet' | 'blitz
   if (baseSeconds < 180) return 'bullet';
   if (baseSeconds < 600) return 'blitz';
   if (baseSeconds < 3600) return 'rapid';
-  return null;
+  return 'classical'; // 60+ min = classical
 }
 
 const GamesModal: React.FC<GamesModalProps> = ({
@@ -71,14 +82,8 @@ const GamesModal: React.FC<GamesModalProps> = ({
       }
 
       if (speedFilter !== 'all') {
-        const src = (g.source || '').toLowerCase();
-        const isOtb = src === 'otb';
-        if (speedFilter === 'classical') {
-          if (!isOtb) return false;
-        } else {
-          const speed = getSpeedFromTimeControl(g.timeControl || '', g.source);
-          if (isOtb || !speed || speed !== speedFilter) return false;
-        }
+        const speed = getSpeedFromTimeControl(g.timeControl || '', g.source);
+        if (!speed || speed !== speedFilter) return false;
       }
       return true;
     });
@@ -187,7 +192,6 @@ const GamesModal: React.FC<GamesModalProps> = ({
           <div className="space-y-2">
             {filteredGames.map((g) => {
               const gameIndex = games.indexOf(g);
-              const origIdx = games.indexOf(g);
               const isWhite = identifiers.some((id) => namesMatch(g.white, id));
               const isBlack = identifiers.some((id) => namesMatch(g.black, id));
               const opponent = isWhite ? g.black : g.white;

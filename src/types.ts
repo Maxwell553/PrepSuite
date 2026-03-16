@@ -87,6 +87,17 @@ export interface ScoutingReport {
     otb: { white: OpeningStat[]; black: OpeningStat[] };
   };
   engineDepth?: number; // Stockfish engine depth used for analysis
+  /** Engine-derived stats (mistake histogram, avg eval by opening, endgame accuracy) */
+  engineStats?: {
+    mistakeHistogram: { bucket: string; count: number }[];
+    avgEvalByOpening: {
+      openingName: string;
+      side: 'white' | 'black';
+      avgEval: number;
+      games: number;
+    }[];
+    endgameAccuracy: number;
+  };
   lastUpdated: string;
 }
 

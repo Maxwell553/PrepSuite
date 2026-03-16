@@ -79,15 +79,15 @@ describe('validation', () => {
       expect(result.success).toBe(false);
     });
 
-    it('should accept game limit up to 2000 (schema max)', () => {
+    it('should accept game limit up to 2500 (schema max)', () => {
       const validInput = {
         name: 'Test Player',
-        gameLimit: 2000,
+        gameLimit: 2500,
       };
 
       const result = playerSearchSchema.safeParse(validInput);
       expect(result.success).toBe(true);
-      if (result.success) expect(result.data.gameLimit).toBe(2000);
+      if (result.success) expect(result.data.gameLimit).toBe(2500);
     });
 
     it('should accept game limit at 2000', () => {
@@ -131,9 +131,13 @@ describe('validation', () => {
       expect(result.lichessUsername).toBe('drnykterstein');
     });
 
-    it('should throw for game limit above 2000', () => {
-      expect(() => validatePlayerSearch({ name: 'Test', gameLimit: 2001 })).toThrow();
-      expect(() => validatePlayerSearch({ name: 'Test', gameLimit: 5000 })).toThrow();
+    it('should throw for game limit above 2500', () => {
+      expect(() => validatePlayerSearch({ name: 'Test', gameLimit: 2501 })).toThrow();
+    });
+
+    it('should accept game limit 2500 when premium', () => {
+      const result = validatePlayerSearch({ name: 'Test', gameLimit: 2500 }, true);
+      expect(result.gameLimit).toBe(2500);
     });
 
     it('should accept game limit 2000', () => {

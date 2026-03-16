@@ -52,18 +52,18 @@ export const playerSearchSchema = z.object({
   gameLimit: z.number()
     .int('Game limit must be an integer')
     .min(1, 'Game limit must be at least 1')
-    .max(2000, 'Game limit cannot exceed 2000')
+    .max(2500, 'Game limit cannot exceed 2500')
     .default(1000)
     .optional(),
   onlineLimit: z.number()
     .int('Online limit must be an integer')
     .min(0, 'Online limit cannot be negative')
-    .max(5000, 'Online limit cannot exceed 5000')
+    .max(2500, 'Online limit cannot exceed 2500')
     .optional(),
   otbLimit: z.number()
     .int('OTB limit must be an integer')
     .min(0, 'OTB limit cannot be negative')
-    .max(5000, 'OTB limit cannot exceed 5000')
+    .max(2500, 'OTB limit cannot exceed 2500')
     .optional(),
 }).refine(
   (data) => {
@@ -96,15 +96,20 @@ export function sanitizeString(input: string): string {
     .slice(0, 1000); // Limit length
 }
 
-/** Max games per report */
-export const MAX_GAME_LIMIT = 2000;
+/** Max games: free tier */
+export const MAX_GAME_LIMIT_FREE = 2500;
+/** Max games: premium tier */
+export const MAX_GAME_LIMIT_PREMIUM = 2500;
+/** @deprecated Use MAX_GAME_LIMIT_FREE or pass isPremium to validatePlayerSearch */
+export const MAX_GAME_LIMIT = MAX_GAME_LIMIT_FREE;
 
 /**
  * Validates and sanitizes player search input.
  * @param input - Raw input to validate
+ * @param isPremium - If true, allows up to 5000 games; otherwise 2000
  */
-export function validatePlayerSearch(input: unknown): PlayerSearchInput {
-  const maxGames = MAX_GAME_LIMIT;
+export function validatePlayerSearch(input: unknown, isPremium?: boolean): PlayerSearchInput {
+  const maxGames = isPremium ? MAX_GAME_LIMIT_PREMIUM : MAX_GAME_LIMIT_FREE;
 
   const sanitized = typeof input === 'object' && input !== null
     ? {

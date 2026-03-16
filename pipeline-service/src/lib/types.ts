@@ -186,6 +186,17 @@ export interface ScoutingReport {
     otb: { white: OpeningStat[]; black: OpeningStat[] };
   };
   engineDepth?: number;
+  /** Engine-derived stats (mistake histogram, avg eval by opening, endgame accuracy) */
+  engineStats?: {
+    mistakeHistogram: { bucket: string; count: number }[];
+    avgEvalByOpening: {
+      openingName: string;
+      side: 'white' | 'black';
+      avgEval: number;
+      games: number;
+    }[];
+    endgameAccuracy: number;
+  };
   lastUpdated: string;
 }
 
@@ -234,6 +245,7 @@ export interface ProgressEvent {
 /** SSE event: pipeline complete */
 export interface CompleteEvent {
   report: ScoutingReport;
+  creditsDeducted?: number;
 }
 
 /** SSE event: error */

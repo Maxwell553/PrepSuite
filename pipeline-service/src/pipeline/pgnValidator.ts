@@ -2,6 +2,7 @@ import { Chess } from 'chess.js';
 import { fetchWithRetry } from '../lib/fetchWithRetry.js';
 import { logger } from '../lib/logger.js';
 import { standardizePgnForBoard } from './gameParser.js';
+import { fetchLichessPgnBatch } from './lichess.js';
 import type { GameData } from '../lib/types.js';
 
 const USER_AGENT = 'PrepSuite-Pipeline/1.0';
@@ -118,23 +119,37 @@ export async function validateAndRefetchPgn(
     '[PgnValidator] Refetching PGN for games with missing/invalid notation',
   );
 
+  // Batch Lichess refetches (avoids 2000+ sequential requests)
+  const lichessToRefetch = lichessUsername
+    ? toRefetch.filter((g) => g.source === 'lichess')
+    : [];
+  if (lichessToRefetch.length > 0) {
+    const lichessIds = lichessToRefetch.map((g) => g.id).filter(Boolean) as string[];
+    const pgnMap = await fetchLichessPgnBatch(lichessIds);
+    for (const g of lichessToRefetch) {
+      const pgn = pgnMap.get(g.id);
+      if (pgn && isValidPgn(pgn)) {
+        g.pgn = standardizePgnForBoard(pgn);
+        valid.push(g);
+      }
+    }
+    const lichessFixed = lichessToRefetch.filter((g) => valid.includes(g)).length;
+    logger.info({ lichessRefetched: lichessIds.length, lichessFixed }, '[PgnValidator] Lichess batch refetch complete');
+  }
+
+  // Chess.com and OTB: refetch one-by-one (no batch API)
   for (const g of toRefetch) {
+    if (valid.includes(g)) continue; // Already fixed by Lichess batch
     let pgn: string | null = null;
     if (g.source === 'chess.com' && chessComUsername) {
       pgn = await refetchChessComPgn(chessComUsername, g.id, g.playedAt);
-    } else if (g.source === 'lichess' && lichessUsername) {
-      pgn = await refetchLichessPgn(g.id);
     }
 
     if (pgn && isValidPgn(pgn)) {
       g.pgn = pgn;
       valid.push(g);
-      logger.info({ gameId: g.id, source: g.source }, '[PgnValidator] Refetched valid PGN');
     } else if (g.source === 'otb' && g.pgn && g.pgn.trim().length > 20) {
       valid.push(g);
-      logger.info({ gameId: g.id }, '[PgnValidator] Keeping OTB game (no refetch available)');
-    } else {
-      logger.info({ gameId: g.id, source: g.source }, '[PgnValidator] Skipping game: no valid PGN after refetch');
     }
   }
 

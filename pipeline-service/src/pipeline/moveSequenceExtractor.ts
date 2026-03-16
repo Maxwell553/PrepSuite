@@ -27,7 +27,7 @@ export function parsePGNMoves(pgn: string): string[] {
       if (!token || token.match(/^\d+$/) || token === '...') continue;
       if (
         token.match(
-          /^([a-h][1-8](?:[a-h][1-8])?(?:=[QRBN])?|O-O(?:-O)?|[QRBNK][a-h1-8]?x?[a-h][1-8](?:=[QRBN])?|[a-h]x[a-h][1-8](?:=[QRBN])?|[QRBNK]x[a-h][1-8](?:=[QRBN])?)$/,
+          /^([a-h][1-8](?:[a-h][1-8])?(?:=[QRBN])?|O-O(?:-O)?|0-0(?:-0)?|[QRBNK][a-h1-8]?x?[a-h][1-8](?:=[QRBN])?|[a-h]x[a-h][1-8](?:=[QRBN])?|[QRBNK]x[a-h][1-8](?:=[QRBN])?)$/,
         )
       ) {
         moves.push(token);
@@ -36,6 +36,13 @@ export function parsePGNMoves(pgn: string): string[] {
   }
 
   return moves;
+}
+
+/** Normalize castling notation for consistent grouping */
+function normalizeCastling(m: string): string {
+  if (m === '0-0') return 'O-O';
+  if (m === '0-0-0') return 'O-O-O';
+  return m;
 }
 
 /** Format moves array into standard notation: "1. e4 e5 2. Nf3 Nc6" */
@@ -85,7 +92,7 @@ export function extractMostPlayedLines(
   games: GameData[],
   targetUsername: string,
   maxSequences = 10,
-  sequenceLength = 10,
+  sequenceLength = 16,
 ): { white: MoveSequence[]; black: MoveSequence[] } {
   const targetLower = targetUsername.toLowerCase().trim();
 
@@ -103,7 +110,7 @@ export function extractMostPlayedLines(
       const moves = parsePGNMoves(game.pgn);
       if (moves.length < sequenceLength) continue;
 
-      const seq = moves.slice(0, sequenceLength);
+      const seq = moves.slice(0, sequenceLength).map(normalizeCastling);
       const key = seq.join(' ');
       const existing = seqMap.get(key);
       if (existing) {

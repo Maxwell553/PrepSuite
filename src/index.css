@@ -1,11 +1,17 @@
 @import "tailwindcss";
 
+/* Inter as primary sans font - used by font-sans and body */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
 /* Use .dark class instead of prefers-color-scheme - app is always dark regardless of system setting */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* Force dark mode regardless of system preference - forbids browser from overriding */
 html {
     color-scheme: dark;
+    font-family: var(--font-sans);
 }
 @supports (color-scheme: only dark) {
     html {
@@ -27,9 +33,11 @@ html, body {
 }
 
 body {
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-sans);
     margin: 0;
     padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 /* App uses dark theme only */

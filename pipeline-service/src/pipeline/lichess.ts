@@ -76,9 +76,9 @@ export async function fetchLichessGames(
 
       if (lines.length < maxGames) break;
 
-      // Respect rate limits
+      // Brief pause between batches to avoid rate limits (Lichess: one request at a time)
       if (i < numRequests - 1) {
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 150));
       }
     }
 
@@ -139,31 +139,44 @@ export async function fetchLichessPgnBatch(
   for (let b = 0; b < batches.length; b++) {
     const ids = batches[b];
     const body = ids.join(',');
-    try {
-      const res = await fetchWithRetry(EXPORT_URL, {
-        method: 'POST',
-        body,
-        headers: { Accept: 'application/x-chess-pgn' },
-        timeoutMs: 60000,
-      });
-      if (!res.ok) {
-        logger.warn({ status: res.status, batch: b + 1 }, '[Lichess] PGN export batch failed');
-        continue;
+    let success = false;
+    for (let attempt = 0; attempt <= 3 && !success; attempt++) {
+      try {
+        const res = await fetchWithRetry(EXPORT_URL, {
+          method: 'POST',
+          body,
+          headers: { Accept: 'application/x-chess-pgn' },
+          timeoutMs: 60000,
+          retries: 1,
+          delayMs: 3000,
+        });
+        if (res.status === 429) {
+          logger.warn({ batch: b + 1, attempt }, '[Lichess] Rate limited (429), waiting 60s before retry');
+          await new Promise((r) => setTimeout(r, 60000));
+          continue;
+        }
+        if (!res.ok) {
+          logger.warn({ status: res.status, batch: b + 1 }, '[Lichess] PGN export batch failed');
+          break;
+        }
+        const text = await res.text();
+        const parsed = parseMultiGamePgn(text);
+        for (const [id, pgn] of parsed) {
+          result.set(id, pgn);
+        }
+        logger.info(
+          { batch: b + 1, requested: ids.length, received: parsed.size },
+          '[Lichess] PGN export batch complete',
+        );
+        success = true;
+      } catch (err) {
+        logger.warn({ err, batch: b + 1, attempt }, '[Lichess] PGN export failed');
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 60000));
       }
-      const text = await res.text();
-      const parsed = parseMultiGamePgn(text);
-      for (const [id, pgn] of parsed) {
-        result.set(id, pgn);
-      }
-      logger.info(
-        { batch: b + 1, requested: ids.length, received: parsed.size },
-        '[Lichess] PGN export batch complete',
-      );
-      if (b < batches.length - 1) {
-        await new Promise((r) => setTimeout(r, 500));
-      }
-    } catch (err) {
-      logger.error({ err, batch: b + 1 }, '[Lichess] PGN export error');
+    }
+    // Delay between batches to avoid rate limits (Lichess: one request at a time)
+    if (b < batches.length - 1) {
+      await new Promise((r) => setTimeout(r, 1200));
     }
   }
   return result;

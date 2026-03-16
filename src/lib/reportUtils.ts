@@ -107,6 +107,9 @@ export function mergeReport(base: ScoutingReport, partial: Partial<ScoutingRepor
   if (partial.engineDepth != null) {
     merged.engineDepth = partial.engineDepth;
   }
+  if (partial.engineStats) {
+    merged.engineStats = partial.engineStats;
+  }
 
   return merged;
 }

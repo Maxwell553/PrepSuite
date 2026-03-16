@@ -20,6 +20,7 @@ import SupportChat from './components/SupportChat';
 import { ThemeProvider } from './lib/themeContext';
 import { setSentryUser, clearSentryUser } from './lib/sentry';
 import { mergeReport } from './lib/reportUtils';
+import { useCredits } from './hooks/useCredits';
 
 function FeaturedReportLayout({
   report,
@@ -44,7 +45,7 @@ function FeaturedReportLayout({
       </header>
       <main className="max-w-6xl mx-auto p-6">
         <Suspense fallback={<div className="flex items-center justify-center min-h-[400px]"><Loader2 className="w-10 h-10 animate-spin text-indigo-400" /></div>}>
-          <ReportDashboard report={report} requiresSignInForChat={!user} />
+          <ReportDashboard report={report} requiresSignInForChat={!user} hideCreditsBadge />
         </Suspense>
       </main>
     </div>
@@ -76,6 +77,9 @@ const App: React.FC = () => {
   }, [isAnalyzing]);
   const [loadingStage, setLoadingStage] = useState<'identity' | 'fetching' | 'analyzing' | 'generating' | null>(null);
   const [scanningStatus, setScanningStatus] = useState<string>('');
+  const [creditsDeductedForReport, setCreditsDeductedForReport] = useState<number | null>(null);
+
+  const { credits, hasEnoughCredits, refetch: refetchCredits } = useCredits(user?.id);
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
@@ -174,6 +178,15 @@ const App: React.FC = () => {
     }
   }, [isInLandingFlow, showPrivacyPolicy, showTermsOfService, showAboutPrepSuite, viewingFeaturedReport]);
 
+  // Refetch credits when returning from successful credit purchase
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('credits') === 'success') {
+      refetchCredits();
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [refetchCredits]);
+
   // Fetch history when user is available (only once, not on every render)
   useEffect(() => {
     const fetchHistory = async () => {
@@ -192,16 +205,25 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const handleReportGenerated = (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean }) => {
+  const handleReportGenerated = (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean; fromBatch?: boolean; batchItemStart?: boolean }) => {
     setSelectedReport(report);
     setActiveTab('dashboard');
     if (options?.isInitial) {
+      setCreditsDeductedForReport(null); // Clear until new report completes
       setIsAnalyzing(true);
       isGeneratingRef.current = true;
-    } else {
+    } else if (options?.batchItemStart) {
+      // Starting next batch item: keep loading overlay, show empty report for this player
+      setIsAnalyzing(true);
+      isGeneratingRef.current = true;
+    } else if (!options?.fromBatch) {
       setIsAnalyzing(false);
       isGeneratingRef.current = false;
-      // Auto-save report to user's profile (skip when loading from cache - already saved)
+      if (!options?.fromCache) {
+        handleSaveReport(report);
+      }
+    } else {
+      // fromBatch: completed one report; keep isAnalyzing (batch still running); save
       if (!options?.fromCache) {
         handleSaveReport(report);
       }
@@ -334,6 +356,7 @@ const App: React.FC = () => {
 
   const selectFromHistory = (report: ScoutingReport) => {
     setSelectedReport(report);
+    setCreditsDeductedForReport(null); // Cached reports don't show credits used
     setActiveTab('dashboard');
   };
 
@@ -499,6 +522,8 @@ const App: React.FC = () => {
                   setShowLandingPage(true);
                   // User will be signed out by UserSettings component
                 }}
+                credits={credits}
+                onCreditsPurchased={refetchCredits}
               />
             </div>
           ) : (
@@ -527,6 +552,8 @@ const App: React.FC = () => {
                     onReportGenerated={handleReportGenerated} 
                     onReportPartialUpdate={handleReportPartialUpdate}
                     user={user}
+                    credits={credits}
+                    hasEnoughCredits={hasEnoughCredits}
                     isAnalyzing={isAnalyzing}
                     setIsAnalyzing={setIsAnalyzing}
                     loadingProgress={loadingProgress}
@@ -552,6 +579,8 @@ const App: React.FC = () => {
                         report={selectedReport}
                         isGenerating={isAnalyzing}
                         generatingStatus={scanningStatus}
+                        creditsDeducted={creditsDeductedForReport ?? undefined}
+                        onGoToSearch={() => setActiveTab('search')}
                       />
                     </Suspense>
                   </div>

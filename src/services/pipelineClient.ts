@@ -18,13 +18,12 @@ export interface PipelineParams {
   otbLimit?: number;
   /** Premium: customizable 7–20; free uses default */
   engineDepth?: number;
-  /** Enables priority queue, higher limits */
-  isPremium?: boolean;
 }
 
 /** The pipeline now returns a complete ScoutingReport */
 export interface PipelineResult {
   report: ScoutingReport;
+  creditsDeducted?: number;
 }
 
 /** Chat message for conversation history */
@@ -117,7 +116,6 @@ export async function runPipeline(
     'Content-Type': 'application/json',
     Authorization: `Bearer ${accessToken}`,
   };
-  if (params.isPremium) headers['X-Premium'] = 'true';
   const response = await fetch(url, {
     method: 'POST',
     headers,
