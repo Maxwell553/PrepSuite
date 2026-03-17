@@ -605,7 +605,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                         </div>
                         <div className="flex items-center gap-6">
                             <a
-                                href="#"
+                                href="/about"
                                 className="text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 text-sm transition-colors"
                                 onClick={(e) => {
                                     e.preventDefault();
@@ -617,7 +617,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                 Why PrepSuite
                             </a>
                             <a
-                                href="#"
+                                href="/privacy-policy"
                                 className="text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 text-sm transition-colors"
                                 onClick={(e) => {
                                     e.preventDefault();
@@ -629,7 +629,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                 Privacy Policy
                             </a>
                             <a
-                                href="#"
+                                href="/terms-of-service"
                                 className="text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 text-sm transition-colors"
                                 onClick={(e) => {
                                     e.preventDefault();

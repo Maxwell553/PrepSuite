@@ -52,8 +52,18 @@ function FeaturedReportLayout({
   );
 }
 
+const pathByTab = { search: '/analysis', dashboard: '/dashboard', history: '/history' } as const;
+
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'search' | 'dashboard' | 'history'>('search');
+  const [activeTabState, setActiveTabState] = useState<'search' | 'dashboard' | 'history'>('search');
+  const setActiveTab = React.useCallback((tab: 'search' | 'dashboard' | 'history') => {
+    setActiveTabState(tab);
+    const path = pathByTab[tab];
+    if (path && window.location.pathname !== path) {
+      window.history.pushState({}, '', path);
+    }
+  }, []);
+  const activeTab = activeTabState;
   const [selectedReport, setSelectedReport] = useState<ScoutingReport | null>(null);
   const [history, setHistory] = useState<ScoutingReport[]>([]);
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -66,9 +76,9 @@ const App: React.FC = () => {
   const [showUserSettings, setShowUserSettings] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(true);
   const [viewingFeaturedReport, setViewingFeaturedReport] = useState<ScoutingReport | null>(null);
-  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
-  const [showTermsOfService, setShowTermsOfService] = useState(false);
-  const [showAboutPrepSuite, setShowAboutPrepSuite] = useState(false);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(() => window.location.pathname === '/privacy-policy');
+  const [showTermsOfService, setShowTermsOfService] = useState(() => window.location.pathname === '/terms-of-service');
+  const [showAboutPrepSuite, setShowAboutPrepSuite] = useState(() => window.location.pathname === '/about');
   const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
   // Persist loading state across tab switches
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -141,20 +151,27 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // History API: keep landing subpages (privacy, terms, about, featured) in-browser so back/forward work
+  // Sync app state with URL pathname (supports /privacy-policy, /terms-of-service, /about, /analysis, /history, /dashboard, /settings, /featured/:slug)
   const isInLandingFlow = !user || showLandingPage || showPrivacyPolicy || showTermsOfService || showAboutPrepSuite || !!viewingFeaturedReport;
-  useEffect(() => {
-    if (!isInLandingFlow) return;
+  const appRoutes = ['/analysis', '/history', '/dashboard', '/settings'] as const;
+  const tabByPath: Record<string, 'search' | 'dashboard' | 'history'> = {
+    '/analysis': 'search',
+    '/history': 'history',
+    '/dashboard': 'dashboard',
+  };
 
-    const handlePopState = () => {
-      const s = window.history.state as { landingView?: string; slug?: string } | null;
-      const v = s?.landingView ?? 'main';
-      setShowPrivacyPolicy(v === 'privacy');
-      setShowTermsOfService(v === 'terms');
-      setShowAboutPrepSuite(v === 'about');
-      if (v === 'featured' && s?.slug) {
+  const syncStateFromPath = React.useCallback(() => {
+    const path = window.location.pathname;
+    // Landing/legal pages
+    setShowPrivacyPolicy(path === '/privacy-policy');
+    setShowTermsOfService(path === '/terms-of-service');
+    setShowAboutPrepSuite(path === '/about');
+    // Featured reports
+    if (path.startsWith('/featured/')) {
+      const slug = path.replace(/^\/featured\/?/, '').replace(/\/$/, '') || undefined;
+      if (slug) {
         import('./services/featuredReports').then(({ getFeaturedReport }) => {
-          getFeaturedReport(s.slug!).then((report) => {
+          getFeaturedReport(slug).then((report) => {
             if (report) setViewingFeaturedReport(report);
             else setViewingFeaturedReport(null);
           });
@@ -162,22 +179,66 @@ const App: React.FC = () => {
       } else {
         setViewingFeaturedReport(null);
       }
-      // When returning to main landing, ensure we show landing (not analysis) — fixes back from featured report
-      if (v === 'main') {
+      setShowLandingPage(false);
+    } else {
+      setViewingFeaturedReport(null);
+      // App routes: only apply when user is logged in (checked by caller)
+      if (appRoutes.includes(path)) {
+        setShowLandingPage(false);
+        if (path === '/settings') {
+          setShowUserSettings(true);
+        } else {
+          setShowUserSettings(false);
+          const tab = tabByPath[path];
+          if (tab) setActiveTabState(tab);
+        }
+      } else if (path === '/' || path === '') {
         setShowLandingPage(true);
+        setShowUserSettings(false);
+      }
+    }
+  }, []);
+
+  // On initial load and popstate, sync state from URL
+  useEffect(() => {
+    const path = window.location.pathname;
+    // Redirect unauthenticated users from app routes to landing
+    if (!loadingAuth && !user && appRoutes.includes(path)) {
+      window.history.replaceState({}, '', '/');
+      setShowLandingPage(true);
+      return;
+    }
+    // Only apply app route logic when user is logged in
+    if (user && appRoutes.includes(path)) {
+      syncStateFromPath();
+    } else if (!appRoutes.includes(path)) {
+      syncStateFromPath();
+    }
+  }, [syncStateFromPath, loadingAuth, user]);
+
+  // Listen for back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      if (!user && appRoutes.includes(path)) {
+        window.history.replaceState({}, '', '/');
+        setShowLandingPage(true);
+      } else {
+        syncStateFromPath();
       }
     };
-
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [isInLandingFlow]);
+  }, [syncStateFromPath, user]);
 
-  // Establish landing state on first load so back from subpages stays in-app
+  // Establish landing state on first load when on home
   useEffect(() => {
     if (!isInLandingFlow || showPrivacyPolicy || showTermsOfService || showAboutPrepSuite || viewingFeaturedReport) return;
+    const path = window.location.pathname;
+    if (path !== '/' && path !== '') return;
     const state = window.history.state as { landingView?: string } | null;
     if (!state?.landingView) {
-      window.history.replaceState({ landingView: 'main' }, '', window.location.pathname || '/');
+      window.history.replaceState({ landingView: 'main' }, '', '/');
     }
   }, [isInLandingFlow, showPrivacyPolicy, showTermsOfService, showAboutPrepSuite, viewingFeaturedReport]);
 
@@ -447,22 +508,40 @@ const App: React.FC = () => {
   }
 
   const openPrivacyPolicy = () => {
-    window.history.pushState({ landingView: 'privacy' }, '', window.location.pathname || '/');
+    window.history.pushState({}, '', '/privacy-policy');
     setShowPrivacyPolicy(true);
+    setShowTermsOfService(false);
+    setShowAboutPrepSuite(false);
+    setViewingFeaturedReport(null);
   };
 
   const openTermsOfService = () => {
-    window.history.pushState({ landingView: 'terms' }, '', window.location.pathname || '/');
+    window.history.pushState({}, '', '/terms-of-service');
     setShowTermsOfService(true);
+    setShowPrivacyPolicy(false);
+    setShowAboutPrepSuite(false);
+    setViewingFeaturedReport(null);
   };
 
   const openAboutPrepSuite = () => {
-    window.history.pushState({ landingView: 'about' }, '', window.location.pathname || '/');
+    window.history.pushState({}, '', '/about');
     setShowAboutPrepSuite(true);
+    setShowPrivacyPolicy(false);
+    setShowTermsOfService(false);
+    setViewingFeaturedReport(null);
   };
 
   const closeLandingSubpage = () => {
-    window.history.back();
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      window.history.replaceState({}, '', '/');
+      setShowPrivacyPolicy(false);
+      setShowTermsOfService(false);
+      setShowAboutPrepSuite(false);
+      setViewingFeaturedReport(null);
+      setShowLandingPage(true);
+    }
   };
 
   if (showPrivacyPolicy) {
@@ -499,9 +578,12 @@ const App: React.FC = () => {
     const { getFeaturedReport } = await import('./services/featuredReports');
     const report = await getFeaturedReport(slug);
     if (report) {
-      window.history.pushState({ landingView: 'featured', slug }, '', window.location.pathname || '/');
+      window.history.pushState({}, '', `/featured/${slug}`);
       setViewingFeaturedReport(report);
       setShowLandingPage(false);
+      setShowPrivacyPolicy(false);
+      setShowTermsOfService(false);
+      setShowAboutPrepSuite(false);
     }
   };
 
@@ -528,6 +610,7 @@ const App: React.FC = () => {
           onGetStarted={() => {
             if (user) {
               setShowLandingPage(false);
+              window.history.pushState({}, '', '/analysis');
             } else {
               const el = document.getElementById('access');
               el?.scrollIntoView({ behavior: 'smooth' });
@@ -554,7 +637,10 @@ const App: React.FC = () => {
           <Sidebar 
             activeTab={activeTab} 
             setActiveTab={setActiveTab}
-            onLogoClick={() => setShowLandingPage(true)}
+            onLogoClick={() => {
+              setShowLandingPage(true);
+              window.history.pushState({}, '', '/');
+            }}
             isAnalyzing={isAnalyzing}
           />
         )}
@@ -564,7 +650,10 @@ const App: React.FC = () => {
             <div className="h-full overflow-y-auto">
               <UserSettings
                 user={user}
-                onBack={() => setShowUserSettings(false)}
+                onBack={() => {
+                setShowUserSettings(false);
+                window.history.pushState({}, '', pathByTab[activeTab]);
+              }}
                 onLogout={handleLogout}
                 onAccountDeleted={() => {
                   setShowUserSettings(false);
@@ -586,7 +675,10 @@ const App: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-slate-500 dark:text-slate-500 text-gray-600 hidden md:block">{user.email}</span>
                     <div
-                      onClick={() => setShowUserSettings(true)}
+                      onClick={() => {
+                        setShowUserSettings(true);
+                        window.history.pushState({}, '', '/settings');
+                      }}
                       className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white cursor-pointer hover:bg-indigo-500 transition-colors ml-[12px]"
                     >
                       <User className="w-5 h-5" />
