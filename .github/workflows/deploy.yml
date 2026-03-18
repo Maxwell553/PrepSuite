@@ -120,6 +120,7 @@ jobs:
           npm install -g supabase
           supabase functions deploy health --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
           supabase functions deploy delete-user --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+          supabase functions deploy nightly-digest --no-verify-jwt --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       

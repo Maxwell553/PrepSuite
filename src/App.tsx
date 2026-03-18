@@ -121,8 +121,9 @@ const App: React.FC = () => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       
-      // When user just signed in (OAuth or email link), take them straight to the dashboard
-      if (event === 'SIGNED_IN' && currentUser) {
+      // When user just signed in (OAuth or email link), take them straight to the dashboard.
+      // INITIAL_SESSION fires when page loads with session in URL (OAuth redirect); SIGNED_IN fires on in-app sign-in.
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && currentUser) {
         setShowLandingPage(false);
       }
       
@@ -208,6 +209,12 @@ const App: React.FC = () => {
       setShowLandingPage(true);
       return;
     }
+    // Logged-in user at / (e.g. returning from OAuth): show dashboard, not landing
+    if (user && (path === '/' || path === '')) {
+      setShowLandingPage(false);
+      window.history.replaceState({}, '', '/analysis');
+      return;
+    }
     // Only apply app route logic when user is logged in
     if (user && appRoutes.includes(path)) {
       syncStateFromPath();
@@ -223,6 +230,9 @@ const App: React.FC = () => {
       if (!user && appRoutes.includes(path)) {
         window.history.replaceState({}, '', '/');
         setShowLandingPage(true);
+      } else if (user && (path === '/' || path === '')) {
+        setShowLandingPage(false);
+        window.history.replaceState({}, '', '/analysis');
       } else {
         syncStateFromPath();
       }
