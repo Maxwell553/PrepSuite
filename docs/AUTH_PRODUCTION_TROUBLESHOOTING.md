@@ -13,7 +13,7 @@ If **Google OAuth** or **email signup** fails in production, verify these settin
 | **Site URL** | `https://prepsuite.ai` (no trailing slash) |
 | **Redirect URLs** | Add both: `https://prepsuite.ai` and `https://prepsuite.ai/**` |
 
-The `redirectTo` in code is `window.location.origin` (e.g. `https://prepsuite.ai`). It must EXACTLY match an entry in Redirect URLs. If it doesn't, Supabase may not append the auth code, and the session will not be established.
+The `redirectTo` in code is `window.location.origin + '/analysis'` (e.g. `https://prepsuite.ai/analysis`) so users land on the dashboard. Ensure `https://prepsuite.ai/**` is in Redirect URLs so any path is allowed.
 
 ### 2. Google Cloud Console → APIs & Services → Credentials
 

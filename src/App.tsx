@@ -99,18 +99,22 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    const hasAuthParamsInUrl = () => {
+      const s = (window.location.hash || '') + (window.location.search || '');
+      return /(access_token|refresh_token|code)=/.test(s);
+    };
+
     // Check current session
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      setLoadingAuth(false);
-      
-      // Set Sentry user context
+      // If URL has auth params (OAuth redirect) but no session yet, PKCE exchange may still be in progress.
+      // Don't finish loading until onAuthStateChange fires—otherwise we'd show "Get Started" briefly.
+      if (!hasAuthParamsInUrl() || currentUser) {
+        setLoadingAuth(false);
+      }
       if (currentUser) {
-        setSentryUser({
-          id: currentUser.id,
-          email: currentUser.email,
-        });
+        setSentryUser({ id: currentUser.id, email: currentUser.email });
       } else {
         clearSentryUser();
       }
@@ -120,25 +124,26 @@ const App: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      
+      setLoadingAuth(false); // Always allow render once we get an auth event
+
       // When user just signed in (OAuth or email link), take them straight to the dashboard.
       // INITIAL_SESSION fires when page loads with session in URL (OAuth redirect); SIGNED_IN fires on in-app sign-in.
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && currentUser) {
         setShowLandingPage(false);
       }
-      
-      // Update Sentry user context
       if (currentUser) {
-        setSentryUser({
-          id: currentUser.id,
-          email: currentUser.email,
-        });
+        setSentryUser({ id: currentUser.id, email: currentUser.email });
       } else {
         clearSentryUser();
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Fallback: if we stayed loading due to auth params but never got a session (e.g. user cancelled), unblock after 5s
+    const timeout = setTimeout(() => setLoadingAuth(false), 5000);
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   useEffect(() => {
@@ -203,6 +208,11 @@ const App: React.FC = () => {
   // On initial load and popstate, sync state from URL
   useEffect(() => {
     const path = window.location.pathname;
+    const hasAuthParams = /(access_token|refresh_token|code)=/.test(
+      (window.location.hash || '') + (window.location.search || '')
+    );
+    // Don't sync when OAuth callback may be in progress (auth params in URL, session not yet established)
+    if (hasAuthParams && !user) return;
     // Redirect unauthenticated users from app routes to landing
     if (!loadingAuth && !user && appRoutes.includes(path)) {
       window.history.replaceState({}, '', '/');
