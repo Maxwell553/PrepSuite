@@ -19,6 +19,7 @@ import AboutPrepSuite from './components/AboutPrepSuite';
 import SupportChat from './components/SupportChat';
 import { ThemeProvider } from './lib/themeContext';
 import { setSentryUser, clearSentryUser } from './lib/sentry';
+import { trackSignUpConversion, trackSignUpConversionIfNewUser } from './lib/googleAds';
 import { mergeReport } from './lib/reportUtils';
 import { useCredits } from './hooks/useCredits';
 
@@ -130,6 +131,7 @@ const App: React.FC = () => {
       // INITIAL_SESSION fires when page loads with session in URL (OAuth redirect); SIGNED_IN fires on in-app sign-in.
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && currentUser) {
         setShowLandingPage(false);
+        trackSignUpConversionIfNewUser(currentUser.id, currentUser.created_at);
       }
       if (currentUser) {
         setSentryUser({ id: currentUser.id, email: currentUser.email });
@@ -497,7 +499,8 @@ const App: React.FC = () => {
       } else {
         if (loginData.password) {
           if (loginData.isNewUser) {
-            await authActions.signUp(loginData.email, loginData.password);
+            const res = await authActions.signUp(loginData.email, loginData.password);
+            if (res?.data?.user?.id) trackSignUpConversion(res.data.user.id);
             // We don't alert here anymore as the LandingPage handles the "success" view
           } else {
             await authActions.signInWithPassword(loginData.email, loginData.password);
