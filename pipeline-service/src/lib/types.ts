@@ -66,6 +66,34 @@ export interface ResolvedIdentity {
   confidence: number;
 }
 
+/** Win/loss breakdown by game end type */
+export interface WinLossByType {
+  resignation: number;
+  onTime: number;
+  checkmate: number;
+  other: number;
+}
+
+/** Aggregated clock / flag statistics for online games */
+export interface TimeManagementStats {
+  onlineGames: number;
+  /** Games where platform metadata supports timeout detection */
+  gamesWithEndMetadata: number;
+  lostOnTime: number;
+  wonOnTime: number;
+  /** Among decisive online games (W/L), share of losses that were on time (0–1) */
+  lostOnTimeShareOfLosses: number;
+  /** Among games ending by flag for either side, share the player lost (0–1); undefined if no such games */
+  lostOnTimeShareAmongFlagDecisive?: number;
+  bySpeed: Array<{ speed: string; games: number; lostOnTime: number; wonOnTime: number }>;
+  /** Recent months, oldest → newest (up to ~18) */
+  timeline: Array<{ period: string; games: number; lostOnTime: number; wonOnTime: number }>;
+  /** How the player wins (resignation, on time, checkmate) */
+  winsByType: WinLossByType;
+  /** How the player loses (resignation, on time, checkmate) */
+  lossesByType: WinLossByType;
+}
+
 /** Normalized game data from Chess.com, Lichess, or OTB */
 export interface GameData {
   id: string;
@@ -77,6 +105,11 @@ export interface GameData {
   pgn: string;
   playedAt: string;
   timeControl: string;
+  /** Chess.com player result (e.g. win, timeout, resign) — used for clock stats */
+  chessComWhiteResult?: string;
+  chessComBlackResult?: string;
+  /** Lichess game status (e.g. mate, outoftime, resign) */
+  lichessStatus?: string;
   weight?: number;
   /** Opening name from ECO library when available */
   openingName?: string;
@@ -197,6 +230,10 @@ export interface ScoutingReport {
     }[];
     endgameAccuracy: number;
   };
+  /** Derived from Chess.com / Lichess metadata (not OTB) */
+  timeManagement?: TimeManagementStats;
+  /** AI-generated advice on whether to complicate positions based on opponent's time usage */
+  timeManagementAdvice?: string;
   lastUpdated: string;
 }
 

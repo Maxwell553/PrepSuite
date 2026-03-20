@@ -11,7 +11,8 @@ export function formatTimeControlForDisplay(tc: string | undefined): string {
   const incMatch = s.match(/\d+\+(\d+)/);
   if (!numMatch) return s;
   const num = parseInt(numMatch[1], 10);
-  const baseSeconds = num < 100 ? num * 60 : num;
+  // Lichess uses seconds (60, 180, 300, 600); Chess.com sometimes uses minutes (1, 3, 5, 10)
+  const baseSeconds = num >= 60 && num <= 3600 ? num : num * 60;
   const minutes = Math.round(baseSeconds / 60);
   const increment = incMatch ? parseInt(incMatch[1], 10) : null;
   if (minutes >= 60) {

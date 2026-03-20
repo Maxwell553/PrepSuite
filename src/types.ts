@@ -36,6 +36,28 @@ export interface MoveSequence {
   games: number; // Number of games with this sequence
 }
 
+/** Win/loss breakdown by game end type */
+export interface WinLossByType {
+  resignation: number;
+  onTime: number;
+  checkmate: number;
+  other: number;
+}
+
+/** Aggregated clock / flag statistics (Chess.com + Lichess only) */
+export interface TimeManagementStats {
+  onlineGames: number;
+  gamesWithEndMetadata: number;
+  lostOnTime: number;
+  wonOnTime: number;
+  lostOnTimeShareOfLosses: number;
+  lostOnTimeShareAmongFlagDecisive?: number;
+  bySpeed: Array<{ speed: string; games: number; lostOnTime: number; wonOnTime: number }>;
+  timeline: Array<{ period: string; games: number; lostOnTime: number; wonOnTime: number }>;
+  winsByType: WinLossByType;
+  lossesByType: WinLossByType;
+}
+
 export interface GameData {
   id?: string;
   white: string;
@@ -46,6 +68,9 @@ export interface GameData {
   playedAt: string;
   source: string;
   timeControl?: string;
+  chessComWhiteResult?: string;
+  chessComBlackResult?: string;
+  lichessStatus?: string;
   openingName?: string;
   /** OTB: event name (e.g. tournament) */
   event?: string;
@@ -101,6 +126,9 @@ export interface ScoutingReport {
     }[];
     endgameAccuracy: number;
   };
+  timeManagement?: TimeManagementStats;
+  /** AI-generated advice on whether to complicate positions based on opponent's time usage (Gemini Flash Lite) */
+  timeManagementAdvice?: string;
   lastUpdated: string;
 }
 

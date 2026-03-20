@@ -110,6 +110,12 @@ export function mergeReport(base: ScoutingReport, partial: Partial<ScoutingRepor
   if (partial.engineStats) {
     merged.engineStats = partial.engineStats;
   }
+  if (partial.timeManagement) {
+    merged.timeManagement = partial.timeManagement;
+  }
+  if (typeof partial.timeManagementAdvice === 'string' && partial.timeManagementAdvice.trim()) {
+    merged.timeManagementAdvice = partial.timeManagementAdvice;
+  }
 
   return merged;
 }

@@ -233,4 +233,28 @@ describe('postProcessReport', () => {
     // Verify it's a valid ISO string
     expect(result.lastUpdated).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
+
+  it('attaches timeManagement from online game metadata', () => {
+    const allGames: GameData[] = [
+      {
+        id: '1',
+        source: 'lichess',
+        white: 'Hero',
+        black: 'Other',
+        result: '0-1',
+        eco: 'A00',
+        pgn: '1. e4 e5',
+        playedAt: '2025-06-01T12:00:00.000Z',
+        timeControl: 'blitz',
+        lichessStatus: 'outoftime',
+      },
+    ];
+    const report = makeMinimalReport();
+    const opts = makeOpts({ allGames, actualUsername: 'Hero' });
+
+    const result = postProcessReport(report, opts);
+    expect(result.timeManagement).toBeDefined();
+    expect(result.timeManagement!.lostOnTime).toBe(1);
+    expect(result.timeManagement!.onlineGames).toBe(1);
+  });
 });

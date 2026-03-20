@@ -12,6 +12,7 @@ import type {
 } from '../lib/types.js';
 import { parsePGNMoves } from './moveSequenceExtractor.js';
 import { aggregateOpeningsBySource } from './statsAggregator.js';
+import { computeTimeManagementStats } from './timeManagementAggregator.js';
 
 export interface PostProcessOpts {
   identity: ResolvedIdentity;
@@ -158,6 +159,13 @@ export function postProcessReport(
   if (allGames.length > 0 && targetNames.length > 0) {
     (reportData as ScoutingReport & { openingsBySource?: unknown }).openingsBySource =
       aggregateOpeningsBySource(allGames, targetNames);
+  }
+
+  if (actualUsername) {
+    const tm = computeTimeManagementStats(allGames, actualUsername);
+    if (tm) {
+      reportData.timeManagement = tm;
+    }
   }
 
   return reportData;

@@ -32,11 +32,24 @@ export async function fetchLichessGames(
   );
 
   const allLines: string[] = [];
+  const seenIds = new Set<string>();
+  /** Oldest `createdAt` in the last batch — required so the next request is not a duplicate of the first page */
+  let untilMs: number | undefined;
 
   try {
-    for (let i = 0; i < numRequests; i++) {
-      const maxGames = Math.min(GAMES_PER_REQUEST, targetGames - i * GAMES_PER_REQUEST);
-      const url = `${BASE_URL}/games/user/${username}?max=${maxGames}&opening=true&moves=true&pgnInJson=true`;
+    for (let i = 0; i < numRequests && allLines.length < targetGames; i++) {
+      const maxGames = Math.min(GAMES_PER_REQUEST, targetGames - allLines.length);
+      const params = new URLSearchParams({
+        max: String(maxGames),
+        opening: 'true',
+        // moves=true required for full PGN (repertoire board, move parsing); moves=false returns truncated PGN
+        moves: 'true',
+        pgnInJson: 'true',
+      });
+      if (untilMs !== undefined) {
+        params.set('until', String(untilMs));
+      }
+      const url = `${BASE_URL}/games/user/${encodeURIComponent(username)}?${params.toString()}`;
 
       logger.info({ batch: i + 1, numRequests, url }, '[Lichess] Fetching batch');
 
@@ -63,21 +76,55 @@ export async function fetchLichessGames(
 
       if (lines.length === 0) break;
 
-      allLines.push(...lines);
+      let added = 0;
+      for (const line of lines) {
+        let skip = false;
+        try {
+          const id = (JSON.parse(line) as { id?: string }).id;
+          if (id) {
+            if (seenIds.has(id)) {
+              skip = true;
+            } else {
+              seenIds.add(id);
+            }
+          }
+        } catch {
+          /* keep unparsable lines (rare) */
+        }
+        if (skip) continue;
+        allLines.push(line);
+        added++;
+        if (allLines.length >= targetGames) break;
+      }
+
+      if (lines.length > 0 && added === 0) {
+        logger.warn({ batch: i + 1 }, '[Lichess] No new unique games in batch; stopping pagination');
+        break;
+      }
 
       if (onProgress) {
         onProgress(allLines.length, targetGames);
       }
 
+      const lastLine = lines[lines.length - 1];
+      let oldestCreated: number | undefined;
+      try {
+        oldestCreated = (JSON.parse(lastLine) as { createdAt?: number }).createdAt;
+      } catch {
+        oldestCreated = undefined;
+      }
+
       logger.info(
-        { batch: i + 1, batchSize: lines.length, total: allLines.length },
+        { batch: i + 1, batchSize: lines.length, uniqueAdded: added, total: allLines.length },
         '[Lichess] Batch complete',
       );
 
       if (lines.length < maxGames) break;
+      if (typeof oldestCreated !== 'number') break;
+      untilMs = oldestCreated;
 
       // Brief pause between batches to avoid rate limits (Lichess: one request at a time)
-      if (i < numRequests - 1) {
+      if (allLines.length < targetGames) {
         await new Promise((r) => setTimeout(r, 150));
       }
     }

@@ -55,6 +55,8 @@ interface ChessComGame {
 
 interface LichessGame {
   id: string;
+  /** mate, resign, outoftime, draw, stalemate, cheat, etc. */
+  status?: string;
   players?: {
     white?: { user?: { name?: string; id?: string }; userId?: string; rating?: number };
     black?: { user?: { name?: string; id?: string }; userId?: string; rating?: number };
@@ -172,6 +174,8 @@ export function parseChessComGames(games: unknown[], _targetUsername: string): G
       pgn,
       playedAt: new Date(g.end_time * 1000).toISOString(),
       timeControl: g.time_control || '',
+      chessComWhiteResult: g.white?.result?.toLowerCase(),
+      chessComBlackResult: g.black?.result?.toLowerCase(),
       whiteElo: whiteElo ?? undefined,
       blackElo: blackElo ?? undefined,
     };
@@ -239,6 +243,7 @@ export function parseLichessGames(ndjson: string, _targetUsername: string): Game
         pgn,
         playedAt: new Date(g.createdAt).toISOString(),
         timeControl: g.speed || '',
+        lichessStatus: g.status ? g.status.toLowerCase() : undefined,
         openingName: g.opening?.name || undefined,
         whiteElo,
         blackElo,

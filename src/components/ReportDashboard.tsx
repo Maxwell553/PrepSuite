@@ -2,15 +2,17 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  LineChart, Line, ResponsiveContainer,
+  LineChart, Line, ResponsiveContainer, Legend,
+  PieChart, Pie, Cell,
 } from 'recharts';
 import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, ChevronRight, Activity, Crown, X, BarChart3, Coins } from 'lucide-react';
-import { ScoutingReport, OpeningStat } from '../types';
+import { ScoutingReport, OpeningStat, TimeManagementStats } from '../types';
 import AnalysisBoard from './AnalysisBoard';
 import PracticeOpponent from './PracticeOpponent';
 import RecentGamesList from './RecentGamesList';
 import RepertoireChat from './RepertoireChat';
 import { aggregateOpeningsBySource } from '../lib/openingStats';
+import { formatTimeControlForDisplay } from '../lib/timeControlUtils';
 import { supabase } from '../lib/supabase';
 
 interface ReportDashboardProps {
@@ -27,6 +29,189 @@ interface ReportDashboardProps {
   hideCreditsBadge?: boolean;
   /** Called when user wants to retry with usernames (no games found) */
   onGoToSearch?: () => void;
+}
+
+const PIE_COLORS = { resignation: '#94a3b8', onTime: '#34d399', checkmate: '#f59e0b', other: '#64748b' };
+
+/** Clock / flag stats from Chess.com + Lichess game metadata */
+function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagementStats; timeManagementAdvice?: string }) {
+  const lossPct = (tm.lostOnTimeShareOfLosses * 100).toFixed(1);
+  const flagPct =
+    tm.lostOnTimeShareAmongFlagDecisive != null
+      ? (tm.lostOnTimeShareAmongFlagDecisive * 100).toFixed(1)
+      : null;
+  const winsByType = tm.winsByType ?? { resignation: 0, onTime: 0, checkmate: 0, other: 0 };
+  const lossesByType = tm.lossesByType ?? { resignation: 0, onTime: 0, checkmate: 0, other: 0 };
+  const winsTotal = winsByType.resignation + winsByType.onTime + winsByType.checkmate + winsByType.other;
+  const lossesTotal = lossesByType.resignation + lossesByType.onTime + lossesByType.checkmate + lossesByType.other;
+
+  const winsPieData = [
+    { name: 'Resignation', value: winsByType.resignation, key: 'resignation' },
+    { name: 'On time', value: winsByType.onTime, key: 'onTime' },
+    { name: 'Checkmate', value: winsByType.checkmate, key: 'checkmate' },
+    { name: 'Other', value: winsByType.other, key: 'other' },
+  ].filter((d) => d.value > 0);
+
+  const lossesPieData = [
+    { name: 'Resignation', value: lossesByType.resignation, key: 'resignation' },
+    { name: 'On time', value: lossesByType.onTime, key: 'onTime' },
+    { name: 'Checkmate', value: lossesByType.checkmate, key: 'checkmate' },
+    { name: 'Other', value: lossesByType.other, key: 'other' },
+  ].filter((d) => d.value > 0);
+
+  return (
+    <section className="mt-10 space-y-6">
+      <div className="flex items-center gap-2">
+        <Clock className="w-5 h-5 text-amber-400" />
+        <h3 className="text-xl font-bold text-white">Time management</h3>
+      </div>
+      <p className="text-sm text-slate-400 max-w-3xl">
+        Based on online game metadata from Chess.com and Lichess (timeouts / clock flags). Over-the-board games are excluded.
+      </p>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Online games</div>
+          <div className="text-2xl font-bold text-slate-100 mt-1">{tm.onlineGames.toLocaleString()}</div>
+        </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Lost on time</div>
+          <div className="text-2xl font-bold text-rose-400 mt-1">{tm.lostOnTime.toLocaleString()}</div>
+        </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Won on time</div>
+          <div className="text-2xl font-bold text-emerald-400 mt-1">{tm.wonOnTime.toLocaleString()}</div>
+        </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Share of losses</div>
+          <div className="text-2xl font-bold text-amber-300 mt-1">{lossPct}%</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">Decisive losses ending on time</div>
+        </div>
+      </div>
+
+      {flagPct != null && tm.lostOnTime + tm.wonOnTime > 0 && (
+        <p className="text-xs text-slate-500">
+          When a game ends by flag, this player lost the clock in <span className="text-slate-300 font-semibold">{flagPct}%</span> of those games.
+        </p>
+      )}
+
+      {(timeManagementAdvice ?? '').trim() && (
+        <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-4">
+          <p className="text-sm text-slate-200 leading-relaxed">{timeManagementAdvice}</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {tm.bySpeed.length > 0 && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+            <h4 className="text-sm font-semibold text-slate-200 mb-3">By time control</h4>
+            <div className="grid gap-2">
+              {tm.bySpeed.map((row) => (
+                <div key={row.speed} className="flex items-center justify-between gap-4 py-1.5 px-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                  <span className="text-sm font-medium text-slate-200">{formatTimeControlForDisplay(row.speed)}</span>
+                  <span className="text-xs text-slate-400 shrink-0">
+                    {row.games.toLocaleString()} games · <span className="text-rose-400">{row.lostOnTime}L</span> / <span className="text-emerald-400">{row.wonOnTime}W</span> on time
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {winsTotal > 0 && winsPieData.length > 0 && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+            <h4 className="text-sm font-semibold text-slate-200 mb-3">How they win</h4>
+            <div className="h-52 w-full min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                  <Pie
+                    data={winsPieData}
+                    cx="50%"
+                    cy="45%"
+                    innerRadius={44}
+                    outerRadius={64}
+                    paddingAngle={2}
+                    dataKey="value"
+                    nameKey="name"
+                    label={false}
+                  >
+                    {winsPieData.map((entry) => (
+                      <Cell key={entry.key} fill={PIE_COLORS[entry.key as keyof typeof PIE_COLORS]} />
+                    ))}
+                  </Pie>
+                  <Legend
+                    layout="horizontal"
+                    align="center"
+                    verticalAlign="bottom"
+                    formatter={(value) => {
+                      const item = winsPieData.find((d) => d.name === value);
+                      const pct = item && winsTotal > 0 ? ((item.value / winsTotal) * 100).toFixed(0) : '0';
+                      return <span className="text-slate-300 text-xs">{value} {pct}%</span>;
+                    }}
+                    iconType="circle"
+                    iconSize={8}
+                    wrapperStyle={{ paddingTop: 8 }}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: 8 }}
+                    itemStyle={{ color: '#e2e8f0' }}
+                    labelStyle={{ color: '#f1f5f9' }}
+                    formatter={(value: number, name: string) => [`${value} (${winsTotal > 0 ? ((value / winsTotal) * 100).toFixed(1) : 0}%)`, name]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {lossesTotal > 0 && lossesPieData.length > 0 && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+            <h4 className="text-sm font-semibold text-slate-200 mb-3">How they lose</h4>
+            <div className="h-52 w-full min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                  <Pie
+                    data={lossesPieData}
+                    cx="50%"
+                    cy="45%"
+                    innerRadius={44}
+                    outerRadius={64}
+                    paddingAngle={2}
+                    dataKey="value"
+                    nameKey="name"
+                    label={false}
+                  >
+                    {lossesPieData.map((entry) => (
+                      <Cell key={entry.key} fill={PIE_COLORS[entry.key as keyof typeof PIE_COLORS]} />
+                    ))}
+                  </Pie>
+                  <Legend
+                    layout="horizontal"
+                    align="center"
+                    verticalAlign="bottom"
+                    formatter={(value) => {
+                      const item = lossesPieData.find((d) => d.name === value);
+                      const pct = item && lossesTotal > 0 ? ((item.value / lossesTotal) * 100).toFixed(0) : '0';
+                      return <span className="text-slate-300 text-xs">{value} {pct}%</span>;
+                    }}
+                    iconType="circle"
+                    iconSize={8}
+                    wrapperStyle={{ paddingTop: 8 }}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: 8 }}
+                    itemStyle={{ color: '#e2e8f0' }}
+                    labelStyle={{ color: '#f1f5f9' }}
+                    formatter={(value: number, name: string) => [`${value} (${lossesTotal > 0 ? ((value / lossesTotal) * 100).toFixed(1) : 0}%)`, name]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 function OpeningList({ openings, defaultExpanded = false, id }: { openings: OpeningStat[]; defaultExpanded?: boolean; id?: string }) {
@@ -811,6 +996,10 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
               isSkeleton={!!isGenerating && (blackDefenses?.length ?? 0) === 0}
             />
           </div>
+        )}
+
+        {report.timeManagement && report.timeManagement.onlineGames > 0 && (
+          <TimeManagementSection tm={report.timeManagement} timeManagementAdvice={report.timeManagementAdvice} />
         )}
 
         </>

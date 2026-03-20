@@ -21,6 +21,7 @@ function makeChessComGame(overrides: Record<string, unknown> = {}) {
 function makeLichessGame(overrides: Record<string, unknown> = {}) {
   return {
     id: 'Li1234abcd',
+    status: 'mate',
     players: {
       white: { user: { name: 'DrNykterstein', id: 'drnykterstein' } },
       black: { user: { name: 'Firouzja2003', id: 'firouzja2003' } },
@@ -55,6 +56,8 @@ describe('parseChessComGames', () => {
     expect(g.eco).toBe('B90');
     expect(g.pgn).toContain('1. e4 c5');
     expect(g.timeControl).toBe('600');
+    expect(g.chessComWhiteResult).toBe('win');
+    expect(g.chessComBlackResult).toBe('checkmated');
     // end_time 1700000000 seconds → valid ISO date
     expect(g.playedAt).toBe(new Date(1700000000 * 1000).toISOString());
   });
@@ -162,9 +165,19 @@ describe('parseLichessGames', () => {
     expect(g.eco).toBe('C84');
     expect(g.openingName).toBe('Ruy Lopez: Closed');
     expect(g.timeControl).toBe('blitz');
+    expect(g.lichessStatus).toBe('mate');
     expect(g.playedAt).toBe(new Date(1700000000000).toISOString());
     // PGN constructed from moves string
     expect(g.pgn).toContain('1. e4 e5');
+  });
+
+  it('records outoftime status for clock stats', () => {
+    const ndjson = toLichessNdjson(
+      makeLichessGame({ winner: 'white', status: 'outoftime' }),
+    );
+    const result = parseLichessGames(ndjson, 'X');
+    expect(result[0].lichessStatus).toBe('outoftime');
+    expect(result[0].result).toBe('1-0');
   });
 
   it('maps winner=white to 1-0', () => {
@@ -199,7 +212,8 @@ describe('parseLichessGames', () => {
     const game = makeLichessGame({ pgn: fullPgn, moves: undefined });
     const ndjson = toLichessNdjson(game);
     const result = parseLichessGames(ndjson, 'X');
-    expect(result[0].pgn).toBe(fullPgn);
+    // standardizePgnForBoard ensures a blank line between headers and movetext
+    expect(result[0].pgn).toBe('[Event "Rated Blitz"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 1-0');
   });
 
   it('parses multiple NDJSON lines', () => {

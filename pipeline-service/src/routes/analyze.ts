@@ -9,9 +9,8 @@ import type { GameData } from '../lib/types.js';
 import { resolveIdentity } from '../pipeline/identity.js';
 import { fetchGames } from '../pipeline/gameFetcher.js';
 import { fetchOtbGames } from '../pipeline/otbGames.js';
-import { parseChessComGames, parseLichessGames, standardizePgnForBoard } from '../pipeline/gameParser.js';
-import { fetchLichessPgnBatch } from '../pipeline/lichess.js';
-import { validateAndRefetchPgn, isValidPgn } from '../pipeline/pgnValidator.js';
+import { parseChessComGames, parseLichessGames } from '../pipeline/gameParser.js';
+import { validateAndRefetchPgn } from '../pipeline/pgnValidator.js';
 import { identifyOpeningsBatch } from '../pipeline/openingClassifier.js';
 import { generateStats } from '../pipeline/statsAggregator.js';
 import { extractMostPlayedLines } from '../pipeline/moveSequenceExtractor.js';
@@ -19,6 +18,7 @@ import { StockfishPool } from '../pipeline/enginePool.js';
 import { sampleGamesForAnalysis } from '../pipeline/engineSampler.js';
 import { generateReportParallel } from '../pipeline/geminiReport.js';
 import { postProcessReport } from '../pipeline/reportPostProcessor.js';
+import { generateTimeManagementAdvice } from '../pipeline/timeManagementAdvice.js';
 // MONETIZATION_DISABLED: import { hasEnoughCredits, deductCredits } from '../lib/credits.js';
 
 export const analyzeRoute = new Hono();
@@ -247,24 +247,7 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         identity.lichessUsername,
       );
 
-      // Only refetch PGN for Lichess games that have invalid/missing notation (NDJSON often has usable PGN)
-      if (lichessGames.length > 0) {
-        const needPgn = lichessGames.filter((g) => !isValidPgn(g.pgn));
-        if (needPgn.length > 0) {
-          const lichessIds = needPgn.map((g) => g.id);
-          const pgnMap = await fetchLichessPgnBatch(lichessIds);
-          for (const g of needPgn) {
-            const exportPgn = pgnMap.get(g.id);
-            if (exportPgn) {
-              g.pgn = standardizePgnForBoard(exportPgn);
-            }
-          }
-          logger.info(
-            { needed: needPgn.length, fetched: pgnMap.size },
-            '[Analyze] Lichess PGN refetched for games with invalid notation',
-          );
-        }
-      }
+      // Lichess PGN refetch is handled once in validateAndRefetchPgn (batched) to avoid duplicate export calls
 
       // Respect OTB/online split: take up to otbLimit from OTB, up to onlineLimit from online, then combine
       const otbSlice = otbGames.slice(0, otbLimit);
@@ -406,6 +389,14 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         allGames,
         actualUsername: targetUsername,
       });
+
+      if (report.timeManagement && report.timeManagement.lostOnTime + report.timeManagement.wonOnTime > 0) {
+        try {
+          report.timeManagementAdvice = await generateTimeManagementAdvice(report.timeManagement);
+        } catch (err) {
+          logger.warn({ err: err instanceof Error ? err.message : String(err) }, '[Analyze] Time management advice failed');
+        }
+      }
 
       sse.sendPhase({
         phase: 'report',
