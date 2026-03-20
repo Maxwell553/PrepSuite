@@ -610,6 +610,15 @@ const App: React.FC = () => {
     }
   };
 
+  const handleFeaturedReportBack = () => {
+    setViewingFeaturedReport(null);
+    setShowLandingPage(true);
+    setShowPrivacyPolicy(false);
+    setShowTermsOfService(false);
+    setShowAboutPrepSuite(false);
+    window.history.replaceState({}, '', '/');
+  };
+
   if (viewingFeaturedReport) {
     return (
       <ThemeProvider>
@@ -617,7 +626,7 @@ const App: React.FC = () => {
         <FeaturedReportLayout
           report={viewingFeaturedReport}
           user={user}
-          onBack={closeLandingSubpage}
+          onBack={handleFeaturedReportBack}
         />
         <SupportChat isLoggedIn={!!user} />
       </ThemeProvider>

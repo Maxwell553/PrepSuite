@@ -12,7 +12,7 @@ import PracticeOpponent from './PracticeOpponent';
 import RecentGamesList from './RecentGamesList';
 import RepertoireChat from './RepertoireChat';
 import { aggregateOpeningsBySource } from '../lib/openingStats';
-import { formatTimeControlForDisplay } from '../lib/timeControlUtils';
+import { formatTimeControlForDisplay, getTimeControlSecondsForSort } from '../lib/timeControlUtils';
 import { supabase } from '../lib/supabase';
 
 interface ReportDashboardProps {
@@ -106,7 +106,9 @@ function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagemen
           <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
             <h4 className="text-sm font-semibold text-slate-200 mb-3">By time control</h4>
             <div className="grid gap-2">
-              {tm.bySpeed.map((row) => (
+              {[...tm.bySpeed]
+                .sort((a, b) => getTimeControlSecondsForSort(b.speed) - getTimeControlSecondsForSort(a.speed))
+                .map((row) => (
                 <div key={row.speed} className="flex items-center justify-between gap-4 py-1.5 px-3 rounded-lg bg-slate-950/60 border border-slate-800">
                   <span className="text-sm font-medium text-slate-200">{formatTimeControlForDisplay(row.speed)}</span>
                   <span className="text-xs text-slate-400 shrink-0">

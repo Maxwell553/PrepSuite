@@ -1,3 +1,17 @@
+/** Get base seconds for sorting (longer = higher). Used to order time controls longest-first. */
+export function getTimeControlSecondsForSort(tc: string | undefined): number {
+  const s = (tc || '').trim().toLowerCase();
+  if (!s) return 0;
+  if (s.includes('classical')) return 1800;
+  if (s.includes('rapid')) return 600;
+  if (s.includes('blitz')) return 180;
+  if (s.includes('bullet')) return 60;
+  const numMatch = s.match(/(\d+)/);
+  if (!numMatch) return 0;
+  const num = parseInt(numMatch[1], 10);
+  return num >= 60 && num <= 3600 ? num : num * 60;
+}
+
 /** Format timeControl for display: "180" -> "3 min", "180+2" -> "3+2", "bullet" -> "Bullet" */
 export function formatTimeControlForDisplay(tc: string | undefined): string {
   const s = (tc || '').trim();
