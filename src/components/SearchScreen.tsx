@@ -60,9 +60,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
 
   const [error, setError] = useState<string | null>(null);
   const maxGames = 2500;
-  const [gameLimit, setGameLimit] = useState(1000);
-  const [onlineLimit, setOnlineLimit] = useState(500);
-  const [otbLimit, setOtbLimit] = useState(500);
+  const [gameLimit, setGameLimit] = useState(1500);
+  const [onlineLimit, setOnlineLimit] = useState(750);
+  const [otbLimit, setOtbLimit] = useState(750);
   const [formData, setFormData] = useState({
     name: '',
     chessComUsername: '',
@@ -76,7 +76,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
     { name: '', chessComUsername: '', lichessUsername: '' },
   ]);
   const BATCH_MAX_GAMES = 2500;
-  const [batchGameLimit, setBatchGameLimit] = useState(1000);
+  const [batchGameLimit, setBatchGameLimit] = useState(1500);
   const [saveToFolder, setSaveToFolder] = useState(false);
   const [folderName, setFolderName] = useState('');
   useEffect(() => {

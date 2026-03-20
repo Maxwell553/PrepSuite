@@ -13,6 +13,52 @@ import type {
 import { parsePGNMoves } from './moveSequenceExtractor.js';
 import { aggregateOpeningsBySource } from './statsAggregator.js';
 import { computeTimeManagementStats } from './timeManagementAggregator.js';
+import { enrichChessComGamesFromPgn } from './gameParser.js';
+
+/** Resolve target username from ONLINE games only. OTB uses FIDE names; online uses platform usernames. */
+function resolveTargetUsernameForOnline(
+  games: GameData[],
+  identity: ResolvedIdentity,
+  actualUsername?: string,
+): string {
+  const online = games.filter((g) => g.source === 'chess.com' || g.source === 'lichess');
+  if (online.length === 0) return '';
+
+  const candidates = [
+    identity.chessComUsername,
+    identity.lichessUsername,
+    identity.verifiedName,
+    actualUsername,
+  ].filter(Boolean) as string[];
+
+  if (candidates.length === 0) return '';
+
+  const counts = new Map<string, number>();
+  for (const c of candidates) counts.set(c, 0);
+
+  for (const g of online) {
+    const w = g.white.toLowerCase().trim();
+    const b = g.black.toLowerCase().trim();
+    for (const c of candidates) {
+      const cLower = c.toLowerCase().trim();
+      if (w === cLower || b === cLower || w.includes(cLower) || cLower.includes(w) || b.includes(cLower) || cLower.includes(b)) {
+        counts.set(c, (counts.get(c) ?? 0) + 1);
+        break;
+      }
+    }
+  }
+
+  let best = candidates[0];
+  let bestCount = counts.get(best) ?? 0;
+  for (const c of candidates.slice(1)) {
+    const n = counts.get(c) ?? 0;
+    if (n > bestCount) {
+      best = c;
+      bestCount = n;
+    }
+  }
+  return bestCount > 0 ? best : '';
+}
 
 export interface PostProcessOpts {
   identity: ResolvedIdentity;
@@ -161,8 +207,10 @@ export function postProcessReport(
       aggregateOpeningsBySource(allGames, targetNames);
   }
 
-  if (actualUsername) {
-    const tm = computeTimeManagementStats(allGames, actualUsername);
+  {
+    enrichChessComGamesFromPgn(allGames);
+    const onlineUsername = resolveTargetUsernameForOnline(allGames, identity, actualUsername);
+    const tm = computeTimeManagementStats(allGames, onlineUsername || actualUsername || '');
     if (tm) {
       reportData.timeManagement = tm;
     }

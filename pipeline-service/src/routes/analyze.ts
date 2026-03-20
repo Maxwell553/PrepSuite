@@ -88,7 +88,7 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
   const pipelinePromise = (async () => {
     try {
       const userId = user.sub;
-      const gameLimit = input.gameLimit || 1000;
+      const gameLimit = input.gameLimit || 1500;
       const onlineLimit = input.onlineLimit ?? gameLimit;
       const otbLimit = input.otbLimit ?? 0;
 
@@ -139,10 +139,11 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         },
       );
 
+      const identityDurationMs = Date.now() - identityStart;
       sse.sendPhase({
         phase: 'identity',
         status: 'complete',
-        durationMs: Date.now() - identityStart,
+        durationMs: identityDurationMs,
       });
 
       // Final identity event (ensures complete state)
@@ -197,6 +198,7 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
       }
 
       // ── Phase 2: Game Fetching ─────────────────────────────
+      const gamesStart = Date.now();
       let gameResult: Awaited<ReturnType<typeof fetchGames>> = {
         chessComGames: [],
         lichessGamesNdjson: '',
@@ -222,13 +224,14 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         );
       }
 
+      const gamesDurationMs = Date.now() - gamesStart;
       logger.info(
         {
           chessComGames: gameResult.chessComGames.length,
           lichessGames: gameResult.lichessGamesNdjson
             ? gameResult.lichessGamesNdjson.split('\n').filter((l) => l.trim()).length
             : 0,
-          durationMs: gameResult.durationMs,
+          durationMs: gamesDurationMs,
         },
         '[Analyze] Games fetched',
       );
@@ -307,10 +310,11 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
       // Extract most-played lines
       const moveSequences = extractMostPlayedLines(allGames, targetUsername, 10, 10);
 
+      const parsingDurationMs = Date.now() - parsingStart;
       sse.sendPhase({
         phase: 'parsing',
         status: 'complete',
-        durationMs: Date.now() - parsingStart,
+        durationMs: parsingDurationMs,
         gameCount: allGames.length,
       });
 
@@ -351,15 +355,16 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         }
       }
 
+      const engineDurationMs = Date.now() - engineStart;
       sse.sendPhase({
         phase: 'engine',
         status: 'complete',
-        durationMs: Date.now() - engineStart,
+        durationMs: engineDurationMs,
         gamesAnalyzed: engineAnalysis.length,
       });
 
       logger.info(
-        { gamesAnalyzed: engineAnalysis.length, durationMs: Date.now() - engineStart },
+        { gamesAnalyzed: engineAnalysis.length, durationMs: engineDurationMs },
         '[Analyze] Engine analysis complete',
       );
 
@@ -398,14 +403,26 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         }
       }
 
+      const reportDurationMs = Date.now() - reportStart;
       sse.sendPhase({
         phase: 'report',
         status: 'complete',
-        durationMs: Date.now() - reportStart,
+        durationMs: reportDurationMs,
       });
 
+      const totalDurationMs = identityDurationMs + gamesDurationMs + parsingDurationMs + engineDurationMs + reportDurationMs;
       logger.info(
-        { reportId: report.id, durationMs: Date.now() - reportStart },
+        {
+          reportId: report.id,
+          phaseTimingMs: {
+            identity: identityDurationMs,
+            games: gamesDurationMs,
+            parsing: parsingDurationMs,
+            engine: engineDurationMs,
+            report: reportDurationMs,
+          },
+          totalMs: totalDurationMs,
+        },
         '[Analyze] Report generated',
       );
 

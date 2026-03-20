@@ -111,6 +111,7 @@ export async function runPipeline(
 
   const url = `${baseUrl}/api/analyze`;
 
+  const pipelineStartMs = Date.now();
   const PIPELINE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -217,6 +218,8 @@ export async function runPipeline(
               processLines();
             }
             if (result) {
+              const durationMs = Date.now() - pipelineStartMs;
+              console.log(`[Pipeline] Generation complete in ${(durationMs / 1000).toFixed(1)}s (${durationMs}ms)`);
               resolve(result);
             } else {
               reject(new Error('Pipeline stream ended without complete event'));

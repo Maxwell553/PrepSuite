@@ -53,7 +53,7 @@ export const playerSearchSchema = z.object({
     .int('Game limit must be an integer')
     .min(1, 'Game limit must be at least 1')
     .max(2500, 'Game limit cannot exceed 2500')
-    .default(1000)
+    .default(1500)
     .optional(),
   onlineLimit: z.number()
     .int('Online limit must be an integer')
@@ -67,7 +67,7 @@ export const playerSearchSchema = z.object({
     .optional(),
 }).refine(
   (data) => {
-    const total = data.gameLimit ?? 1000;
+    const total = data.gameLimit ?? 1500;
     const online = data.onlineLimit ?? total;
     const otb = data.otbLimit ?? 0;
     return online + otb === total;
@@ -127,7 +127,7 @@ export function validatePlayerSearch(input: unknown, isPremium?: boolean): Playe
     : input;
   
   const result = playerSearchSchema.parse(sanitized);
-  const total = result.gameLimit ?? 1000;
+  const total = result.gameLimit ?? 1500;
   if (total > maxGames) {
     throw new Error(`Game limit cannot exceed ${maxGames.toLocaleString()} games.`);
   }

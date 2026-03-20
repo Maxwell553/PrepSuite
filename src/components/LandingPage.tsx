@@ -9,6 +9,7 @@ import repertoireChartsImg from '@/assets/landing/repertoire_charts.png';
 import repertoireChatImg from '@/assets/landing/repertoire_chat.png';
 import playerActivityImg from '@/assets/landing/player_activity.png';
 import gameAnalysisBoardImg from '@/assets/landing/game-analysis-board.png';
+import timeManagementImg from '@/assets/landing/time_management.png';
 
 interface LandingPageProps {
     onGetStarted: () => void;
@@ -45,6 +46,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
         { src: generationImg, caption: 'Search any opponent and watch the analysis run.' },
         { src: tacticalRecommendationImg, caption: 'Get a verified tournament profile with strategic insights.' },
         { src: repertoireChartsImg, caption: 'Look at every opening—win rates, draws, and losses at a glance.' },
+        { src: timeManagementImg, caption: 'Analyze how they use their time and where they mess up.' },
         { src: repertoireChatImg, caption: 'Chat with AI to explore openings and player repertoires.' },
         { src: playerActivityImg, caption: 'Player Activity: Track rating history across classical, rapid, and blitz over time.' },
         { src: gameAnalysisBoardImg, caption: 'Explore every game on the board with full move notation.' },
@@ -258,7 +260,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             </div>
                             <h3 className="text-2xl font-bold mb-3 text-white dark:text-white text-gray-900">Multi-Source Game Aggregation</h3>
                             <p className="text-slate-400 dark:text-slate-400 text-gray-600 leading-relaxed">
-                                Analyzes up to 2,000 games from Chess.com, Lichess, and OTB tournament databases. Get a complete picture of your opponent's playing style across online and over-the-board play.
+                                Analyzes up to 2,500 games from Chess.com, Lichess, and OTB tournament databases. Get a complete picture of your opponent's playing style across online and over-the-board play.
                             </p>
                         </div>
 

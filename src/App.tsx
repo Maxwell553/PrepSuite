@@ -73,7 +73,7 @@ const App: React.FC = () => {
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; reportIds: string[] }>({ isOpen: false, reportIds: [] });
   const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
-  const [historyView, setHistoryView] = useState<'folders' | 'individual'>('folders');
+  const [historyView, setHistoryView] = useState<'folders' | 'individual'>('individual');
   const [showUserSettings, setShowUserSettings] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(true);
   const [viewingFeaturedReport, setViewingFeaturedReport] = useState<ScoutingReport | null>(null);

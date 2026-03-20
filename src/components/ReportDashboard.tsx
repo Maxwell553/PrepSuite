@@ -31,7 +31,8 @@ interface ReportDashboardProps {
   onGoToSearch?: () => void;
 }
 
-const PIE_COLORS = { resignation: '#94a3b8', onTime: '#34d399', checkmate: '#f59e0b', other: '#64748b' };
+const WINS_PIE_COLORS = { resignation: '#14532d', onTime: '#86efac', checkmate: '#22c55e', other: '#052e16' };
+const LOSSES_PIE_COLORS = { resignation: '#b91c1c', onTime: '#fda4af', checkmate: '#ef4444', other: '#7f1d1d' };
 
 /** Clock / flag stats from Chess.com + Lichess game metadata */
 function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagementStats; timeManagementAdvice?: string }) {
@@ -91,7 +92,7 @@ function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagemen
 
       {flagPct != null && tm.lostOnTime + tm.wonOnTime > 0 && (
         <p className="text-xs text-slate-500">
-          When a game ends by flag, this player lost the clock in <span className="text-slate-300 font-semibold">{flagPct}%</span> of those games.
+          When a game ends by flag, this player lost on time in <span className="text-slate-300 font-semibold">{flagPct}%</span> of these games.
         </p>
       )}
 
@@ -138,7 +139,7 @@ function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagemen
                     label={false}
                   >
                     {winsPieData.map((entry) => (
-                      <Cell key={entry.key} fill={PIE_COLORS[entry.key as keyof typeof PIE_COLORS]} />
+                      <Cell key={entry.key} fill={WINS_PIE_COLORS[entry.key as keyof typeof WINS_PIE_COLORS]} />
                     ))}
                   </Pie>
                   <Legend
@@ -184,7 +185,7 @@ function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagemen
                     label={false}
                   >
                     {lossesPieData.map((entry) => (
-                      <Cell key={entry.key} fill={PIE_COLORS[entry.key as keyof typeof PIE_COLORS]} />
+                      <Cell key={entry.key} fill={LOSSES_PIE_COLORS[entry.key as keyof typeof LOSSES_PIE_COLORS]} />
                     ))}
                   </Pie>
                   <Legend

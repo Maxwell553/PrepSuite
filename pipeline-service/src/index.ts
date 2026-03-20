@@ -120,6 +120,19 @@ if (fs.existsSync(frontendDir)) {
 
 const port = parseInt(process.env.PORT || '8080', 10);
 
+// Pre-warm Vertex AI access token so the first analyze request doesn't incur ~10s token fetch.
+// The identity phase uses Gemini for username discovery; without pre-warm, that call blocks on token acquisition.
+void (async () => {
+  try {
+    const { getAccessToken } = await import('./lib/vertexAuth.js');
+    const start = Date.now();
+    await getAccessToken();
+    logger.info({ durationMs: Date.now() - start }, '[Startup] Vertex AI token pre-warmed');
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : String(err) }, '[Startup] Vertex token pre-warm failed (will retry on first request)');
+  }
+})();
+
 serve({ fetch: app.fetch, port }, () => {
   logger.info({ port }, 'Pipeline service started');
 });

@@ -115,6 +115,26 @@ describe('parseChessComGames', () => {
     expect(games[0].eco).toBe('C65');
   });
 
+  it('falls back to PGN Termination when API omits white/black result', () => {
+    const pgnWithTermination = `[Event "Live Chess"]
+[Site "Chess.com"]
+[Date "2026.02.07"]
+[White "AlexandraBotez"]
+[Black "bat120"]
+[Result "0-1"]
+[Termination "bat120 won on time"]
+
+1. d4 c6 2. c4 d5 0-1`;
+    const game = makeChessComGame({
+      white: { username: 'AlexandraBotez', result: '' },
+      black: { username: 'bat120', result: '' },
+      pgn: pgnWithTermination,
+    });
+    const result = parseChessComGames([game], 'AlexandraBotez');
+    expect(result[0].chessComWhiteResult).toBe('timeout');
+    expect(result[0].chessComBlackResult).toBe('win');
+  });
+
   it('extracts ECO from a Chess.com URL', () => {
     const games = parseChessComGames(
       [makeChessComGame({ eco: 'https://www.chess.com/openings/Sicilian-Defense-Najdorf-Variation/B90' })],
