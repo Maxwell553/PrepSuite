@@ -137,6 +137,26 @@ function hasEndMetadata(g: GameData): boolean {
   return false;
 }
 
+/** Map raw time control to speed category (bullet/blitz/rapid/classical/correspondence) to avoid duplicate rows. */
+function getSpeedCategory(tc: string | undefined, source?: string): string {
+  const src = (source || '').toLowerCase();
+  if (src === 'otb') return 'classical';
+  const s = (tc || '').toLowerCase().trim();
+  if (s.includes('correspondence')) return 'correspondence';
+  if (s.includes('bullet')) return 'bullet';
+  if (s.includes('blitz')) return 'blitz';
+  if (s.includes('rapid')) return 'rapid';
+  if (s.includes('classical')) return 'classical';
+  const numMatch = s.match(/(\d+)/);
+  if (!numMatch) return 'unknown';
+  const num = parseInt(numMatch[1], 10);
+  const baseSeconds = num >= 60 && num <= 3600 ? num : num * 60;
+  if (baseSeconds < 180) return 'bullet';
+  if (baseSeconds < 600) return 'blitz';
+  if (baseSeconds < 3600) return 'rapid';
+  return 'classical';
+}
+
 /**
  * Build time-management stats for online games only (Chess.com / Lichess).
  */
@@ -157,7 +177,7 @@ export function computeTimeManagementStats(
   for (const g of online) {
     const lost = playerLostOnTime(g, targetUsername);
     const won = playerWonOnTime(g, targetUsername);
-    const speed = (g.timeControl || 'unknown').toLowerCase() || 'unknown';
+    const speed = getSpeedCategory(g.timeControl, g.source);
 
     if (!bySpeed.has(speed)) {
       bySpeed.set(speed, { games: 0, lostOnTime: 0, wonOnTime: 0 });

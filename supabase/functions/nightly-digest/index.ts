@@ -45,7 +45,9 @@ serve(async (req) => {
       );
     }
 
-    const { signups, reports, questions } = digest ?? { signups: 0, reports: 0, questions: 0 };
+    const { signups, reports, questions, total_signups, total_reports } = digest ?? {
+      signups: 0, reports: 0, questions: 0, total_signups: 0, total_reports: 0,
+    };
     const dateStr = new Date().toISOString().slice(0, 10);
 
     const html = `
@@ -55,12 +57,18 @@ serve(async (req) => {
 <body style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
   <h1 style="font-size: 1.25rem; margin-bottom: 8px;">PrepSuite Daily Digest</h1>
   <p style="color: #666; margin-bottom: 24px;">${dateStr}</p>
+  <h2 style="font-size: 0.875rem; font-weight: 600; color: #888; margin-bottom: 8px;">Last 24 hours</h2>
   <table style="width: 100%; border-collapse: collapse;">
     <tr><td style="padding: 12px 0; border-bottom: 1px solid #eee;">New signups</td><td style="text-align: right; font-weight: 600;">${signups}</td></tr>
     <tr><td style="padding: 12px 0; border-bottom: 1px solid #eee;">Reports generated</td><td style="text-align: right; font-weight: 600;">${reports}</td></tr>
     <tr><td style="padding: 12px 0; border-bottom: 1px solid #eee;">Support questions</td><td style="text-align: right; font-weight: 600;">${questions}</td></tr>
   </table>
-  <p style="margin-top: 24px; font-size: 0.875rem; color: #888;">Last 24 hours. Sent only to ${DEVELOPER_EMAIL}.</p>
+  <h2 style="font-size: 0.875rem; font-weight: 600; color: #888; margin: 24px 0 8px;">Cumulative totals</h2>
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr><td style="padding: 12px 0; border-bottom: 1px solid #eee;">Total users signed up</td><td style="text-align: right; font-weight: 600;">${total_signups ?? 0}</td></tr>
+    <tr><td style="padding: 12px 0; border-bottom: 1px solid #eee;">Total reports generated</td><td style="text-align: right; font-weight: 600;">${total_reports ?? 0}</td></tr>
+  </table>
+  <p style="margin-top: 24px; font-size: 0.875rem; color: #888;">Sent only to ${DEVELOPER_EMAIL}.</p>
 </body>
 </html>`;
 

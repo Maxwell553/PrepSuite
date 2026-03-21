@@ -5,6 +5,8 @@ A daily email is sent **only to max@soundside.ai** at 7 PM Eastern with:
 - New signups (last 24h)
 - Reports generated (last 24h)
 - Support questions (last 24h)
+- Total users signed up (cumulative)
+- Total reports generated (cumulative)
 
 ## Prerequisites
 

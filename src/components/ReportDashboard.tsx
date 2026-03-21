@@ -664,13 +664,10 @@ function ActivityReportSection({ player }: { player: ScoutingReport['player'] })
     const controller = new AbortController();
     (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
         const baseUrl = import.meta.env.VITE_PIPELINE_SERVICE_URL || '';
-        const url = `${baseUrl}/api/fide-rating-history/${player.fideId}`;
-        const res = await fetch(url, {
-          signal: controller.signal,
-          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-        });
+        // Use public route so unsigned users (e.g. featured report viewers) can see activity graphs
+        const url = `${baseUrl}/fide-rating-history/${player.fideId}`;
+        const res = await fetch(url, { signal: controller.signal });
         if (res.ok) {
           const { history } = await res.json();
           if (Array.isArray(history) && history.length > 0) {

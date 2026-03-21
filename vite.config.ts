@@ -25,6 +25,10 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           proxyTimeout: 300000, // 5 min — avoid socket hang up on long pipeline requests (FIDE, analyze)
         },
+        '/fide-rating-history': {
+          target: 'http://localhost:8080',
+          changeOrigin: true,
+        },
         '/lichess-export': {
           target: 'https://lichess.org',
           changeOrigin: true,

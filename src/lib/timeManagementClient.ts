@@ -5,6 +5,7 @@
  */
 
 import type { GameData, TimeManagementStats, WinLossByType } from '../types';
+import { getSpeedCategory } from './timeControlUtils';
 
 type EndType = 'resignation' | 'onTime' | 'checkmate' | 'other';
 
@@ -200,7 +201,7 @@ export function computeTimeManagementFromGames(
   for (const g of online) {
     const lost = playerLostOnTime(g, targetUsername);
     const won = playerWonOnTime(g, targetUsername);
-    const speed = (g.timeControl || 'unknown').toLowerCase() || 'unknown';
+    const speed = getSpeedCategory(g.timeControl, g.source);
     if (!bySpeed.has(speed)) bySpeed.set(speed, { games: 0, lostOnTime: 0, wonOnTime: 0 });
     const speedRow = bySpeed.get(speed)!;
     speedRow.games += 1;

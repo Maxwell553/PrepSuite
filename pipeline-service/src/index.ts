@@ -30,6 +30,7 @@ app.use('*', corsMiddleware);
 
 // Public routes
 app.route('/health', healthRoute);
+app.route('/', fideRatingHistoryRoute); // /fide-rating-history/:fideId — public (FIDE data from ChessTools)
 
 // Protected routes
 app.use('/api/*', authMiddleware);
