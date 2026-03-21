@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Shield, Mail, ChevronRight, Search, Database, Target, Zap, TrendingUp, Cpu, Users, Globe, BarChart3, Brain, CheckCircle, ArrowRight, X, Crown, Download } from 'lucide-react';
+import { Shield, Mail, ChevronRight, Search, Database, Target, Zap, TrendingUp, Cpu, Users, Globe, BarChart3, Brain, CheckCircle, ArrowRight, X, Crown } from 'lucide-react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
 import type { ToastType } from './Toast';
@@ -112,16 +112,20 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                 <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-blue-600/5 dark:bg-blue-600/5 bg-blue-100/30 blur-[100px] rounded-full translate-y-1/2 -translate-x-1/2" />
                 {/* Faded report screenshot for depth */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <img
-                        src="/hero-lcp.png"
-                        alt=""
-                        width={901}
-                        height={1024}
-                        decoding="async"
-                        fetchPriority="high"
-                        className="w-full max-w-4xl h-auto opacity-[0.06] object-contain scale-90"
-                        aria-hidden
-                    />
+                    <picture>
+                        <source srcSet="/hero-lcp.webp" type="image/webp" />
+                        <img
+                            src="/hero-lcp.png"
+                            alt=""
+                            width={901}
+                            height={1024}
+                            decoding="async"
+                            fetchPriority="high"
+                            loading="eager"
+                            className="w-full max-w-4xl h-auto opacity-[0.06] object-contain scale-90"
+                            aria-hidden
+                        />
+                    </picture>
                 </div>
 
                 <div className="max-w-7xl mx-auto text-center relative z-10">
@@ -180,12 +184,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                     setLoadingSampleSlug(null);
                                 }
                             };
-                            const handleDownloadJson = async (e: React.MouseEvent) => {
-                                e.stopPropagation();
-                                const { downloadFeaturedReportJson } = await import('../services/featuredReports');
-                                const result = await downloadFeaturedReportJson(item.slug);
-                                if (!result.ok) showToast?.(result.reason, 'error');
-                            };
                             return (
                                 <div
                                     key={item.slug}
@@ -223,14 +221,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                                         <ArrowRight className="w-4 h-4" />
                                                     </>
                                                 )}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={handleDownloadJson}
-                                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-600/80 text-slate-200 text-sm font-medium hover:bg-slate-700/50 transition-colors"
-                                            >
-                                                <Download className="w-4 h-4" />
-                                                JSON
                                             </button>
                                         </div>
                                     </div>

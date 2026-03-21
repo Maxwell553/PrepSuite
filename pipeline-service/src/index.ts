@@ -107,13 +107,28 @@ if (fs.existsSync(frontendDir)) {
   logger.info({ frontendDir }, 'Serving frontend static files');
 
   // Serve static assets (JS, CSS, images, etc.)
-  app.use('/*', serveStatic({ root: frontendDir }));
+  app.use(
+    '/*',
+    serveStatic({
+      root: frontendDir,
+      onFound: (_filePath, c) => {
+        const p = c.req.path;
+        if (p.startsWith('/assets/')) {
+          c.header('Cache-Control', 'public, max-age=31536000, immutable');
+          return;
+        }
+        if (/\.(png|jpe?g|gif|webp|ico|svg|woff2?)$/i.test(p)) {
+          c.header('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    })
+  );
 
   // SPA fallback: any non-API, non-file request gets index.html
   app.get('*', async (c) => {
     const indexPath = path.join(frontendDir, 'index.html');
     const html = fs.readFileSync(indexPath, 'utf-8');
-    return c.html(html);
+    return c.html(html, 200, { 'Cache-Control': 'no-cache' });
   });
 } else {
   logger.warn({ frontendDir }, 'Frontend dist/ not found — run "npm run build" in project root');

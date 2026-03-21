@@ -12,7 +12,8 @@ ENV VITE_PIPELINE_SERVICE_URL=${VITE_PIPELINE_SERVICE_URL}
 
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY index.html vite.config.ts tsconfig.json ./
+# Include every file vite.config.ts imports (plugin lives at repo root, not under src/)
+COPY index.html vite.config.ts vite-plugin-html-optimizations.ts tsconfig.json tailwind.config.js postcss.config.js ./
 COPY src/ ./src/
 COPY public/ ./public/
 RUN npx vite build

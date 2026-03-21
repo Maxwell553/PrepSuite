@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'rea
 import { Search, History, Shield, Database, LayoutDashboard, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, User, Loader2, Trash2, Square, CheckSquare, FolderOpen } from 'lucide-react';
 const SearchScreen = lazy(() => import('./components/SearchScreen'));
 const ReportDashboard = lazy(() => import('./components/ReportDashboard'));
-import Sidebar from './components/Sidebar';
+const Sidebar = lazy(() => import('./components/Sidebar'));
 import OfflineBanner from './components/OfflineBanner';
 import { ScoutingReport } from './types';
 import LandingPage from './components/LandingPage';
@@ -16,7 +16,7 @@ const UserSettings = lazy(() => import('./components/UserSettings'));
 const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('./components/TermsOfService'));
 const AboutPrepSuite = lazy(() => import('./components/AboutPrepSuite'));
-import SupportChat from './components/SupportChat';
+const SupportChat = lazy(() => import('./components/SupportChat'));
 import { ThemeProvider } from './lib/themeContext';
 import { setSentryUser, clearSentryUser } from './lib/sentry';
 import { trackSignUpConversion, trackSignUpConversionIfNewUser } from './lib/googleAds';
@@ -26,36 +26,15 @@ function FeaturedReportLayout({
   report,
   user,
   onBack,
-  featuredSlug,
 }: {
   report: ScoutingReport;
   user: SupabaseUser | null;
   onBack: () => void;
-  featuredSlug?: string | null;
 }) {
   const scrollRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     scrollRef.current?.scrollTo(0, 0);
   }, [report]);
-
-  const resolvedFeaturedSlug =
-    (featuredSlug && featuredSlug.trim()) ||
-    (typeof window !== 'undefined'
-      ? window.location.pathname.replace(/^\/featured\/?/, '').replace(/\/$/, '') || 'scouting-report'
-      : 'scouting-report');
-
-  const handleDownloadCurrentJson = () => {
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${resolvedFeaturedSlug}.json`;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
 
   return (
     <div ref={scrollRef} className="h-screen overflow-y-auto bg-slate-950 dark:bg-slate-950 bg-gray-50">
@@ -63,16 +42,7 @@ function FeaturedReportLayout({
         <button type="button" onClick={onBack} className="text-slate-400 hover:text-white flex items-center gap-2">
           <ChevronLeft className="w-4 h-4" /> Back to home
         </button>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleDownloadCurrentJson}
-            className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 transition-colors"
-          >
-            Download JSON
-          </button>
-          <span className="text-slate-400 text-sm hidden sm:inline">Featured Report — No sign-in required</span>
-        </div>
+        <span className="text-slate-400 text-sm hidden sm:inline">Featured Report — No sign-in required</span>
       </header>
       <main className="max-w-6xl mx-auto p-6">
         <Suspense fallback={<div className="flex items-center justify-center min-h-[400px]"><Loader2 className="w-10 h-10 animate-spin text-indigo-400" /></div>}>
@@ -107,7 +77,6 @@ const App: React.FC = () => {
   const [showUserSettings, setShowUserSettings] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(true);
   const [viewingFeaturedReport, setViewingFeaturedReport] = useState<ScoutingReport | null>(null);
-  const [viewingFeaturedSlug, setViewingFeaturedSlug] = useState<string | null>(null);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(() => window.location.pathname === '/privacy-policy');
   const [showTermsOfService, setShowTermsOfService] = useState(() => window.location.pathname === '/terms-of-service');
   const [showAboutPrepSuite, setShowAboutPrepSuite] = useState(() => window.location.pathname === '/about');
@@ -158,10 +127,14 @@ const App: React.FC = () => {
       setUser(currentUser);
       setLoadingAuth(false); // Always allow render once we get an auth event
 
-      // When user just signed in (OAuth or email link), take them straight to the dashboard.
-      // INITIAL_SESSION fires when page loads with session in URL (OAuth redirect); SIGNED_IN fires on in-app sign-in.
-      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && currentUser) {
+      // Fresh sign-in only: leave INITIAL_SESSION alone so logged-in users can stay on marketing `/` after "Back to home".
+      // (INITIAL_SESSION runs on every load with a stored session and was forcing the app shell + `/analysis`.)
+      if (event === 'SIGNED_IN' && currentUser) {
         setShowLandingPage(false);
+        const p = typeof window !== 'undefined' ? window.location.pathname : '';
+        if (p === '/' || p === '') {
+          window.history.replaceState({}, '', '/analysis');
+        }
         trackSignUpConversionIfNewUser(currentUser.id, currentUser.created_at);
       }
       if (currentUser) {
@@ -209,7 +182,6 @@ const App: React.FC = () => {
     if (path.startsWith('/featured/')) {
       const slug = path.replace(/^\/featured\/?/, '').replace(/\/$/, '') || undefined;
       if (slug) {
-        setViewingFeaturedSlug(slug);
         import('./services/featuredReports').then(({ getFeaturedReport }) => {
           getFeaturedReport(slug).then((report) => {
             if (report) setViewingFeaturedReport(report);
@@ -218,12 +190,10 @@ const App: React.FC = () => {
         });
       } else {
         setViewingFeaturedReport(null);
-        setViewingFeaturedSlug(null);
       }
       setShowLandingPage(false);
     } else {
       setViewingFeaturedReport(null);
-      setViewingFeaturedSlug(null);
       // App routes: only apply when user is logged in (checked by caller)
       if (appRoutes.includes(path)) {
         setShowLandingPage(false);
@@ -255,8 +225,8 @@ const App: React.FC = () => {
       setShowLandingPage(true);
       return;
     }
-    // Logged-in user at / (e.g. returning from OAuth): show dashboard, not landing
-    if (user && (path === '/' || path === '')) {
+    // OAuth / magic-link return: session in URL on home path — go to analysis once (not on every visit to `/` while logged in).
+    if (user && (path === '/' || path === '') && hasAuthParams) {
       setShowLandingPage(false);
       window.history.replaceState({}, '', '/analysis');
       return;
@@ -276,9 +246,6 @@ const App: React.FC = () => {
       if (!user && appRoutes.includes(path)) {
         window.history.replaceState({}, '', '/');
         setShowLandingPage(true);
-      } else if (user && (path === '/' || path === '')) {
-        setShowLandingPage(false);
-        window.history.replaceState({}, '', '/analysis');
       } else {
         syncStateFromPath();
       }
@@ -570,7 +537,6 @@ const App: React.FC = () => {
     setShowTermsOfService(false);
     setShowAboutPrepSuite(false);
     setViewingFeaturedReport(null);
-    setViewingFeaturedSlug(null);
   };
 
   const openTermsOfService = () => {
@@ -579,7 +545,6 @@ const App: React.FC = () => {
     setShowPrivacyPolicy(false);
     setShowAboutPrepSuite(false);
     setViewingFeaturedReport(null);
-    setViewingFeaturedSlug(null);
   };
 
   const openAboutPrepSuite = () => {
@@ -588,7 +553,6 @@ const App: React.FC = () => {
     setShowPrivacyPolicy(false);
     setShowTermsOfService(false);
     setViewingFeaturedReport(null);
-    setViewingFeaturedSlug(null);
   };
 
   /** Always return to marketing home — do not use history.back() (prior entry may be /analysis). */
@@ -598,7 +562,6 @@ const App: React.FC = () => {
     setShowTermsOfService(false);
     setShowAboutPrepSuite(false);
     setViewingFeaturedReport(null);
-    setViewingFeaturedSlug(null);
     setShowLandingPage(true);
   };
 
@@ -615,7 +578,11 @@ const App: React.FC = () => {
         <Suspense fallback={legalFallback}>
           <PrivacyPolicy onBack={closeLandingSubpage} />
         </Suspense>
-        <SupportChat isLoggedIn={!!user} />
+        {user ? (
+          <Suspense fallback={null}>
+            <SupportChat isLoggedIn />
+          </Suspense>
+        ) : null}
       </ThemeProvider>
     );
   }
@@ -627,7 +594,11 @@ const App: React.FC = () => {
         <Suspense fallback={legalFallback}>
           <TermsOfService onBack={closeLandingSubpage} />
         </Suspense>
-        <SupportChat isLoggedIn={!!user} />
+        {user ? (
+          <Suspense fallback={null}>
+            <SupportChat isLoggedIn />
+          </Suspense>
+        ) : null}
       </ThemeProvider>
     );
   }
@@ -639,7 +610,11 @@ const App: React.FC = () => {
         <Suspense fallback={legalFallback}>
           <AboutPrepSuite onBack={closeLandingSubpage} />
         </Suspense>
-        <SupportChat isLoggedIn={!!user} />
+        {user ? (
+          <Suspense fallback={null}>
+            <SupportChat isLoggedIn />
+          </Suspense>
+        ) : null}
       </ThemeProvider>
     );
   }
@@ -649,7 +624,6 @@ const App: React.FC = () => {
     const report = await getFeaturedReport(slug);
     if (report) {
       window.history.pushState({}, '', `/featured/${slug}`);
-      setViewingFeaturedSlug(slug);
       setViewingFeaturedReport(report);
       setShowLandingPage(false);
       setShowPrivacyPolicy(false);
@@ -660,7 +634,6 @@ const App: React.FC = () => {
 
   const handleFeaturedReportBack = () => {
     setViewingFeaturedReport(null);
-    setViewingFeaturedSlug(null);
     setShowLandingPage(true);
     setShowPrivacyPolicy(false);
     setShowTermsOfService(false);
@@ -676,9 +649,12 @@ const App: React.FC = () => {
           report={viewingFeaturedReport}
           user={user}
           onBack={handleFeaturedReportBack}
-          featuredSlug={viewingFeaturedSlug}
         />
-        <SupportChat isLoggedIn={!!user} />
+        {user ? (
+          <Suspense fallback={null}>
+            <SupportChat isLoggedIn />
+          </Suspense>
+        ) : null}
       </ThemeProvider>
     );
   }
@@ -707,7 +683,11 @@ const App: React.FC = () => {
           showToast={showToast}
         />
         </div>
-        <SupportChat isLoggedIn={!!user} />
+        {user ? (
+          <Suspense fallback={null}>
+            <SupportChat isLoggedIn />
+          </Suspense>
+        ) : null}
       </ThemeProvider>
     );
   }
@@ -717,15 +697,25 @@ const App: React.FC = () => {
       {isOffline && <OfflineBanner />}
       <div className="flex h-screen bg-slate-950 dark:bg-slate-950 bg-gray-50 text-slate-100 dark:text-slate-100 text-gray-900 overflow-hidden">
         {!showUserSettings && (
-          <Sidebar 
-            activeTab={activeTab} 
-            setActiveTab={setActiveTab}
-            onLogoClick={() => {
-              setShowLandingPage(true);
-              window.history.pushState({}, '', '/');
-            }}
-            isAnalyzing={isAnalyzing}
-          />
+          <Suspense
+            fallback={
+              <aside
+                className="w-64 flex flex-col hidden md:flex shrink-0 border-r border-slate-800/80 border-gray-200 animate-pulse"
+                style={{ backgroundColor: '#0f0f1a' }}
+                aria-hidden
+              />
+            }
+          >
+            <Sidebar
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              onLogoClick={() => {
+                setShowLandingPage(true);
+                window.history.pushState({}, '', '/');
+              }}
+              isAnalyzing={isAnalyzing}
+            />
+          </Suspense>
         )}
 
         <main className="flex-1 overflow-y-auto relative bg-slate-950 dark:bg-slate-950 bg-gray-50 overscroll-none before:absolute before:inset-0 before:pointer-events-none before:bg-[radial-gradient(ellipse_80%_50%_at_50%_0%,rgba(99,102,241,0.08)_0%,transparent_50%)]" style={{ overscrollBehavior: 'none' }}>
@@ -1007,7 +997,11 @@ const App: React.FC = () => {
           />
         )}
 
-        <SupportChat isLoggedIn={!!user} />
+        {user ? (
+          <Suspense fallback={null}>
+            <SupportChat isLoggedIn />
+          </Suspense>
+        ) : null}
       </div>
     </ThemeProvider>
   );

@@ -1,24 +1,9 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
-    <!-- Stub gtag early (queues events); load gtag.js after window.load to reduce main-thread contention during LCP -->
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      window.gtag = gtag;
-      window.addEventListener('load', function () {
-        var s = document.createElement('script');
-        s.async = true;
-        s.src = 'https://www.googletagmanager.com/gtag/js?id=AW-18020973445';
-        s.onload = function () {
-          gtag('js', new Date());
-          gtag('config', 'AW-18020973445');
-        };
-        document.head.appendChild(s);
-      });
-    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preload" as="image" href="/hero-lcp.webp" type="image/webp" fetchpriority="high">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#0f172a">
     <style>
@@ -59,7 +44,6 @@
     <link rel="icon" href="/tabimage.png" type="image/png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preload" as="image" href="/hero-lcp.png" fetchpriority="high">
     <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2">
     <link rel="preload" as="image" href="/NewLogo.jpg">
     <!-- Non-render-blocking font CSS (swap keeps text visible while fonts load) -->
@@ -92,6 +76,22 @@
         }
       ]
     }
+    </script>
+    <!-- Stub gtag (queues events); load gtag.js after window.load so discovery of LCP image is not delayed by script in the first KB of head -->
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      window.gtag = gtag;
+      window.addEventListener('load', function () {
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=AW-18020973445';
+        s.onload = function () {
+          gtag('js', new Date());
+          gtag('config', 'AW-18020973445');
+        };
+        document.head.appendChild(s);
+      });
     </script>
 </head>
 <body>

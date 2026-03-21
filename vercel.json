@@ -1,7 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/((?!EmailLogo\\.jpg$|.*\\.(jpg|jpeg|png|gif|ico|svg|css|js|json|woff2?)$).*)",
+      "source": "/((?!EmailLogo\\.jpg$|.*\\.(jpg|jpeg|png|gif|ico|svg|webp|css|js|json|woff2?)$).*)",
       "destination": "/index.html"
     }
   ],
@@ -21,6 +21,10 @@
     },
     {
       "source": "/hero-lcp.png",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
+      "source": "/hero-lcp.webp",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
     {
