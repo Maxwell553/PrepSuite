@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react';
 import { Search, History, Shield, Database, LayoutDashboard, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, User, Loader2, Trash2, Square, CheckSquare, FolderOpen } from 'lucide-react';
-import SearchScreen from './components/SearchScreen';
+const SearchScreen = lazy(() => import('./components/SearchScreen'));
 const ReportDashboard = lazy(() => import('./components/ReportDashboard'));
 import Sidebar from './components/Sidebar';
 import OfflineBanner from './components/OfflineBanner';
@@ -22,27 +22,57 @@ import { setSentryUser, clearSentryUser } from './lib/sentry';
 import { trackSignUpConversion, trackSignUpConversionIfNewUser } from './lib/googleAds';
 import { mergeReport } from './lib/reportUtils';
 import { useCredits } from './hooks/useCredits';
-
 function FeaturedReportLayout({
   report,
   user,
   onBack,
+  featuredSlug,
 }: {
   report: ScoutingReport;
   user: SupabaseUser | null;
   onBack: () => void;
+  featuredSlug?: string | null;
 }) {
   const scrollRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     scrollRef.current?.scrollTo(0, 0);
   }, [report]);
+
+  const resolvedFeaturedSlug =
+    (featuredSlug && featuredSlug.trim()) ||
+    (typeof window !== 'undefined'
+      ? window.location.pathname.replace(/^\/featured\/?/, '').replace(/\/$/, '') || 'scouting-report'
+      : 'scouting-report');
+
+  const handleDownloadCurrentJson = () => {
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${resolvedFeaturedSlug}.json`;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div ref={scrollRef} className="h-screen overflow-y-auto bg-slate-950 dark:bg-slate-950 bg-gray-50">
-      <header className="sticky top-0 z-10 backdrop-blur-md bg-slate-950/80 border-b border-slate-800 p-4 flex justify-between items-center">
+      <header className="sticky top-0 z-10 backdrop-blur-md bg-slate-950/80 border-b border-slate-800 p-4 flex flex-wrap gap-3 justify-between items-center">
         <button type="button" onClick={onBack} className="text-slate-400 hover:text-white flex items-center gap-2">
           <ChevronLeft className="w-4 h-4" /> Back to home
         </button>
-        <span className="text-slate-400 text-sm">Featured Report — No sign-in required</span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleDownloadCurrentJson}
+            className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 transition-colors"
+          >
+            Download JSON
+          </button>
+          <span className="text-slate-400 text-sm hidden sm:inline">Featured Report — No sign-in required</span>
+        </div>
       </header>
       <main className="max-w-6xl mx-auto p-6">
         <Suspense fallback={<div className="flex items-center justify-center min-h-[400px]"><Loader2 className="w-10 h-10 animate-spin text-indigo-400" /></div>}>
@@ -77,6 +107,7 @@ const App: React.FC = () => {
   const [showUserSettings, setShowUserSettings] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(true);
   const [viewingFeaturedReport, setViewingFeaturedReport] = useState<ScoutingReport | null>(null);
+  const [viewingFeaturedSlug, setViewingFeaturedSlug] = useState<string | null>(null);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(() => window.location.pathname === '/privacy-policy');
   const [showTermsOfService, setShowTermsOfService] = useState(() => window.location.pathname === '/terms-of-service');
   const [showAboutPrepSuite, setShowAboutPrepSuite] = useState(() => window.location.pathname === '/about');
@@ -178,6 +209,7 @@ const App: React.FC = () => {
     if (path.startsWith('/featured/')) {
       const slug = path.replace(/^\/featured\/?/, '').replace(/\/$/, '') || undefined;
       if (slug) {
+        setViewingFeaturedSlug(slug);
         import('./services/featuredReports').then(({ getFeaturedReport }) => {
           getFeaturedReport(slug).then((report) => {
             if (report) setViewingFeaturedReport(report);
@@ -186,10 +218,12 @@ const App: React.FC = () => {
         });
       } else {
         setViewingFeaturedReport(null);
+        setViewingFeaturedSlug(null);
       }
       setShowLandingPage(false);
     } else {
       setViewingFeaturedReport(null);
+      setViewingFeaturedSlug(null);
       // App routes: only apply when user is logged in (checked by caller)
       if (appRoutes.includes(path)) {
         setShowLandingPage(false);
@@ -536,6 +570,7 @@ const App: React.FC = () => {
     setShowTermsOfService(false);
     setShowAboutPrepSuite(false);
     setViewingFeaturedReport(null);
+    setViewingFeaturedSlug(null);
   };
 
   const openTermsOfService = () => {
@@ -544,6 +579,7 @@ const App: React.FC = () => {
     setShowPrivacyPolicy(false);
     setShowAboutPrepSuite(false);
     setViewingFeaturedReport(null);
+    setViewingFeaturedSlug(null);
   };
 
   const openAboutPrepSuite = () => {
@@ -552,19 +588,18 @@ const App: React.FC = () => {
     setShowPrivacyPolicy(false);
     setShowTermsOfService(false);
     setViewingFeaturedReport(null);
+    setViewingFeaturedSlug(null);
   };
 
+  /** Always return to marketing home — do not use history.back() (prior entry may be /analysis). */
   const closeLandingSubpage = () => {
-    if (window.history.length > 1) {
-      window.history.back();
-    } else {
-      window.history.replaceState({}, '', '/');
-      setShowPrivacyPolicy(false);
-      setShowTermsOfService(false);
-      setShowAboutPrepSuite(false);
-      setViewingFeaturedReport(null);
-      setShowLandingPage(true);
-    }
+    window.history.replaceState({}, '', '/');
+    setShowPrivacyPolicy(false);
+    setShowTermsOfService(false);
+    setShowAboutPrepSuite(false);
+    setViewingFeaturedReport(null);
+    setViewingFeaturedSlug(null);
+    setShowLandingPage(true);
   };
 
   if (showPrivacyPolicy) {
@@ -602,6 +637,7 @@ const App: React.FC = () => {
     const report = await getFeaturedReport(slug);
     if (report) {
       window.history.pushState({}, '', `/featured/${slug}`);
+      setViewingFeaturedSlug(slug);
       setViewingFeaturedReport(report);
       setShowLandingPage(false);
       setShowPrivacyPolicy(false);
@@ -612,6 +648,7 @@ const App: React.FC = () => {
 
   const handleFeaturedReportBack = () => {
     setViewingFeaturedReport(null);
+    setViewingFeaturedSlug(null);
     setShowLandingPage(true);
     setShowPrivacyPolicy(false);
     setShowTermsOfService(false);
@@ -627,6 +664,7 @@ const App: React.FC = () => {
           report={viewingFeaturedReport}
           user={user}
           onBack={handleFeaturedReportBack}
+          featuredSlug={viewingFeaturedSlug}
         />
         <SupportChat isLoggedIn={!!user} />
       </ThemeProvider>
@@ -654,6 +692,7 @@ const App: React.FC = () => {
           onShowTermsOfService={openTermsOfService}
           onShowAboutPrepSuite={openAboutPrepSuite}
           onViewFeaturedReport={handleViewFeaturedReport}
+          showToast={showToast}
         />
         </div>
         <SupportChat isLoggedIn={!!user} />
@@ -721,21 +760,29 @@ const App: React.FC = () => {
 
               <div className={`p-6 mx-auto ${activeTab === 'dashboard' && selectedReport ? 'max-w-[90rem]' : 'max-w-7xl'}`}>
                 {activeTab === 'search' && (
-                  <SearchScreen 
-                    onReportGenerated={handleReportGenerated} 
-                    onReportPartialUpdate={handleReportPartialUpdate}
-                    user={user}
-                    credits={credits}
-                    hasEnoughCredits={() => true}
-                    isAnalyzing={isAnalyzing}
-                    setIsAnalyzing={setIsAnalyzing}
-                    loadingProgress={loadingProgress}
-                    setLoadingProgress={setLoadingProgress}
-                    loadingStage={loadingStage}
-                    setLoadingStage={setLoadingStage}
-                    scanningStatus={scanningStatus}
-                    setScanningStatus={setScanningStatus}
-                  />
+                  <Suspense
+                    fallback={
+                      <div className="flex items-center justify-center min-h-[320px]">
+                        <Loader2 className="w-10 h-10 animate-spin text-indigo-400" />
+                      </div>
+                    }
+                  >
+                    <SearchScreen
+                      onReportGenerated={handleReportGenerated}
+                      onReportPartialUpdate={handleReportPartialUpdate}
+                      user={user}
+                      credits={credits}
+                      hasEnoughCredits={() => true}
+                      isAnalyzing={isAnalyzing}
+                      setIsAnalyzing={setIsAnalyzing}
+                      loadingProgress={loadingProgress}
+                      setLoadingProgress={setLoadingProgress}
+                      loadingStage={loadingStage}
+                      setLoadingStage={setLoadingStage}
+                      scanningStatus={scanningStatus}
+                      setScanningStatus={setScanningStatus}
+                    />
+                  </Suspense>
                 )}
 
                 {selectedReport && (

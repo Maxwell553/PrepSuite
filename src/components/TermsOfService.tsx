@@ -7,33 +7,32 @@ interface TermsOfServiceProps {
 
 const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
   return (
-    <div className="min-h-screen bg-slate-950 dark:bg-slate-950 bg-white text-slate-100 dark:text-slate-100 text-gray-900">
-      {/* Header */}
-      <header className="sticky top-0 z-10 backdrop-blur-md bg-slate-950/80 dark:bg-slate-950/80 bg-white/80 border-b border-slate-800 dark:border-slate-800 border-gray-200 p-4">
+    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-slate-950 dark:bg-slate-950 bg-white text-slate-100 dark:text-slate-100 text-gray-900">
+      <header className="shrink-0 z-10 bg-slate-950 dark:bg-slate-950 bg-white border-b border-slate-800 dark:border-slate-800 border-gray-200 p-4">
         <div className="max-w-4xl mx-auto flex items-center gap-4">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 text-slate-400 dark:text-slate-400 text-gray-600 hover:text-white dark:hover:text-white hover:text-gray-900 transition-colors"
+            className="flex items-center gap-2 text-slate-300 dark:text-slate-300 text-gray-600 hover:text-white dark:hover:text-white hover:text-gray-900 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span className="text-sm font-medium">Back</span>
           </button>
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-indigo-500 dark:text-indigo-500 text-indigo-600" />
-            <h1 className="text-xl font-semibold text-white dark:text-white text-gray-900">Terms of Service</h1>
+            <p className="text-xl font-semibold text-white dark:text-white text-gray-900">Terms of Service</p>
           </div>
         </div>
       </header>
 
-      {/* Content */}
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
       <div className="max-w-4xl mx-auto py-8 px-6">
         <div className="prose prose-invert dark:prose-invert max-w-none">
           {/* Title */}
           <h1 className="text-3xl font-bold mb-2 text-white dark:text-white text-gray-900">TERMS OF SERVICE</h1>
-          <p className="text-slate-400 dark:text-slate-400 text-gray-600 mb-8">Last updated January 18, 2026</p>
+          <p className="text-slate-300 dark:text-slate-300 text-gray-600 mb-8">Last updated January 18, 2026</p>
 
           {/* Main Content */}
-          <div className="space-y-6 text-slate-300 dark:text-slate-300 text-gray-700 leading-relaxed">
+          <div className="space-y-6 text-slate-200 dark:text-slate-200 text-gray-700 leading-relaxed">
             <p>
               These Terms of Service ("Terms") govern your access to and use of PrepSuite ("Service", "we", "us", or "our"), operated by SoundSideDesign LLC ("Company", "we", "us", or "our"). By accessing or using our Service, you agree to be bound by these Terms. If you disagree with any part of these Terms, then you may not access the Service.
             </p>
@@ -232,6 +231,7 @@ const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
           </div>
         </div>
       </div>
+      </main>
     </div>
   );
 };

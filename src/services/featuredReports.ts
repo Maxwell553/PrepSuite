@@ -98,6 +98,30 @@ function resolveTargetUsername(report: ScoutingReport): string {
   return best;
 }
 
+/** Download the raw JSON asset for a featured/candidates sample (for editing or re-uploading to `public/featured-reports/`). */
+export async function downloadFeaturedReportJson(slug: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+  try {
+    const res = await fetch(`${BASE}/${slug}.json`);
+    if (!res.ok) {
+      return { ok: false, reason: res.status === 404 ? 'No JSON published for this slug yet.' : `Could not download (${res.status}).` };
+    }
+    const text = await res.text();
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${slug}.json`;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: 'Download failed.' };
+  }
+}
+
 export async function getFeaturedReport(slug: string): Promise<ScoutingReport | null> {
   try {
     const res = await fetch(`${BASE}/${slug}.json`);

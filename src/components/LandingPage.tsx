@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Shield, Mail, ChevronRight, Search, Database, Target, Zap, TrendingUp, Cpu, Users, Globe, BarChart3, Brain, CheckCircle, ArrowRight, X, Crown } from 'lucide-react';
+import { Shield, Mail, ChevronRight, Search, Database, Target, Zap, TrendingUp, Cpu, Users, Globe, BarChart3, Brain, CheckCircle, ArrowRight, X, Crown, Download } from 'lucide-react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
+import type { ToastType } from './Toast';
 import generationImg from '@/assets/landing/generation.png';
 import tacticalRecommendationImg from '@/assets/landing/tactical_recommendation.png';
 import repertoireChartsImg from '@/assets/landing/repertoire_charts.png';
@@ -19,15 +20,16 @@ interface LandingPageProps {
     onShowTermsOfService?: () => void;
     onShowAboutPrepSuite?: () => void;
     onViewFeaturedReport?: (slug: string) => Promise<void>;
+    showToast?: (message: string, type: ToastType) => void;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, onShowPrivacyPolicy, onShowTermsOfService, onShowAboutPrepSuite, onViewFeaturedReport }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, onShowPrivacyPolicy, onShowTermsOfService, onShowAboutPrepSuite, onViewFeaturedReport, showToast }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [view, setView] = useState<'login' | 'signup' | 'success'>('login');
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const [featuredList, setFeaturedList] = useState<{ slug: string; name: string; title?: string; federation?: string; rating?: number }[]>([]);
-    const [loadingFeatured, setLoadingFeatured] = useState<string | null>(null);
+    const [loadingSampleSlug, setLoadingSampleSlug] = useState<string | null>(null);
 
     useEffect(() => {
         import('../services/featuredReports').then(({ getFeaturedReportList }) => {
@@ -76,12 +78,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
     }, [lightboxIndex]);
 
     return (
-        <div className="min-h-screen bg-slate-950 dark:bg-slate-950 bg-white text-slate-100 dark:text-slate-100 text-slate-900 selection:bg-indigo-500/30 overflow-x-hidden">
-            {/* Navigation */}
-            <nav className="fixed top-0 w-full z-50 backdrop-blur-xl bg-slate-950/50 dark:bg-slate-950/50 bg-white/90 border-b border-slate-800/50 dark:border-slate-800/50 border-gray-200 px-6 py-4">
+        <>
+            <nav aria-label="Primary" className="fixed top-0 w-full z-50 backdrop-blur-xl bg-slate-950/50 dark:bg-slate-950/50 bg-white/90 border-b border-slate-800/50 dark:border-slate-800/50 border-gray-200 px-6 py-4">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
                     <div className="flex items-center select-none py-1">
-                        <img src="/NewLogo.jpg" alt="Prepsuite.ai" className="h-10 w-auto max-h-10 object-contain object-left flex-shrink-0 select-none" draggable={false} />
+                        <img src="/NewLogo.jpg" alt="Prepsuite.ai" width={565} height={144} className="h-10 w-auto max-h-10 object-contain object-left flex-shrink-0 select-none" draggable={false} />
                     </div>
                     <div className="flex items-center gap-4">
                         {user ? (
@@ -103,6 +104,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                 </div>
             </nav>
 
+            <main id="landing-main" className="min-h-screen bg-slate-950 dark:bg-slate-950 bg-white text-slate-100 dark:text-slate-100 text-slate-900 selection:bg-indigo-500/30 overflow-x-hidden">
             {/* Hero Section */}
             <section className="relative pt-32 pb-12 px-6 overflow-hidden bg-slate-950 dark:bg-slate-950 bg-white">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_0%,rgba(99,102,241,0.08)_0%,transparent_50%)] pointer-events-none" />
@@ -113,6 +115,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                     <img
                         src={repertoireChartsImg}
                         alt=""
+                        width={901}
+                        height={1024}
+                        decoding="async"
+                        fetchPriority="high"
                         className="w-full max-w-4xl h-auto opacity-[0.06] object-contain scale-90"
                         aria-hidden
                     />
@@ -125,7 +131,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                     <h1 className="text-5xl md:text-7xl font-sans font-bold tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-b from-white via-white to-slate-500 dark:from-white dark:via-white dark:to-slate-500 from-gray-900 via-gray-900 to-gray-700 max-w-4xl mx-auto leading-[1.1] animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-200">
                         Master Your Opponent Analysis
                     </h1>
-                    <p className="text-xl text-slate-400 dark:text-slate-400 text-gray-600 max-w-2xl mx-auto mb-12 leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300">
+                    <p className="text-xl text-slate-300 dark:text-slate-300 text-gray-600 max-w-2xl mx-auto mb-12 leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300">
                         Bridge the gap between tournament and online play. Get comprehensive scouting reports from Chess.com, Lichess, and OTB tournament databases.
                     </p>
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-400">
@@ -139,7 +145,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                 </div>
             </section>
 
-            {/* Featured Reports - "The Hook" - moved up for conversion */}
+            {/* Featured sample reports */}
             <section
                 ref={featuredRef.ref}
                 className={`py-24 px-6 relative overflow-hidden ${
@@ -164,14 +170,21 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                         {featuredList.map((item) => {
                             const handleClick = async () => {
                                 if (!onViewFeaturedReport) return;
-                                setLoadingFeatured(item.slug);
+                                setLoadingSampleSlug(item.slug);
                                 try {
                                     const { getFeaturedReport } = await import('../services/featuredReports');
                                     const report = await getFeaturedReport(item.slug);
                                     if (report) await onViewFeaturedReport(item.slug);
+                                    else showToast?.('Sample report is not available yet for this player.', 'error');
                                 } finally {
-                                    setLoadingFeatured(null);
+                                    setLoadingSampleSlug(null);
                                 }
+                            };
+                            const handleDownloadJson = async (e: React.MouseEvent) => {
+                                e.stopPropagation();
+                                const { downloadFeaturedReportJson } = await import('../services/featuredReports');
+                                const result = await downloadFeaturedReportJson(item.slug);
+                                if (!result.ok) showToast?.(result.reason, 'error');
                             };
                             return (
                                 <div
@@ -180,12 +193,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                     tabIndex={0}
                                     onClick={handleClick}
                                     onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-                                    className="group relative w-full bg-slate-800/80 dark:bg-slate-800/80 border border-slate-700/60 dark:border-slate-700/60 rounded-2xl p-6 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-500/40 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 flex flex-col min-h-[120px]"
+                                    className="group relative w-full bg-slate-800/80 dark:bg-slate-800/80 border border-slate-700/60 dark:border-slate-700/60 rounded-2xl p-5 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-500/40 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 flex flex-col min-h-[120px]"
                                     style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.05) inset, 0 0 20px rgba(251,191,36,0.08)' }}
                                 >
-                                    <div className="flex items-stretch gap-4 flex-1">
-                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                            <div className="text-white dark:text-white font-bold text-lg">{item.name}</div>
+                                    <div className="flex flex-col gap-3 flex-1">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-white dark:text-white font-bold text-lg leading-tight">{item.name}</div>
                                             <div className="flex flex-wrap items-center gap-2 mt-1">
                                                 {item.title && (
                                                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-400/25 text-amber-300 border border-amber-400/40 shadow-[0_0_12px_rgba(251,191,36,0.2)]">
@@ -197,19 +210,29 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                                 )}
                                             </div>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); handleClick(); }}
-                                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-sm font-semibold transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-indigo-500/25 disabled:opacity-50 shrink-0"
-                                            disabled={!onViewFeaturedReport || loadingFeatured !== null}
-                                        >
-                                            {loadingFeatured === item.slug ? 'Loading...' : (
-                                                <>
-                                                    View
-                                                    <ArrowRight className="w-4 h-4" />
-                                                </>
-                                            )}
-                                        </button>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); handleClick(); }}
+                                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-sm font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/25 disabled:opacity-50"
+                                                disabled={!onViewFeaturedReport || loadingSampleSlug !== null}
+                                            >
+                                                {loadingSampleSlug === item.slug ? 'Loading...' : (
+                                                    <>
+                                                        View
+                                                        <ArrowRight className="w-4 h-4" />
+                                                    </>
+                                                )}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleDownloadJson}
+                                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-600/80 text-slate-200 text-sm font-medium hover:bg-slate-700/50 transition-colors"
+                                            >
+                                                <Download className="w-4 h-4" />
+                                                JSON
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -459,13 +482,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
             <section 
                 id="access" 
                 ref={loginRef.ref}
-                className={`min-h-screen py-12 px-6 bg-slate-950 dark:bg-slate-950 bg-white ${
+                className={`py-16 md:py-24 px-6 bg-slate-950 dark:bg-slate-950 bg-white ${
                     loginRef.isVisible ? 'animate-fade-in-up' : ''
                 }`}
                 style={loginRef.isVisible ? {} : { opacity: 0 }}
             >
                 <div className="max-w-7xl mx-auto">
-                    <div className="grid lg:grid-cols-2 gap-12 items-center">
+                    <div className="grid lg:grid-cols-2 gap-12 items-start">
                         {/* Left side - Content */}
                         <div className="space-y-8">
                             <div>
@@ -475,7 +498,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                 <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-400 dark:from-white dark:to-slate-400 from-gray-900 to-gray-600">
                                     {view === 'success' ? 'Verification Required' : (view === 'login' ? 'Welcome Back' : 'Join PrepSuite')}
                                 </h2>
-                                <p className="text-slate-400 dark:text-slate-400 text-gray-600 text-lg">
+                                <p className="text-slate-300 dark:text-slate-300 text-gray-600 text-lg">
                                     {view === 'success'
                                         ? 'We\'ve sent a verification link to your inbox to authorize this device.'
                                         : 'Access the PrepSuite platform with your credentials to start analyzing opponents.'}
@@ -587,7 +610,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                 onClick={() => onLogin('google')}
                                 className="w-full bg-slate-950 dark:bg-slate-950 bg-white text-white dark:text-white text-gray-900 px-10 py-4 rounded-2xl font-bold text-lg hover:bg-slate-900 dark:hover:bg-slate-900 hover:bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 shadow-xl flex items-center justify-center gap-3 transition-all hover:border-indigo-500/30 dark:hover:border-indigo-500/30 hover:border-indigo-600"
                             >
-                                        <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
+                                        <img src="https://www.google.com/favicon.ico" alt="Google" width={20} height={20} className="w-5 h-5" />
                                         Continue with Google
                                     </button>
                                 </div>
@@ -602,13 +625,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
             <footer className="bg-slate-950 dark:bg-slate-950 bg-white border-t border-slate-800 dark:border-slate-800 border-gray-200 py-8 px-6">
                 <div className="max-w-7xl mx-auto">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                        <div className="text-slate-400 dark:text-slate-400 text-gray-600 text-sm">
+                        <div className="text-slate-300 dark:text-slate-300 text-gray-600 text-sm">
                             © {new Date().getFullYear()} SoundSideDesign. All rights reserved.
                         </div>
                         <div className="flex items-center gap-6">
                             <a
                                 href="/about"
-                                className="text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 text-sm transition-colors"
+                                className="text-slate-200 dark:text-slate-200 text-gray-700 hover:text-white dark:hover:text-white hover:text-indigo-700 text-sm font-medium transition-colors underline-offset-4 hover:underline"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     if (onShowAboutPrepSuite) {
@@ -620,7 +643,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             </a>
                             <a
                                 href="/privacy-policy"
-                                className="text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 text-sm transition-colors"
+                                className="text-slate-200 dark:text-slate-200 text-gray-700 hover:text-white dark:hover:text-white hover:text-indigo-700 text-sm font-medium transition-colors underline-offset-4 hover:underline"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     if (onShowPrivacyPolicy) {
@@ -632,7 +655,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             </a>
                             <a
                                 href="/terms-of-service"
-                                className="text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 text-sm transition-colors"
+                                className="text-slate-200 dark:text-slate-200 text-gray-700 hover:text-white dark:hover:text-white hover:text-indigo-700 text-sm font-medium transition-colors underline-offset-4 hover:underline"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     if (onShowTermsOfService) {
@@ -646,7 +669,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                     </div>
                 </div>
             </footer>
-        </div>
+            </main>
+        </>
     );
 };
 

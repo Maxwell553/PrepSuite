@@ -15,7 +15,9 @@
     <meta name="theme-color" content="#0f172a">
     <style>
       html{color-scheme:only dark}
-      html,body{background-color:#0f172a;color:#f1f5f9}
+      html,body{background-color:#0f172a;color:#e8e8e8}
+      /* Approximate hero LCP text so first paint is readable before Tailwind bundle */
+      #root:empty{min-height:100vh}
     </style>
     <script>(function(){var h=document.documentElement;h.classList.add('dark');h.style.colorScheme='dark'})();</script>
     <title>PrepSuite — AI-Powered Chess Opponent Scouting</title>
@@ -37,7 +39,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preload" as="image" href="/NewLogo.jpg">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&family=Dancing+Script:wght@500;600;700&display=swap" rel="stylesheet">
+    <!-- Non-render-blocking font CSS (swap keeps text visible while fonts load) -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&family=Dancing+Script:wght@500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&family=Dancing+Script:wght@500;600;700&display=swap"></noscript>
     <link rel="stylesheet" href="/src/index.css">
     <script type="application/ld+json">
     {

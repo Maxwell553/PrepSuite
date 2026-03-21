@@ -29,7 +29,9 @@ html {
 
 html, body {
     overflow-x: hidden;
-    overscroll-behavior: none;
+    /* Allow vertical document scroll (wheel / trackpad); avoid blocking page scroll in Chrome */
+    overscroll-behavior-y: auto;
+    overscroll-behavior-x: none;
 }
 
 body {
