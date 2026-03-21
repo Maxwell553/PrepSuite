@@ -113,7 +113,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                 {/* Faded report screenshot for depth */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <img
-                        src={repertoireChartsImg}
+                        src="/hero-lcp.png"
                         alt=""
                         width={901}
                         height={1024}
@@ -162,7 +162,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                         <h2 className="text-4xl md:text-5xl font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-400 dark:from-white dark:to-slate-400 from-gray-900 to-gray-600 text-center">
                             Featured Reports
                         </h2>
-                        <p className="text-slate-500 dark:text-slate-500 text-gray-500 text-base mt-3 text-center max-w-xl">
+                        <p className="text-slate-400 dark:text-slate-400 text-gray-500 text-base mt-3 text-center max-w-xl">
                             Explore sample scouting reports of top players. No sign-in required.
                         </p>
                     </div>
@@ -549,7 +549,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                 <div className="space-y-6 relative z-10">
                                     <form onSubmit={handleEmailPasswordSubmit} className="space-y-4">
                                     <div className="space-y-2">
-                                    <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-slate-500 text-gray-600 ml-1">Email Address</label>
+                                    <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 dark:text-slate-400 text-gray-600 ml-1">Email Address</label>
                                     <div className="relative group">
                                         <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-600 dark:text-slate-600 text-gray-400 group-focus-within:text-indigo-400 dark:group-focus-within:text-indigo-400 group-focus-within:text-indigo-600 transition-colors" />
                                         <input
@@ -564,7 +564,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-slate-500 text-gray-600 ml-1">Password</label>
+                                    <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 dark:text-slate-400 text-gray-600 ml-1">Password</label>
                                     <div className="relative group">
                                         <Shield className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-600 dark:text-slate-600 text-gray-400 group-focus-within:text-indigo-400 dark:group-focus-within:text-indigo-400 group-focus-within:text-indigo-600 transition-colors" />
                                         <input
@@ -590,7 +590,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                     <button
                                         type="button"
                                         onClick={() => setView(view === 'login' ? 'signup' : 'login')}
-                                        className="text-sm text-slate-500 dark:text-slate-500 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 transition-colors"
+                                        className="text-sm text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 hover:text-indigo-600 transition-colors"
                                     >
                                         {view === 'login' ? 'New here? Initialize account' : 'Already have an account? Log in here'}
                                     </button>
@@ -601,7 +601,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                                 <div className="absolute inset-0 flex items-center">
                                     <div className="w-full border-t border-slate-800 dark:border-slate-800 border-gray-200"></div>
                                 </div>
-                                <div className="relative flex justify-center text-[10px] uppercase tracking-[0.2em] text-slate-600 dark:text-slate-600 text-gray-500">
+                                <div className="relative flex justify-center text-[10px] uppercase tracking-[0.2em] text-slate-400 dark:text-slate-400 text-gray-500">
                                     <span className="bg-slate-900/40 dark:bg-slate-900/40 bg-gray-50 px-4">Social Login</span>
                                 </div>
                             </div>

@@ -1,13 +1,21 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18020973445"></script>
+    <!-- Stub gtag early (queues events); load gtag.js after window.load to reduce main-thread contention during LCP -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'AW-18020973445');
+      window.gtag = gtag;
+      window.addEventListener('load', function () {
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=AW-18020973445';
+        s.onload = function () {
+          gtag('js', new Date());
+          gtag('config', 'AW-18020973445');
+        };
+        document.head.appendChild(s);
+      });
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,9 +23,22 @@
     <meta name="theme-color" content="#0f172a">
     <style>
       html{color-scheme:only dark}
-      html,body{background-color:#0f172a;color:#e8e8e8}
-      /* Approximate hero LCP text so first paint is readable before Tailwind bundle */
-      #root:empty{min-height:100vh}
+      html,body{margin:0;background-color:#0f172a;color:#e8e8e8}
+      /* Critical path: paint hero before JS/CSS bundle (removed when React mounts) */
+      #root{min-height:100vh}
+      .ps-static-hero{
+        min-height:100vh;background:#0f172a;color:#e8e8e8;
+        padding:7.5rem 1.5rem 3rem;text-align:center;
+        font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      }
+      .ps-static-hero .ps-badge{display:inline-flex;align-items:center;gap:.5rem;padding:.5rem 1rem;border-radius:9999px;
+        background:rgba(15,23,42,.5);border:1px solid rgba(99,102,241,.35);color:#c7d2fe;font-size:.75rem;font-weight:700;
+        letter-spacing:.1em;text-transform:uppercase;margin-bottom:2rem}
+      .ps-static-hero h1{font-size:clamp(2.25rem,8vw,4.5rem);font-weight:700;line-height:1.1;margin:0 auto 1.5rem;max-width:42rem;
+        color:#fff;letter-spacing:-.02em}
+      .ps-static-hero p{font-size:1.125rem;line-height:1.625;margin:0 auto 3rem;max-width:36rem;color:#cbd5e1}
+      .ps-static-hero .ps-cta{display:inline-block;padding:1.15rem 2.5rem;background:#fff;color:#0f172a;font-weight:700;
+        font-size:1.05rem;border-radius:1rem;text-decoration:none;box-shadow:0 25px 50px -12px rgba(255,255,255,.15)}
     </style>
     <script>(function(){var h=document.documentElement;h.classList.add('dark');h.style.colorScheme='dark'})();</script>
     <title>PrepSuite — AI-Powered Chess Opponent Scouting</title>
@@ -38,6 +59,8 @@
     <link rel="icon" href="/tabimage.png" type="image/png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="image" href="/hero-lcp.png" fetchpriority="high">
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2">
     <link rel="preload" as="image" href="/NewLogo.jpg">
     <!-- Non-render-blocking font CSS (swap keeps text visible while fonts load) -->
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&family=Dancing+Script:wght@500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
@@ -72,7 +95,14 @@
     </script>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="ps-static-hero" id="ps-static-hero" aria-hidden="true">
+        <div class="ps-badge">Advanced Chess Preparation</div>
+        <h1>Master Your Opponent Analysis</h1>
+        <p>Bridge the gap between tournament and online play. Get comprehensive scouting reports from Chess.com, Lichess, and OTB tournament databases.</p>
+        <span class="ps-cta">Start Analyzing</span>
+      </div>
+    </div>
     <noscript>
       <main id="prepsuite-content" role="main" style="max-width: 720px; margin: 2rem auto; padding: 2rem; font-family: system-ui, sans-serif; line-height: 1.6; color: #f1f5f9;">
         <article>

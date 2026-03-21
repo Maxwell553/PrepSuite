@@ -327,7 +327,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-700 dark:border-slate-700 border-gray-300 rounded-xl px-4 py-3 pl-11 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-500 focus:border-indigo-600 transition-colors font-medium text-white dark:text-white text-gray-900 shadow-inner placeholder:text-slate-600 dark:placeholder:text-slate-600 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
                         placeholder="Enter Player Name"
                       />
-                      <User className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-500 text-gray-400" />
+                      <User className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-400 text-gray-400" />
                     </div>
                   </div>
 
@@ -336,7 +336,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 transition-colors uppercase tracking-widest"
+                  className="flex items-center gap-2 text-xs font-bold text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 transition-colors uppercase tracking-widest"
                 >
                   {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   Manually link accounts (optional)
@@ -344,7 +344,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                 {showAdvanced && (
                   <div className="grid grid-cols-2 gap-4 mt-3">
                     <div className="relative group">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-2 uppercase tracking-widest">Chess.com</label>
+                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-400 text-gray-600 mb-2 uppercase tracking-widest">Chess.com</label>
                       <input
                         type="text"
                         value={formData.chessComUsername}
@@ -355,7 +355,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                       />
                     </div>
                     <div className="relative group">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-2 uppercase tracking-widest">Lichess</label>
+                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-400 text-gray-600 mb-2 uppercase tracking-widest">Lichess</label>
                       <input
                         type="text"
                         value={formData.lichessUsername}
@@ -405,7 +405,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         type="button"
                         onClick={() => setBatchPlayers((p) => p.length > 1 ? p.filter((_, j) => j !== i) : p)}
                         disabled={batchPlayers.length <= 1 || loading}
-                        className="p-2 text-slate-500 hover:text-red-400 disabled:opacity-50"
+                        className="p-2 text-slate-400 hover:text-red-400 disabled:opacity-50"
                       >
                         ×
                       </button>
@@ -451,7 +451,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
               {!batchMode && (
               <>
               <div className="relative group space-y-3 pt-4">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 text-gray-600 mb-3 uppercase tracking-widest">Number of Games to Analyze</label>
+                    <label className="block text-xs font-bold text-slate-400 dark:text-slate-400 text-gray-600 mb-3 uppercase tracking-widest">Number of Games to Analyze</label>
 
                     {/* Total Games Slider */}
                     <div className="space-y-2">
@@ -574,7 +574,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                 type="submit"
                 disabled={loading}
                 className={`w-full py-4 rounded-xl flex items-center justify-center gap-3 font-bold text-lg transition-all px-4 ${loading
-                  ? 'bg-slate-800 dark:bg-slate-800 bg-gray-200 text-slate-500 dark:text-slate-500 text-gray-500 cursor-not-allowed'
+                  ? 'bg-slate-800 dark:bg-slate-800 bg-gray-200 text-slate-400 dark:text-slate-400 text-gray-500 cursor-not-allowed'
                   : batchMode ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xl shadow-amber-500/20' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-500/20'
                   } `}
               >
@@ -609,7 +609,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
               className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-800/30 transition-colors"
             >
               <span className="text-indigo-400 dark:text-indigo-400 font-bold text-sm uppercase tracking-widest">Tips</span>
-              {tipsExpanded ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+              {tipsExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
             </button>
             {tipsExpanded && (
               <div className="px-5 pb-5 space-y-4 border-t border-slate-700/50">

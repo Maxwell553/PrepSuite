@@ -188,7 +188,7 @@ export const BatchSearch: React.FC<BatchSearchProps> = ({
               type="button"
               onClick={() => removePlayer(i)}
               disabled={players.length <= 1 || loading}
-              className="p-2 text-slate-500 hover:text-red-400 disabled:opacity-50"
+              className="p-2 text-slate-400 hover:text-red-400 disabled:opacity-50"
             >
               ×
             </button>

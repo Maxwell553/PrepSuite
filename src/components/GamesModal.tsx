@@ -123,18 +123,18 @@ const GamesModal: React.FC<GamesModalProps> = ({
 
         <div className="px-6 py-4 space-y-4 border-b border-slate-700">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search opponent or opening..."
-              className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-600 rounded-xl text-white placeholder:text-slate-500"
+              className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-600 rounded-xl text-white placeholder:text-slate-400"
             />
           </div>
           <div className="flex flex-wrap gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 uppercase">Speed:</span>
+              <span className="text-xs text-slate-400 uppercase">Speed:</span>
               {(['all', 'bullet', 'blitz', 'rapid', 'classical'] as const).map((s) => (
                 <button
                   key={s}
@@ -149,7 +149,7 @@ const GamesModal: React.FC<GamesModalProps> = ({
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 uppercase">Color:</span>
+              <span className="text-xs text-slate-400 uppercase">Color:</span>
               {(['both', 'white', 'black'] as const).map((c) => (
                 <button
                   key={c}
@@ -164,7 +164,7 @@ const GamesModal: React.FC<GamesModalProps> = ({
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 uppercase">Result:</span>
+              <span className="text-xs text-slate-400 uppercase">Result:</span>
               {(['all', 'wins', 'draws', 'losses'] as const).map((r) => (
                 <button
                   key={r}
@@ -180,9 +180,9 @@ const GamesModal: React.FC<GamesModalProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-4 text-sm">
-            <BarChart3 className="w-4 h-4 text-slate-500" />
+            <BarChart3 className="w-4 h-4 text-slate-400" />
             <span className="text-emerald-400 font-mono">{stats.wins}W</span>
-            <span className="text-slate-500 font-mono">{stats.draws}D</span>
+            <span className="text-slate-400 font-mono">{stats.draws}D</span>
             <span className="text-red-400 font-mono">{stats.losses}L</span>
             <span className="text-slate-400">• {stats.winRate}% win rate</span>
           </div>
@@ -216,18 +216,18 @@ const GamesModal: React.FC<GamesModalProps> = ({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-slate-200 truncate">{opponent}</div>
-                    <div className="text-xs text-slate-500 truncate">{g.openingName || g.eco || 'Unknown'}</div>
+                    <div className="text-xs text-slate-400 truncate">{g.openingName || g.eco || 'Unknown'}</div>
                   </div>
                   <div className="text-slate-400 text-sm shrink-0">
                     {opponentElo != null ? opponentElo : '—'} · {formatTimeControlForDisplay(g.timeControl)}
                   </div>
-                  <div className="text-slate-500 text-xs shrink-0">{dateStr}</div>
+                  <div className="text-slate-400 text-xs shrink-0">{dateStr}</div>
                 </button>
               );
             })}
           </div>
           {filteredGames.length === 0 && (
-            <p className="text-center text-slate-500 py-8">No games match filters</p>
+            <p className="text-center text-slate-400 py-8">No games match filters</p>
           )}
         </div>
       </div>

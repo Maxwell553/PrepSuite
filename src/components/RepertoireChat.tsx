@@ -129,10 +129,10 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
       <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-lg opacity-60">
         <div className="w-full flex items-center justify-between p-4 cursor-not-allowed">
           <div className="flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-slate-500" />
+            <MessageSquare className="w-5 h-5 text-slate-400" />
             <h3 className="text-lg font-semibold text-slate-400">Repertoire Analysis Chat</h3>
           </div>
-          <span className="text-sm text-slate-500">Requires sign in</span>
+          <span className="text-sm text-slate-400">Requires sign in</span>
         </div>
       </div>
     );

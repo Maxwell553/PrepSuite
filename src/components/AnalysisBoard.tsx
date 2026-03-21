@@ -186,7 +186,7 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
   if (!gamesSafe.length) {
     return (
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
-        <Database className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+        <Database className="w-12 h-12 text-slate-400 mx-auto mb-4" />
         <p className="text-slate-400">No games available for analysis</p>
       </div>
     );
@@ -255,7 +255,7 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-            <div className="text-slate-500 text-xs text-center">
+            <div className="text-slate-400 text-xs text-center">
               {path.length > 0 ? `${path.length} move(s) from start` : 'Starting position'}
             </div>
           </div>
@@ -310,7 +310,7 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
                         <div className="bg-slate-500" style={{ width: `${drawPct}%` }} title="Draws" />
                         <div className="bg-red-500" style={{ width: `${lossPct}%` }} title="Losses" />
                       </div>
-                      <div className="text-xs text-slate-500">{winPct}% {drawPct}% {lossPct}%</div>
+                      <div className="text-xs text-slate-400">{winPct}% {drawPct}% {lossPct}%</div>
                     </div>
                     <table className="w-full text-sm border-collapse table-fixed">
                       <thead>
@@ -357,7 +357,7 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
                       </tbody>
                     </table>
                     {moveStats.length === 0 && (
-                      <p className="text-sm text-slate-500 py-4 text-center">No {repertoireSide} data</p>
+                      <p className="text-sm text-slate-400 py-4 text-center">No {repertoireSide} data</p>
                     )}
                   </>
                 );

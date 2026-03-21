@@ -138,11 +138,11 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onLogout, onA
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold mb-1 block">Email</label>
+                <label className="text-xs text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold mb-1 block">Email</label>
                 <p className="text-slate-300 dark:text-slate-300 text-gray-700">{user.email}</p>
               </div>
               <div>
-                <label className="text-xs text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold mb-1 block">User ID</label>
+                <label className="text-xs text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold mb-1 block">User ID</label>
                 <p className="text-slate-400 dark:text-slate-400 text-gray-600 font-mono text-sm">{user.id}</p>
               </div>
             </div>

@@ -91,7 +91,7 @@ class ErrorBoundary extends Component<Props, State> {
               
               {isDevelopment && errorStack && (
                 <details className="mt-4">
-                  <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400 mb-2">
+                  <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-400 mb-2">
                     Error Stack Trace
                   </summary>
                   <pre className="text-xs text-slate-600 overflow-auto max-h-48 bg-slate-900 p-3 rounded border border-slate-800">
@@ -102,7 +102,7 @@ class ErrorBoundary extends Component<Props, State> {
 
               {isDevelopment && componentStack && (
                 <details className="mt-4">
-                  <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400 mb-2">
+                  <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-400 mb-2">
                     Component Stack
                   </summary>
                   <pre className="text-xs text-slate-600 overflow-auto max-h-48 bg-slate-900 p-3 rounded border border-slate-800">
@@ -130,7 +130,7 @@ class ErrorBoundary extends Component<Props, State> {
             </div>
 
             {!isDevelopment && (
-              <p className="text-xs text-slate-500 text-center mt-6">
+              <p className="text-xs text-slate-400 text-center mt-6">
                 If this problem persists, please contact support with the error details above.
               </p>
             )}

@@ -72,26 +72,26 @@ function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagemen
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Online games</div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Online games</div>
           <div className="text-2xl font-bold text-slate-100 mt-1">{tm.onlineGames.toLocaleString()}</div>
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Lost on time</div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Lost on time</div>
           <div className="text-2xl font-bold text-rose-400 mt-1">{tm.lostOnTime.toLocaleString()}</div>
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Won on time</div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Won on time</div>
           <div className="text-2xl font-bold text-emerald-400 mt-1">{tm.wonOnTime.toLocaleString()}</div>
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Share of losses</div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Share of losses</div>
           <div className="text-2xl font-bold text-amber-300 mt-1">{lossPct}%</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Decisive losses ending on time</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Decisive losses ending on time</div>
         </div>
       </div>
 
       {flagPct != null && tm.lostOnTime + tm.wonOnTime > 0 && (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-400">
           When a game ends by flag, this player lost on time in <span className="text-slate-300 font-semibold">{flagPct}%</span> of these games.
         </p>
       )}
@@ -339,7 +339,7 @@ function PracticeBarWithModals({
                     : 'bg-slate-800/80 text-slate-400 hover:bg-slate-700/80 hover:text-slate-200 border border-slate-700'
                 }`}
               >
-                <Crown className={`w-5 h-5 shrink-0 ${playerColor === 'white' ? 'text-amber-600' : 'text-slate-500'}`} />
+                <Crown className={`w-5 h-5 shrink-0 ${playerColor === 'white' ? 'text-amber-600' : 'text-slate-400'}`} />
                 You play White
               </button>
               <button
@@ -351,7 +351,7 @@ function PracticeBarWithModals({
                     : 'bg-slate-800/80 text-slate-400 hover:bg-slate-700/80 hover:text-slate-200 border border-slate-700'
                 }`}
               >
-                <Crown className={`w-5 h-5 shrink-0 ${playerColor === 'black' ? 'text-amber-400' : 'text-slate-500'}`} />
+                <Crown className={`w-5 h-5 shrink-0 ${playerColor === 'black' ? 'text-amber-400' : 'text-slate-400'}`} />
                 You play Black
               </button>
             </div>
@@ -501,7 +501,7 @@ function StrategicProfileWithRecent({
                 })}
               </div>
             ) : (
-              <p className="text-sm text-slate-500">No openings with 20+ games and ≥50% win rate.</p>
+              <p className="text-sm text-slate-400">No openings with 20+ games and ≥50% win rate.</p>
             )}
           </div>
 
@@ -553,7 +553,7 @@ function StrategicProfileWithRecent({
                 })}
               </div>
             ) : (
-              <p className="text-sm text-slate-500">No openings with 20+ games and below 50% win rate.</p>
+              <p className="text-sm text-slate-400">No openings with 20+ games and below 50% win rate.</p>
             )}
           </div>
 
@@ -747,12 +747,12 @@ function ActivityReportSection({ player }: { player: ScoutingReport['player'] })
             <p className="text-slate-400 text-sm mb-4">No games found for analysis. Current ratings:</p>
             <div className="grid grid-cols-2 gap-6">
               <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">FIDE Rating</div>
+                <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">FIDE Rating</div>
                 <div className="text-3xl font-bold text-indigo-400">{fideRating ?? '—'}</div>
                 <div className="text-xs text-slate-400 mt-1">{player.titles?.join(', ') || 'No title'}</div>
               </div>
               <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">USCF Rating</div>
+                <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">USCF Rating</div>
                 <div className="text-3xl font-bold text-emerald-400">{uscfRating ?? '—'}</div>
                 <div className="text-xs text-slate-400 mt-1">{player.country || ''}</div>
               </div>
@@ -876,7 +876,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
         )}
         <div className="py-8 px-10 grid grid-cols-2 md:grid-cols-4 gap-8 bg-slate-950/30 dark:bg-slate-950/30 bg-gray-50 border-t border-slate-800 dark:border-slate-800 border-gray-200">
           <div className="space-y-1">
-            <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Chess.com</div>
+            <div className="text-[10px] text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold">Chess.com</div>
             <div className="text-sm font-semibold text-emerald-400 dark:text-emerald-400 text-emerald-600">
               {player.platforms.chessCom ? (
                 <a
@@ -892,7 +892,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
             </div>
           </div>
           <div className="space-y-1">
-            <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Lichess</div>
+            <div className="text-[10px] text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold">Lichess</div>
             <div className="text-sm font-semibold text-indigo-400 dark:text-indigo-400 text-indigo-600">
               {player.platforms.lichess ? (
                 <a
@@ -908,7 +908,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
             </div>
           </div>
           <div className="space-y-1">
-            <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Game Sources</div>
+            <div className="text-[10px] text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold">Game Sources</div>
             <div className="text-sm text-slate-300 dark:text-slate-300 text-gray-700">
               {report.games && report.games.length > 0 ? (() => {
                 const bySource = (report.games as { source?: string }[]).reduce((acc, g) => {
@@ -926,7 +926,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
             </div>
           </div>
           <div className="space-y-1">
-            <div className="text-[10px] text-slate-500 dark:text-slate-500 text-gray-500 uppercase tracking-widest font-bold">Total Games</div>
+            <div className="text-[10px] text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold">Total Games</div>
             <div className="text-sm font-semibold text-indigo-400 dark:text-indigo-400 text-indigo-600">
               {report.games?.length ?? (((whiteOpenings || []).reduce((s, o) => s + (o.totalGames || 0), 0) + (blackDefenses || []).reduce((s, o) => s + (o.totalGames || 0), 0)) || 0)}
             </div>

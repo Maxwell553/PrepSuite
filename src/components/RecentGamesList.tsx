@@ -52,7 +52,7 @@ const RecentGamesList: React.FC<RecentGamesListProps> = ({
     >
       <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <Clock className="w-6 h-6 text-slate-500" />
+          <Clock className="w-6 h-6 text-slate-400" />
           <span className="text-base font-semibold text-slate-300">Recent</span>
         </div>
         <button
@@ -87,10 +87,10 @@ const RecentGamesList: React.FC<RecentGamesListProps> = ({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-slate-200 truncate">{opponent}</div>
-                <div className="text-sm text-slate-500 truncate mt-0.5">{g.openingName || g.eco || 'Unknown'}</div>
+                <div className="text-sm text-slate-400 truncate mt-0.5">{g.openingName || g.eco || 'Unknown'}</div>
               </div>
               <div className="text-slate-400 text-sm shrink-0">{opponentElo != null ? opponentElo : '—'}</div>
-              <div className="text-slate-500 text-xs shrink-0">{formatTimeControlForDisplay(g.timeControl)}</div>
+              <div className="text-slate-400 text-xs shrink-0">{formatTimeControlForDisplay(g.timeControl)}</div>
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0 ${
                 isWin ? 'bg-emerald-500/30 text-emerald-400' : isLoss ? 'bg-red-500/30 text-red-400' : 'bg-amber-500/30 text-amber-400'
               }`}>

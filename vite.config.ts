@@ -2,6 +2,7 @@ import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { htmlOptimizationsPlugin } from './vite-plugin-html-optimizations';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
@@ -43,9 +44,12 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
+      htmlOptimizationsPlugin(),
     ],
     build: {
       minify: 'esbuild',
+      /** Helps Lighthouse "Best Practices" and error tracking; maps are separate .map files. */
+      sourcemap: isProduction,
       // Remove console.log statements in production builds
       esbuildOptions: {
         drop: isProduction ? ['console', 'debugger'] : [],

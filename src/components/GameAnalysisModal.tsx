@@ -146,21 +146,21 @@ const GameAnalysisModal: React.FC<GameAnalysisModalProps> = ({
           <div className="mb-4 text-sm text-center space-y-1">
             <div>
               <span className={`font-semibold ${getResultColor()}`}>{getResultLabel()}</span>
-              <span className="text-slate-500"> · </span>
+              <span className="text-slate-400"> · </span>
               <span className="text-slate-200">
                 {game.whiteTitle && <span className="text-amber-400/90">{game.whiteTitle} </span>}
                 {game.white}
                 {game.whiteElo != null && <span className="text-slate-400"> ({game.whiteElo})</span>}
               </span>
-              <span className="text-slate-500"> vs </span>
+              <span className="text-slate-400"> vs </span>
               <span className="text-slate-200">
                 {game.blackTitle && <span className="text-amber-400/90">{game.blackTitle} </span>}
                 {game.black}
                 {game.blackElo != null && <span className="text-slate-400"> ({game.blackElo})</span>}
               </span>
-              <span className="text-slate-500"> · {game.eco || game.openingName || 'Unknown'}</span>
+              <span className="text-slate-400"> · {game.eco || game.openingName || 'Unknown'}</span>
             </div>
-            <div className="text-slate-500 text-xs">
+            <div className="text-slate-400 text-xs">
               {currentMoveIndex === -1 ? 'Starting position' : `Move ${currentMoveIndex + 1} of ${moveHistory.length}`}
               <span className="mx-2">·</span>
               {game.source === 'otb' && game.event ? game.event : game.source === 'lichess' ? 'Lichess' : game.source === 'chess.com' ? 'Chess.com' : game.source || 'Unknown'}
@@ -181,7 +181,7 @@ const GameAnalysisModal: React.FC<GameAnalysisModalProps> = ({
               </div>
             ) : (
               <div className="aspect-square w-full max-w-md flex items-center justify-center bg-slate-800/40 rounded-xl border border-dashed border-slate-600">
-                <p className="text-slate-500">No valid PGN</p>
+                <p className="text-slate-400">No valid PGN</p>
               </div>
             )}
 

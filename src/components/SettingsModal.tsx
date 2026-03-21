@@ -33,7 +33,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               Default Federation
             </label>
             <div className="p-4 bg-slate-950 dark:bg-slate-950 bg-slate-50 border border-slate-800 dark:border-slate-800 border-slate-200 rounded-xl space-y-3">
-              <p className="text-xs text-slate-500 dark:text-slate-500 text-slate-600">
+              <p className="text-xs text-slate-400 dark:text-slate-400 text-slate-600">
                 Select your default federation. This will affect which input fields are shown by default in the search form.
               </p>
               <div className="flex gap-3">

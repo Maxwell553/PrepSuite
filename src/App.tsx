@@ -12,10 +12,10 @@ import { playerRepository } from './services/playerRepository';
 import Toast, { ToastType } from './components/Toast';
 import ConfirmationModal from './components/ConfirmationModal';
 import { getUserFriendlyError, logError } from './lib/errorUtils';
-import UserSettings from './components/UserSettings';
-import PrivacyPolicy from './components/PrivacyPolicy';
-import TermsOfService from './components/TermsOfService';
-import AboutPrepSuite from './components/AboutPrepSuite';
+const UserSettings = lazy(() => import('./components/UserSettings'));
+const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('./components/TermsOfService'));
+const AboutPrepSuite = lazy(() => import('./components/AboutPrepSuite'));
 import SupportChat from './components/SupportChat';
 import { ThemeProvider } from './lib/themeContext';
 import { setSentryUser, clearSentryUser } from './lib/sentry';
@@ -602,11 +602,19 @@ const App: React.FC = () => {
     setShowLandingPage(true);
   };
 
+  const legalFallback = (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center" aria-busy="true" aria-label="Loading">
+      <Loader2 className="w-10 h-10 animate-spin text-indigo-400" />
+    </div>
+  );
+
   if (showPrivacyPolicy) {
     return (
       <ThemeProvider>
         {isOffline && <OfflineBanner />}
-        <PrivacyPolicy onBack={closeLandingSubpage} />
+        <Suspense fallback={legalFallback}>
+          <PrivacyPolicy onBack={closeLandingSubpage} />
+        </Suspense>
         <SupportChat isLoggedIn={!!user} />
       </ThemeProvider>
     );
@@ -616,7 +624,9 @@ const App: React.FC = () => {
     return (
       <ThemeProvider>
         {isOffline && <OfflineBanner />}
-        <TermsOfService onBack={closeLandingSubpage} />
+        <Suspense fallback={legalFallback}>
+          <TermsOfService onBack={closeLandingSubpage} />
+        </Suspense>
         <SupportChat isLoggedIn={!!user} />
       </ThemeProvider>
     );
@@ -626,7 +636,9 @@ const App: React.FC = () => {
     return (
       <ThemeProvider>
         {isOffline && <OfflineBanner />}
-        <AboutPrepSuite onBack={closeLandingSubpage} />
+        <Suspense fallback={legalFallback}>
+          <AboutPrepSuite onBack={closeLandingSubpage} />
+        </Suspense>
         <SupportChat isLoggedIn={!!user} />
       </ThemeProvider>
     );
@@ -719,32 +731,39 @@ const App: React.FC = () => {
         <main className="flex-1 overflow-y-auto relative bg-slate-950 dark:bg-slate-950 bg-gray-50 overscroll-none before:absolute before:inset-0 before:pointer-events-none before:bg-[radial-gradient(ellipse_80%_50%_at_50%_0%,rgba(99,102,241,0.08)_0%,transparent_50%)]" style={{ overscrollBehavior: 'none' }}>
           {showUserSettings ? (
             <div className="h-full overflow-y-auto">
-              <UserSettings
-                user={user}
-                onBack={() => {
-                setShowUserSettings(false);
-                window.history.pushState({}, '', pathByTab[activeTab]);
-              }}
-                onLogout={handleLogout}
-                onAccountDeleted={() => {
-                  setShowUserSettings(false);
-                  setShowLandingPage(true);
-                  // User will be signed out by UserSettings component
-                }}
-                credits={credits}
-                onCreditsPurchased={refetchCredits}
-              />
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center min-h-[50vh]">
+                    <Loader2 className="w-10 h-10 animate-spin text-indigo-400" />
+                  </div>
+                }
+              >
+                <UserSettings
+                  user={user}
+                  onBack={() => {
+                    setShowUserSettings(false);
+                    window.history.pushState({}, '', pathByTab[activeTab]);
+                  }}
+                  onLogout={handleLogout}
+                  onAccountDeleted={() => {
+                    setShowUserSettings(false);
+                    setShowLandingPage(true);
+                  }}
+                  credits={credits}
+                  onCreditsPurchased={refetchCredits}
+                />
+              </Suspense>
             </div>
           ) : (
             <>
               <header className="sticky top-0 z-10 backdrop-blur-md bg-slate-950/80 dark:bg-slate-950/80 bg-gray-50/80 border-b border-slate-800 dark:border-slate-800 border-gray-200 p-4 flex justify-between items-center">
-                <span className="text-[0.9rem] font-normal text-slate-500 dark:text-slate-500 text-gray-600 uppercase tracking-widest">V1.1 Stable</span>
+                <span className="text-[0.9rem] font-normal text-slate-400 dark:text-slate-400 text-gray-600 uppercase tracking-widest">V1.1 Stable</span>
                 <div className="flex items-center gap-4">
                   <div className="hidden sm:block bg-slate-900 dark:bg-slate-900 bg-gray-100 border border-emerald-500/50 dark:border-emerald-500/50 border-emerald-400 px-3 py-1 rounded-full text-xs font-medium text-emerald-400 dark:text-emerald-400 text-emerald-600">
                     Live Database Sync
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 dark:text-slate-500 text-gray-600 hidden md:block">{user.email}</span>
+                    <span className="text-xs text-slate-400 dark:text-slate-400 text-gray-600 hidden md:block">{user.email}</span>
                     <div
                       onClick={() => {
                         setShowUserSettings(true);
@@ -809,7 +828,7 @@ const App: React.FC = () => {
                 {activeTab === 'dashboard' && !selectedReport && (
                   <div className="flex flex-col items-center justify-center h-[60vh] text-center">
                     <div className="w-16 h-16 bg-slate-900 dark:bg-slate-900 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
-                      <LayoutDashboard className="w-8 h-8 text-slate-500 dark:text-slate-500 text-gray-400" />
+                      <LayoutDashboard className="w-8 h-8 text-slate-400 dark:text-slate-400 text-gray-400" />
                     </div>
                     <h2 className="text-2xl font-bold mb-2 text-white dark:text-white text-gray-900">No Active Report</h2>
                     <p className="text-slate-400 dark:text-slate-400 text-gray-600 max-w-md">Select an opponent to initialize the PrepSuite analysis engine.</p>
@@ -867,7 +886,7 @@ const App: React.FC = () => {
                       )}
                     </div>
                     {history.length === 0 ? (
-                      <p className="text-slate-500 dark:text-slate-500 text-gray-600 italic">No historical searches available.</p>
+                      <p className="text-slate-400 dark:text-slate-400 text-gray-600 italic">No historical searches available.</p>
                     ) : historyView === 'individual' ? (
                       <div className="space-y-4">
                         {allReportsFlat.map((h) => (
@@ -879,7 +898,7 @@ const App: React.FC = () => {
                             }`}
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <button onClick={(e) => toggleReportSelection(h.id!, e)} className="flex-shrink-0 p-1 text-slate-500 hover:text-indigo-400 transition-colors" title={selectedReportIds.has(h.id!) ? 'Deselect' : 'Select'}>
+                              <button onClick={(e) => toggleReportSelection(h.id!, e)} className="flex-shrink-0 p-1 text-slate-400 hover:text-indigo-400 transition-colors" title={selectedReportIds.has(h.id!) ? 'Deselect' : 'Select'}>
                                 {selectedReportIds.has(h.id!) ? <CheckSquare className="w-5 h-5 text-indigo-400" /> : <Square className="w-5 h-5" />}
                               </button>
                               <div className="min-w-0">
@@ -890,10 +909,10 @@ const App: React.FC = () => {
                               </div>
                             </div>
                             <div className="flex items-center gap-4 flex-shrink-0">
-                              <span className="text-xs text-slate-500 dark:text-slate-500 text-gray-600">Report: {new Date(h.lastUpdated).toLocaleDateString()}</span>
+                              <span className="text-xs text-slate-400 dark:text-slate-400 text-gray-600">Report: {new Date(h.lastUpdated).toLocaleDateString()}</span>
                               <button
                                 onClick={(e) => handleDeleteClick(h.id!, e)}
-                                className="p-2 text-slate-500 dark:text-slate-500 text-gray-600 hover:text-red-400 dark:hover:text-red-400 hover:text-red-600 hover:bg-red-500/10 dark:hover:bg-red-500/10 hover:bg-red-50 rounded-lg transition-all"
+                                className="p-2 text-slate-400 dark:text-slate-400 text-gray-600 hover:text-red-400 dark:hover:text-red-400 hover:text-red-600 hover:bg-red-500/10 dark:hover:bg-red-500/10 hover:bg-red-50 rounded-lg transition-all"
                                 title="Delete dossier"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -904,7 +923,7 @@ const App: React.FC = () => {
                         ))}
                       </div>
                     ) : folderGroups.length === 0 ? (
-                      <p className="text-slate-500 dark:text-slate-500 text-gray-600 italic">No folders yet. Save a batch report to a folder to see them here.</p>
+                      <p className="text-slate-400 dark:text-slate-400 text-gray-600 italic">No folders yet. Save a batch report to a folder to see them here.</p>
                     ) : (
                       <div className="space-y-4">
                         {folderGroups.map(({ folderId, folderName, reports }) => (
@@ -921,7 +940,7 @@ const App: React.FC = () => {
                               )}
                               <FolderOpen className="w-5 h-5 text-amber-400 flex-shrink-0" />
                               <span className="font-semibold text-white dark:text-white text-gray-900">{folderName}</span>
-                              <span className="text-sm text-slate-500 dark:text-slate-500 text-gray-600">({reports.length} reports)</span>
+                              <span className="text-sm text-slate-400 dark:text-slate-400 text-gray-600">({reports.length} reports)</span>
                             </button>
                             {expandedFolderIds.has(folderId) && (
                               <div className="divide-y divide-slate-800 dark:divide-slate-800">
@@ -934,7 +953,7 @@ const App: React.FC = () => {
                                     }`}
                                   >
                                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                                      <button onClick={(e) => toggleReportSelection(h.id!, e)} className="flex-shrink-0 p-1 text-slate-500 hover:text-indigo-400 transition-colors" title={selectedReportIds.has(h.id!) ? 'Deselect' : 'Select'}>
+                                      <button onClick={(e) => toggleReportSelection(h.id!, e)} className="flex-shrink-0 p-1 text-slate-400 hover:text-indigo-400 transition-colors" title={selectedReportIds.has(h.id!) ? 'Deselect' : 'Select'}>
                                         {selectedReportIds.has(h.id!) ? <CheckSquare className="w-5 h-5 text-indigo-400" /> : <Square className="w-5 h-5" />}
                                       </button>
                                       <div className="min-w-0">
@@ -943,10 +962,10 @@ const App: React.FC = () => {
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-4 flex-shrink-0">
-                                      <span className="text-xs text-slate-500 dark:text-slate-500 text-gray-600">Report: {new Date(h.lastUpdated).toLocaleDateString()}</span>
+                                      <span className="text-xs text-slate-400 dark:text-slate-400 text-gray-600">Report: {new Date(h.lastUpdated).toLocaleDateString()}</span>
                                       <button
                                         onClick={(e) => handleDeleteClick(h.id!, e)}
-                                        className="p-2 text-slate-500 dark:text-slate-500 text-gray-600 hover:text-red-400 dark:hover:text-red-400 hover:text-red-600 hover:bg-red-500/10 dark:hover:bg-red-500/10 hover:bg-red-50 rounded-lg transition-all"
+                                        className="p-2 text-slate-400 dark:text-slate-400 text-gray-600 hover:text-red-400 dark:hover:text-red-400 hover:text-red-600 hover:bg-red-500/10 dark:hover:bg-red-500/10 hover:bg-red-50 rounded-lg transition-all"
                                         title="Delete dossier"
                                       >
                                         <Trash2 className="w-4 h-4" />

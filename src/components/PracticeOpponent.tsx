@@ -38,7 +38,7 @@ const MoveHistoryList = React.memo(function MoveHistoryList({
   const probBadge = (p: { pct: number | null; isDeviation: boolean } | null) => {
     if (!p) return null;
     if (p.isDeviation) return <span className="text-amber-400/90" title="Deviation — no games in repertoire">↯</span>;
-    return <span className="text-slate-500 text-xs ml-0.5">{p.pct}%</span>;
+    return <span className="text-slate-400 text-xs ml-0.5">{p.pct}%</span>;
   };
   return (
     <div className="space-y-1 font-mono text-sm text-slate-300">
@@ -47,7 +47,7 @@ const MoveHistoryList = React.memo(function MoveHistoryList({
         const bProb = b != null ? getMoveProbability(bIdx, b, history, mostPlayedLines, opponentColor, parsedGames, games, identifiers) : null;
         return (
           <div key={n} className="flex gap-2 py-0.5 items-baseline">
-            <span className="text-slate-500 w-6 shrink-0">{n}.</span>
+            <span className="text-slate-400 w-6 shrink-0">{n}.</span>
             <span className="flex-1 flex items-baseline min-w-0">
               {w ?? '—'}
               {w != null && opponentColor === 'white' && probBadge(wProb)}
@@ -60,7 +60,7 @@ const MoveHistoryList = React.memo(function MoveHistoryList({
         );
       })}
       {history.length === 0 && (
-        <div className="text-slate-500 italic">No moves yet</div>
+        <div className="text-slate-400 italic">No moves yet</div>
       )}
     </div>
   );
@@ -317,7 +317,7 @@ export const PracticeOpponent: React.FC<PracticeOpponentProps> = ({
           )}
         </div>
         <div className={`bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 min-w-[200px] overflow-y-auto ${isEmbeddedInModal ? 'max-h-[400px]' : 'max-h-[480px]'}`}>
-          <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Move history</div>
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Move history</div>
           <MoveHistoryList
             history={game.history()}
             mostPlayedLines={report.mostPlayedLines}
