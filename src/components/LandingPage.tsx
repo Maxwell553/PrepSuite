@@ -3,6 +3,12 @@ import { createPortal } from 'react-dom';
 import { Shield, Mail, ChevronRight, Search, Database, Target, Zap, TrendingUp, Cpu, Users, Globe, BarChart3, Brain, CheckCircle, ArrowRight, X, Crown } from 'lucide-react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
+import {
+    OTB_GAMES_DISPLAY,
+    FIDE_PLAYERS_DISPLAY,
+    computeGamesAnalyzedCount,
+    formatGamesAnalyzedShort,
+} from '../services/platformStats';
 import type { ToastType } from './Toast';
 import generationImg from '@/assets/landing/generation.png';
 import tacticalRecommendationImg from '@/assets/landing/tactical_recommendation.png';
@@ -30,11 +36,21 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const [featuredList, setFeaturedList] = useState<{ slug: string; name: string; title?: string; federation?: string; rating?: number }[]>([]);
     const [loadingSampleSlug, setLoadingSampleSlug] = useState<string | null>(null);
+    const [gamesAnalyzedDisplay, setGamesAnalyzedDisplay] = useState(() =>
+        formatGamesAnalyzedShort(computeGamesAnalyzedCount()),
+    );
 
     useEffect(() => {
         import('../services/featuredReports').then(({ getFeaturedReportList }) => {
             getFeaturedReportList().then(setFeaturedList);
         });
+    }, []);
+
+    // Recompute at most once per minute (cheap; updates when the hour rolls over)
+    useEffect(() => {
+        const tick = () => setGamesAnalyzedDisplay(formatGamesAnalyzedShort(computeGamesAnalyzedCount()));
+        const id = setInterval(tick, 60_000);
+        return () => clearInterval(id);
     }, []);
 
     const featuredRef = useScrollAnimation();
@@ -135,9 +151,46 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                     <h1 className="text-5xl md:text-7xl font-sans font-bold tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-b from-white via-white to-slate-500 dark:from-white dark:via-white dark:to-slate-500 from-gray-900 via-gray-900 to-gray-700 max-w-4xl mx-auto leading-[1.1] animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-200">
                         Master Your Opponent Analysis
                     </h1>
-                    <p className="text-xl text-slate-300 dark:text-slate-300 text-gray-600 max-w-2xl mx-auto mb-12 leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300">
+                    <p className="text-xl text-slate-300 dark:text-slate-300 text-gray-600 max-w-2xl mx-auto mb-8 leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300">
                         Bridge the gap between tournament and online play. Get comprehensive scouting reports from Chess.com, Lichess, and OTB tournament databases.
                     </p>
+
+                    <div className="max-w-4xl mx-auto mb-10 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                        <div className="landing-stat-card rounded-2xl border border-slate-800/80 dark:border-slate-800/80 border-gray-200 bg-slate-900/40 dark:bg-slate-900/40 bg-white/80 px-5 py-4 text-center shadow-lg shadow-black/10">
+                            <div className="landing-stat-icon flex justify-center mb-2 text-indigo-400 dark:text-indigo-400 text-indigo-600">
+                                <BarChart3 className="w-5 h-5" aria-hidden />
+                            </div>
+                            <div className="landing-stat-value text-2xl md:text-3xl font-bold text-white dark:text-white text-gray-900 tabular-nums">
+                                {gamesAnalyzedDisplay}
+                            </div>
+                            <div className="landing-stat-label text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400 text-gray-500 mt-1">
+                                Games analyzed
+                            </div>
+                        </div>
+                        <div className="landing-stat-card rounded-2xl border border-slate-800/80 dark:border-slate-800/80 border-gray-200 bg-slate-900/40 dark:bg-slate-900/40 bg-white/80 px-5 py-4 text-center shadow-lg shadow-black/10">
+                            <div className="landing-stat-icon flex justify-center mb-2 text-emerald-400 dark:text-emerald-400 text-emerald-600">
+                                <Database className="w-5 h-5" aria-hidden />
+                            </div>
+                            <div className="landing-stat-value text-2xl md:text-3xl font-bold text-white dark:text-white text-gray-900 tabular-nums">
+                                {OTB_GAMES_DISPLAY}
+                            </div>
+                            <div className="landing-stat-label text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400 text-gray-500 mt-1">
+                                OTB games in database
+                            </div>
+                        </div>
+                        <div className="landing-stat-card rounded-2xl border border-slate-800/80 dark:border-slate-800/80 border-gray-200 bg-slate-900/40 dark:bg-slate-900/40 bg-white/80 px-5 py-4 text-center shadow-lg shadow-black/10">
+                            <div className="landing-stat-icon flex justify-center mb-2 text-amber-400 dark:text-amber-400 text-amber-600">
+                                <Users className="w-5 h-5" aria-hidden />
+                            </div>
+                            <div className="landing-stat-value text-2xl md:text-3xl font-bold text-white dark:text-white text-gray-900 tabular-nums">
+                                {FIDE_PLAYERS_DISPLAY}
+                            </div>
+                            <div className="landing-stat-label text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400 text-gray-500 mt-1">
+                                FIDE-registered players
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-400">
                         <button
                             onClick={onGetStarted}

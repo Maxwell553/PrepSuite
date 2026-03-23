@@ -239,6 +239,34 @@ export async function runPipeline(
 const CHAT_CLIENT_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
+ * Parse a full SSE body (used when Content-Type is missing/wrong but body is still SSE — common behind proxies).
+ */
+function parseSseChatFullText(body: string): string {
+  let currentEvent = '';
+  for (const line of body.split('\n')) {
+    if (!line || line.startsWith(':')) continue;
+    if (line.startsWith('event: ')) {
+      currentEvent = line.slice(7).trim();
+    } else if (line.startsWith('data: ')) {
+      const dataStr = line.slice(6);
+      try {
+        const data = JSON.parse(dataStr) as { text?: string; error?: string };
+        if (currentEvent === 'chat_text') {
+          return data.text ?? '';
+        }
+        if (currentEvent === 'error') {
+          throw new Error(data.error || 'Chat error');
+        }
+      } catch (e) {
+        if (e instanceof SyntaxError) continue;
+        throw e;
+      }
+    }
+  }
+  throw new Error('Chat stream ended without a response');
+}
+
+/**
  * Read POST /api/chat (or /api/support-chat) body: SSE with event `chat_text` or `error`, or legacy JSON.
  */
 async function readChatResponse(response: Response): Promise<string> {
@@ -247,14 +275,31 @@ async function readChatResponse(response: Response): Promise<string> {
     throw new Error(errorBody.error || `Chat service error: ${response.status}`);
   }
 
-  const contentType = response.headers.get('content-type') || '';
+  const contentType = (response.headers.get('content-type') || '').toLowerCase();
   if (contentType.includes('text/event-stream')) {
     return readChatSseBody(response);
   }
 
-  const data = (await response.json()) as { text?: string; error?: string };
-  if (data.error) throw new Error(data.error);
-  return data.text || '';
+  const raw = await response.text();
+  const trimmed = raw.trimStart();
+  if (
+    trimmed.startsWith('event:') ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith(':')
+  ) {
+    return parseSseChatFullText(raw);
+  }
+
+  try {
+    const data = JSON.parse(raw) as { text?: string; error?: string };
+    if (data.error) throw new Error(data.error);
+    return data.text || '';
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      throw new Error('Invalid chat response from server');
+    }
+    throw e;
+  }
 }
 
 function readChatSseBody(response: Response): Promise<string> {

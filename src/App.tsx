@@ -127,14 +127,9 @@ const App: React.FC = () => {
       setUser(currentUser);
       setLoadingAuth(false); // Always allow render once we get an auth event
 
-      // Fresh sign-in only: leave INITIAL_SESSION alone so logged-in users can stay on marketing `/` after "Back to home".
-      // (INITIAL_SESSION runs on every load with a stored session and was forcing the app shell + `/analysis`.)
+      // Do not redirect on every SIGNED_IN — Safari / Supabase can emit it again when the tab regains focus,
+      // which was kicking users off the marketing page. OAuth lands on `/analysis`; email sign-in navigates in handleLogin.
       if (event === 'SIGNED_IN' && currentUser) {
-        setShowLandingPage(false);
-        const p = typeof window !== 'undefined' ? window.location.pathname : '';
-        if (p === '/' || p === '') {
-          window.history.replaceState({}, '', '/analysis');
-        }
         trackSignUpConversionIfNewUser(currentUser.id, currentUser.created_at);
       }
       if (currentUser) {
@@ -502,9 +497,14 @@ const App: React.FC = () => {
           if (loginData.isNewUser) {
             const res = await authActions.signUp(loginData.email, loginData.password);
             if (res?.data?.user?.id) trackSignUpConversion(res.data.user.id);
-            // We don't alert here anymore as the LandingPage handles the "success" view
+            if (res?.data?.session) {
+              setShowLandingPage(false);
+              window.history.replaceState({}, '', '/analysis');
+            }
           } else {
             await authActions.signInWithPassword(loginData.email, loginData.password);
+            setShowLandingPage(false);
+            window.history.replaceState({}, '', '/analysis');
           }
         }
       }

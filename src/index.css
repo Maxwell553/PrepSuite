@@ -148,6 +148,124 @@ body {
     opacity: 0;
 }
 
+/* Landing hero — platform stats (transform-only: no opacity:0 so rapid reload / skipped animations never hide content) */
+@keyframes landing-stat-card-in {
+    from {
+        transform: translateY(16px);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
+@keyframes landing-stat-icon-in {
+    from {
+        transform: scale(0.88) translateY(4px);
+    }
+    to {
+        transform: scale(1) translateY(0);
+    }
+}
+
+@keyframes landing-stat-value-in {
+    from {
+        transform: translateY(8px) scale(0.94);
+    }
+    to {
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes landing-stat-label-in {
+    from {
+        transform: translateY(4px);
+        opacity: 0.65;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.landing-stat-card {
+    opacity: 1;
+    animation: landing-stat-card-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.landing-stat-card:nth-child(1) {
+    animation-delay: 0.12s;
+}
+
+.landing-stat-card:nth-child(2) {
+    animation-delay: 0.26s;
+}
+
+.landing-stat-card:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+.landing-stat-card .landing-stat-icon {
+    opacity: 1;
+    animation: landing-stat-icon-in 0.45s cubic-bezier(0.34, 1.15, 0.64, 1) forwards;
+}
+
+.landing-stat-card:nth-child(1) .landing-stat-icon {
+    animation-delay: 0.22s;
+}
+
+.landing-stat-card:nth-child(2) .landing-stat-icon {
+    animation-delay: 0.36s;
+}
+
+.landing-stat-card:nth-child(3) .landing-stat-icon {
+    animation-delay: 0.5s;
+}
+
+.landing-stat-card .landing-stat-value {
+    opacity: 1;
+    animation: landing-stat-value-in 0.6s cubic-bezier(0.34, 1.25, 0.64, 1) forwards;
+}
+
+.landing-stat-card:nth-child(1) .landing-stat-value {
+    animation-delay: 0.34s;
+}
+
+.landing-stat-card:nth-child(2) .landing-stat-value {
+    animation-delay: 0.48s;
+}
+
+.landing-stat-card:nth-child(3) .landing-stat-value {
+    animation-delay: 0.62s;
+}
+
+.landing-stat-card .landing-stat-label {
+    opacity: 1;
+    animation: landing-stat-label-in 0.45s ease-out forwards;
+}
+
+.landing-stat-card:nth-child(1) .landing-stat-label {
+    animation-delay: 0.48s;
+}
+
+.landing-stat-card:nth-child(2) .landing-stat-label {
+    animation-delay: 0.62s;
+}
+
+.landing-stat-card:nth-child(3) .landing-stat-label {
+    animation-delay: 0.76s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .landing-stat-card,
+    .landing-stat-card .landing-stat-icon,
+    .landing-stat-card .landing-stat-value,
+    .landing-stat-card .landing-stat-label {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+    }
+}
+
 /* Skeleton loader shimmer */
 @keyframes shimmer {
     0% { background-position: -200% 0; }

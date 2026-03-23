@@ -45,8 +45,22 @@ serve(async (req) => {
       );
     }
 
-    const { signups, reports, questions, total_signups, total_reports } = digest ?? {
-      signups: 0, reports: 0, questions: 0, total_signups: 0, total_reports: 0,
+    const {
+      signups,
+      reports,
+      questions,
+      total_signups,
+      total_reports,
+      games_24h,
+      total_games_analyzed,
+    } = digest ?? {
+      signups: 0,
+      reports: 0,
+      questions: 0,
+      total_signups: 0,
+      total_reports: 0,
+      games_24h: 0,
+      total_games_analyzed: 0,
     };
     const dateStr = new Date().toISOString().slice(0, 10);
 
@@ -62,11 +76,13 @@ serve(async (req) => {
     <tr><td style="padding: 12px 0; border-bottom: 1px solid #eee;">New signups</td><td style="text-align: right; font-weight: 600;">${signups}</td></tr>
     <tr><td style="padding: 12px 0; border-bottom: 1px solid #eee;">Reports generated</td><td style="text-align: right; font-weight: 600;">${reports}</td></tr>
     <tr><td style="padding: 12px 0; border-bottom: 1px solid #eee;">Support questions</td><td style="text-align: right; font-weight: 600;">${questions}</td></tr>
+    <tr><td style="padding: 12px 0; border-bottom: 1px solid #eee;">Games in new reports (24h)</td><td style="text-align: right; font-weight: 600;">${games_24h ?? 0}</td></tr>
   </table>
   <h2 style="font-size: 0.875rem; font-weight: 600; color: #888; margin: 24px 0 8px;">Cumulative totals</h2>
   <table style="width: 100%; border-collapse: collapse;">
     <tr><td style="padding: 12px 0; border-bottom: 1px solid #eee;">Total users signed up</td><td style="text-align: right; font-weight: 600;">${total_signups ?? 0}</td></tr>
     <tr><td style="padding: 12px 0; border-bottom: 1px solid #eee;">Total reports generated</td><td style="text-align: right; font-weight: 600;">${total_reports ?? 0}</td></tr>
+    <tr><td style="padding: 12px 0; border-bottom: 1px solid #eee;">Total games analyzed (all reports)</td><td style="text-align: right; font-weight: 600;">${total_games_analyzed ?? 0}</td></tr>
   </table>
   <p style="margin-top: 24px; font-size: 0.875rem; color: #888;">Sent only to ${DEVELOPER_EMAIL}.</p>
 </body>

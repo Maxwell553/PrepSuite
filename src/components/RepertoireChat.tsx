@@ -29,15 +29,20 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
 
+  /** Scroll inside the chat panel only — scrollIntoView on the sentinel would scroll the whole page */
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = messagesContainerRef.current;
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
   };
 
-  // Reset greeting when report changes (e.g. user switches to different report from history)
+  // New / different report: collapse chat and reset greeting (avoids jumping to chat after "Analyze opponent")
   useEffect(() => {
+    setIsExpanded(false);
     setMessages([
       {
         role: 'assistant',
@@ -48,8 +53,10 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
   }, [report.id, playerName]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (isExpanded) {
+      scrollToBottom();
+    }
+  }, [messages, isExpanded]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -172,7 +179,7 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((message, index) => (
           <div
             key={index}
@@ -199,7 +206,6 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
