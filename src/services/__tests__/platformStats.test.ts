@@ -11,17 +11,17 @@ describe('platformStats', () => {
     expect(computeGamesAnalyzedCount(GAMES_ANALYZED_EPOCH_MS - 1)).toBe(GAMES_ANALYZED_BASE);
   });
 
-  it('increments each hour by 1000..10000', () => {
+  it('increments each hour by 500..2500', () => {
     const h = 60 * 60 * 1000;
     const c0 = computeGamesAnalyzedCount(GAMES_ANALYZED_EPOCH_MS);
     const c1 = computeGamesAnalyzedCount(GAMES_ANALYZED_EPOCH_MS + h);
     expect(c0).toBe(GAMES_ANALYZED_BASE);
-    expect(c1 - c0).toBeGreaterThanOrEqual(1000);
-    expect(c1 - c0).toBeLessThanOrEqual(10000);
+    expect(c1 - c0).toBeGreaterThanOrEqual(500);
+    expect(c1 - c0).toBeLessThanOrEqual(2500);
   });
 
   it('formats compact', () => {
-    expect(formatGamesAnalyzedShort(215_000)).toBe('215k');
+    expect(formatGamesAnalyzedShort(334_500)).toBe('334.5k');
     expect(formatGamesAnalyzedShort(1_200_000)).toBe('1.2M');
   });
 });

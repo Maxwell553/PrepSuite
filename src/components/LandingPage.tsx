@@ -126,23 +126,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_0%,rgba(99,102,241,0.08)_0%,transparent_50%)] pointer-events-none" />
                 <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-indigo-600/10 dark:bg-indigo-600/10 bg-indigo-100/50 blur-[120px] rounded-full -translate-y-1/2 translate-x-1/2" />
                 <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-blue-600/5 dark:bg-blue-600/5 bg-blue-100/30 blur-[100px] rounded-full translate-y-1/2 -translate-x-1/2" />
-                {/* Faded report screenshot for depth */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <picture>
-                        <source srcSet="/hero-lcp.webp" type="image/webp" />
-                        <img
-                            src="/hero-lcp.png"
-                            alt=""
-                            width={901}
-                            height={1024}
-                            decoding="async"
-                            fetchPriority="high"
-                            loading="eager"
-                            className="w-full max-w-4xl h-auto opacity-[0.06] object-contain scale-90"
-                            aria-hidden
-                        />
-                    </picture>
-                </div>
 
                 <div className="max-w-7xl mx-auto text-center relative z-10">
                     <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/50 dark:bg-slate-900/50 bg-indigo-50 border border-indigo-500/20 dark:border-indigo-500/20 border-indigo-200 text-indigo-400 dark:text-indigo-400 text-indigo-600 text-xs font-bold uppercase tracking-widest mb-8 animate-in fade-in slide-in-from-top-4 duration-1000">

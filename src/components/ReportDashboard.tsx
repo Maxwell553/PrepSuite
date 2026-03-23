@@ -35,7 +35,7 @@ const WINS_PIE_COLORS = { resignation: '#14532d', onTime: '#86efac', checkmate: 
 const LOSSES_PIE_COLORS = { resignation: '#b91c1c', onTime: '#fda4af', checkmate: '#ef4444', other: '#7f1d1d' };
 
 /** Clock / flag stats from Chess.com + Lichess game metadata */
-function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagementStats; timeManagementAdvice?: string }) {
+function TimeManagementSection({ tm }: { tm: TimeManagementStats }) {
   const lossPct = (tm.lostOnTimeShareOfLosses * 100).toFixed(1);
   const flagPct =
     tm.lostOnTimeShareAmongFlagDecisive != null
@@ -94,14 +94,6 @@ function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagemen
         <p className="text-xs text-slate-400">
           When a game ends by flag, this player lost on time in <span className="text-slate-300 font-semibold">{flagPct}%</span> of these games.
         </p>
-      )}
-
-      {(timeManagementAdvice ?? '').trim() && (
-        <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-4 w-full min-w-0 max-w-none overflow-x-visible">
-          <p className="text-sm text-slate-200 leading-relaxed whitespace-normal [overflow-wrap:anywhere] [word-break:break-word] hyphens-auto">
-            {timeManagementAdvice}
-          </p>
-        </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0">
@@ -996,7 +988,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
         )}
 
         {report.timeManagement && report.timeManagement.onlineGames > 0 && (
-          <TimeManagementSection tm={report.timeManagement} timeManagementAdvice={report.timeManagementAdvice} />
+          <TimeManagementSection tm={report.timeManagement} />
         )}
 
         </>
