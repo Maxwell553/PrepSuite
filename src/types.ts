@@ -127,7 +127,7 @@ export interface ScoutingReport {
     endgameAccuracy: number;
   };
   timeManagement?: TimeManagementStats;
-  /** AI-generated advice on whether to complicate positions based on opponent's time usage (Gemini Flash Lite) */
+  /** AI-generated advice on whether to complicate positions based on opponent's time usage (Vertex: gemini-3.1-pro-preview) */
   timeManagementAdvice?: string;
   lastUpdated: string;
 }

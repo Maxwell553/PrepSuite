@@ -61,7 +61,7 @@ function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagemen
   ].filter((d) => d.value > 0);
 
   return (
-    <section className="mt-10 space-y-6">
+    <section className="mt-10 space-y-6 min-w-0 w-full max-w-full">
       <div className="flex items-center gap-2">
         <Clock className="w-5 h-5 text-amber-400" />
         <h3 className="text-xl font-bold text-white">Time management</h3>
@@ -70,23 +70,23 @@ function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagemen
         Based on online game metadata from Chess.com and Lichess (timeouts / clock flags). Over-the-board games are excluded.
       </p>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+      <div className="grid grid-cols-1 min-[420px]:grid-cols-2 xl:grid-cols-4 gap-4 min-w-0">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 min-w-0">
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Online games</div>
-          <div className="text-2xl font-bold text-slate-100 mt-1">{tm.onlineGames.toLocaleString()}</div>
+          <div className="text-2xl font-bold text-slate-100 mt-1 tabular-nums">{tm.onlineGames.toLocaleString()}</div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 min-w-0">
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Lost on time</div>
-          <div className="text-2xl font-bold text-rose-400 mt-1">{tm.lostOnTime.toLocaleString()}</div>
+          <div className="text-2xl font-bold text-rose-400 mt-1 tabular-nums">{tm.lostOnTime.toLocaleString()}</div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 min-w-0">
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Won on time</div>
-          <div className="text-2xl font-bold text-emerald-400 mt-1">{tm.wonOnTime.toLocaleString()}</div>
+          <div className="text-2xl font-bold text-emerald-400 mt-1 tabular-nums">{tm.wonOnTime.toLocaleString()}</div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 min-w-0">
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Share of losses</div>
-          <div className="text-2xl font-bold text-amber-300 mt-1">{lossPct}%</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Decisive losses ending on time</div>
+          <div className="text-2xl font-bold text-amber-300 mt-1 tabular-nums">{lossPct}%</div>
+          <div className="text-[11px] text-slate-400 mt-0.5 text-pretty">Decisive losses ending on time</div>
         </div>
       </div>
 
@@ -97,23 +97,29 @@ function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagemen
       )}
 
       {(timeManagementAdvice ?? '').trim() && (
-        <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-4">
-          <p className="text-sm text-slate-200 leading-relaxed">{timeManagementAdvice}</p>
+        <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-4 w-full min-w-0 max-w-none overflow-x-visible">
+          <p className="text-sm text-slate-200 leading-relaxed whitespace-normal [overflow-wrap:anywhere] [word-break:break-word] hyphens-auto">
+            {timeManagementAdvice}
+          </p>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0">
         {tm.bySpeed.length > 0 && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 min-w-0">
             <h4 className="text-sm font-semibold text-slate-200 mb-3">By time control</h4>
             <div className="grid gap-2">
               {[...tm.bySpeed]
                 .sort((a, b) => getTimeControlSecondsForSort(b.speed) - getTimeControlSecondsForSort(a.speed))
                 .map((row) => (
-                <div key={row.speed} className="flex items-center justify-between gap-4 py-1.5 px-3 rounded-lg bg-slate-950/60 border border-slate-800">
-                  <span className="text-sm font-medium text-slate-200">{formatTimeControlForDisplay(row.speed)}</span>
-                  <span className="text-xs text-slate-400 shrink-0">
-                    {row.games.toLocaleString()} games · <span className="text-rose-400">{row.lostOnTime}L</span> / <span className="text-emerald-400">{row.wonOnTime}W</span> on time
+                <div
+                  key={row.speed}
+                  className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4 py-1.5 px-3 rounded-lg bg-slate-950/60 border border-slate-800 min-w-0"
+                >
+                  <span className="text-sm font-medium text-slate-200 shrink-0">{formatTimeControlForDisplay(row.speed)}</span>
+                  <span className="text-xs text-slate-400 min-w-0 text-left sm:text-right break-words [overflow-wrap:anywhere]">
+                    {row.games.toLocaleString()} games · <span className="text-rose-400">{row.lostOnTime}L</span> /{' '}
+                    <span className="text-emerald-400">{row.wonOnTime}W</span> on time
                   </span>
                 </div>
               ))}
@@ -122,7 +128,7 @@ function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagemen
         )}
 
         {winsTotal > 0 && winsPieData.length > 0 && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 min-w-0">
             <h4 className="text-sm font-semibold text-slate-200 mb-3">How they win</h4>
             <div className="h-52 w-full min-w-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -168,7 +174,7 @@ function TimeManagementSection({ tm, timeManagementAdvice }: { tm: TimeManagemen
         )}
 
         {lossesTotal > 0 && lossesPieData.length > 0 && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 min-w-0">
             <h4 className="text-sm font-semibold text-slate-200 mb-3">How they lose</h4>
             <div className="h-52 w-full min-w-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -648,7 +654,6 @@ interface RatingHistoryPoint {
   classicalRating?: number;
   rapidRating?: number;
   blitzRating?: number;
-  uscfRating?: number;
 }
 
 function ActivityReportSection({ player }: { player: ScoutingReport['player'] }) {
@@ -686,15 +691,11 @@ function ActivityReportSection({ player }: { player: ScoutingReport['player'] })
 
   const chartData: RatingHistoryPoint[] = useMemo(() => {
     if (fideHistory.length > 0) {
-      const sorted = [...fideHistory].sort((a, b) => b.date.localeCompare(a.date));
-      const latestDate = sorted[0]?.date;
       return fideHistory.map((p) => ({
         date: p.date,
         classicalRating: p.classicalRating,
         rapidRating: p.rapidRating,
         blitzRating: p.blitzRating,
-        // USCF: no history API; show current rating only at most recent point
-        uscfRating: p.date === latestDate ? (uscfRating ?? undefined) : undefined,
       }));
     }
     const now = new Date();
@@ -702,12 +703,11 @@ function ActivityReportSection({ player }: { player: ScoutingReport['player'] })
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const point: RatingHistoryPoint = { date: `${yyyy}-${mm}` };
     if (fideRating) point.classicalRating = fideRating;
-    if (uscfRating) point.uscfRating = uscfRating;
     return Object.keys(point).length > 1 ? [point] : [];
-  }, [fideHistory, fideRating, uscfRating]);
+  }, [fideHistory, fideRating]);
 
   const hasChartData = chartData.length > 0 && chartData.some((d) =>
-    d.classicalRating != null || d.rapidRating != null || d.blitzRating != null || d.uscfRating != null,
+    d.classicalRating != null || d.rapidRating != null || d.blitzRating != null,
   );
 
   return (
@@ -736,9 +736,6 @@ function ActivityReportSection({ player }: { player: ScoutingReport['player'] })
               )}
               {chartData.some((d) => d.blitzRating != null) && (
                 <Line type="monotone" dataKey="blitzRating" stroke="#ec4899" strokeWidth={2} dot={{ r: 2 }} name="Blitz" connectNulls />
-              )}
-              {uscfRating != null && (
-                <Line type="monotone" dataKey="uscfRating" stroke="#34d399" strokeWidth={2} dot={{ r: 2 }} name="USCF" connectNulls />
               )}
             </LineChart>
           </ResponsiveContainer>
@@ -829,7 +826,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const showMainContent = hasReportContent || !!isGenerating;
 
   return (
-    <div className={`relative space-y-8 pb-12 print:space-y-6 ${isGenerating ? 'pointer-events-none' : ''}`}>
+    <div className={`relative space-y-8 pb-12 print:space-y-6 min-w-0 w-full max-w-full ${isGenerating ? 'pointer-events-none' : ''}`}>
       {/* Dossier Header */}
       <div className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-3xl overflow-hidden shadow-2xl">
         <div className="h-44 bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-950 dark:from-indigo-900/40 dark:via-slate-900 dark:to-slate-950 from-indigo-50 via-white to-gray-50 relative p-10 flex flex-col justify-end">
@@ -838,8 +835,8 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
             <div className="..."><Coins /> −{creditsDeducted} credits</div>
           )}
           */}
-          <div className="flex justify-between items-end">
-            <div className="flex-1 min-w-0">
+          <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-3 text-indigo-400 dark:text-indigo-400 text-indigo-600 font-bold text-xs uppercase tracking-[0.2em] mb-2">
                 <Shield className="w-4 h-4" />
                 Verified Tournament Profile
@@ -934,7 +931,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
         </div>
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-8 min-w-0">
         {/* Main content: hide when no games and we're showing activity report only */}
         {showMainContent && (
         <>
@@ -1038,9 +1035,11 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
           aria-live="polite"
           aria-busy="true"
         >
-          <div className="flex items-center gap-3 px-6 py-3 bg-slate-800/30 border border-indigo-500/20 rounded-2xl shadow-2xl shadow-indigo-500/5">
-            <div className="w-5 h-5 border-2 border-indigo-400/50 border-t-indigo-400 rounded-full animate-spin" />
-            <span className="text-base font-semibold text-slate-100">{generatingStatus || 'Generating report...'}</span>
+          <div className="flex items-start sm:items-center gap-3 px-6 py-3 max-w-[min(92vw,36rem)] bg-slate-800/30 border border-indigo-500/20 rounded-2xl shadow-2xl shadow-indigo-500/5 min-w-0">
+            <div className="w-5 h-5 shrink-0 mt-0.5 sm:mt-0 border-2 border-indigo-400/50 border-t-indigo-400 rounded-full animate-spin" />
+            <span className="text-base font-semibold text-slate-100 break-words [overflow-wrap:anywhere] min-w-0 leading-snug">
+              {generatingStatus || 'Generating report...'}
+            </span>
           </div>
         </div>
       )}

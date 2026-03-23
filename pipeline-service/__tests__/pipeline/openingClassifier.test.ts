@@ -435,11 +435,11 @@ describe('identifyOpeningsBatch', () => {
     mockedOpeningBook.mockResolvedValueOnce(fakeBook as any);
     mockedGetPositionBook.mockReturnValueOnce(fakePosBook as any);
 
-    mockedLookupByMoves.mockReturnValueOnce({ opening: null } as any);
+    // loadPgn fails on invalid SAN — lookupByMoves is never called; do not queue a mockReturnValueOnce here
+    // or it leaks into the next test's identifyOpeningsBatch mock sequence.
 
-    const games = [
-      { pgn: '1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6' },
-    ];
+    // Valid movetext shape but invalid SAN so loadPgn fails before Tier-2 fallback
+    const games = [{ pgn: '1. e4 e5 2. Nf3 ZZ9' }];
 
     const results = await identifyOpeningsBatch(games);
     expect(results.size).toBe(1);

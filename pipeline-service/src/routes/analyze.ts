@@ -291,6 +291,11 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
       // Enrich with ECO library opening names and codes
       const openingResults = await identifyOpeningsBatch(
         allGames.map((g) => ({ pgn: g.pgn, eco: g.eco })),
+        {
+          onProgress: (current, total) => {
+            sse.sendProgress({ phase: 'parsing', current, total });
+          },
+        },
       );
       for (const [idx, result] of openingResults) {
         if (result && allGames[idx]) {

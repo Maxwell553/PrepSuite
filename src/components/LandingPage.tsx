@@ -10,7 +10,7 @@ import {
     formatGamesAnalyzedShort,
 } from '../services/platformStats';
 import type { ToastType } from './Toast';
-import generationImg from '@/assets/landing/generation.png';
+import verifiedProfileDashboardImg from '@/assets/landing/verified_profile_dashboard.png';
 import tacticalRecommendationImg from '@/assets/landing/tactical_recommendation.png';
 import repertoireChartsImg from '@/assets/landing/repertoire_charts.png';
 import repertoireChatImg from '@/assets/landing/repertoire_chat.png';
@@ -61,7 +61,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
     const loginRef = useScrollAnimation();
 
     const previewImages = [
-        { src: generationImg, caption: 'Search any opponent and watch the analysis run.' },
+        { src: verifiedProfileDashboardImg, caption: 'Full dossier: openings, recent games, and live progress while Stockfish runs.' },
         { src: tacticalRecommendationImg, caption: 'Get a verified tournament profile with strategic insights.' },
         { src: repertoireChartsImg, caption: 'Look at every opening—win rates, draws, and losses at a glance.' },
         { src: timeManagementImg, caption: 'Analyze how they use their time and where they mess up.' },
@@ -213,7 +213,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_0%,rgba(99,102,241,0.08),transparent_50%)] pointer-events-none" />
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_100%,rgba(30,41,59,0.6),transparent)] pointer-events-none" />
                 <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
-                <div className="max-w-5xl mx-auto relative">
+                <div className="max-w-7xl mx-auto relative">
                     <div className="flex flex-col items-center mb-14">
                         <Crown className="w-8 h-8 text-amber-400 mb-4" />
                         <h2 className="text-4xl md:text-5xl font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-400 dark:from-white dark:to-slate-400 from-gray-900 to-gray-600 text-center">
@@ -223,7 +223,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             Explore sample scouting reports of top players. No sign-in required.
                         </p>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6 max-w-6xl mx-auto">
                         {featuredList.map((item) => {
                             const handleClick = async () => {
                                 if (!onViewFeaturedReport) return;

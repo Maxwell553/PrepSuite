@@ -718,7 +718,7 @@ const App: React.FC = () => {
           </Suspense>
         )}
 
-        <main className="flex-1 overflow-y-auto relative bg-slate-950 dark:bg-slate-950 bg-gray-50 overscroll-none before:absolute before:inset-0 before:pointer-events-none before:bg-[radial-gradient(ellipse_80%_50%_at_50%_0%,rgba(99,102,241,0.08)_0%,transparent_50%)]" style={{ overscrollBehavior: 'none' }}>
+        <main className="flex-1 min-w-0 overflow-y-auto relative bg-slate-950 dark:bg-slate-950 bg-gray-50 overscroll-none before:absolute before:inset-0 before:pointer-events-none before:bg-[radial-gradient(ellipse_80%_50%_at_50%_0%,rgba(99,102,241,0.08)_0%,transparent_50%)]" style={{ overscrollBehavior: 'none' }}>
           {showUserSettings ? (
             <div className="h-full overflow-y-auto">
               <Suspense
@@ -767,7 +767,7 @@ const App: React.FC = () => {
                 </div>
               </header>
 
-              <div className={`p-6 mx-auto ${activeTab === 'dashboard' && selectedReport ? 'max-w-[90rem]' : 'max-w-7xl'}`}>
+              <div className={`p-6 mx-auto min-w-0 ${activeTab === 'dashboard' && selectedReport ? 'max-w-[90rem]' : 'max-w-7xl'}`}>
                 {activeTab === 'search' && (
                   <Suspense
                     fallback={

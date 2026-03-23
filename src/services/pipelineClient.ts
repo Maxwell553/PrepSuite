@@ -179,13 +179,18 @@ export async function runPipeline(
           callbacks.onPhase?.(phase, status, durationMs, extra);
           break;
         }
-        case 'progress':
-          callbacks.onProgress?.(
-            data.phase as string,
-            data.current as number,
-            data.total as number,
-          );
+        case 'progress': {
+          // Defer so each update runs in its own macrotask. Otherwise hundreds of `progress`
+          // lines parsed in one `read()` chunk trigger React state updates in one synchronous
+          // turn and React 18 batches them — the UI often stays stuck at (0/N).
+          const phase = data.phase as string;
+          const current = data.current as number;
+          const total = data.total as number;
+          setTimeout(() => {
+            callbacks.onProgress?.(phase, current, total);
+          }, 0);
           break;
+        }
         case 'complete':
           result = data as unknown as PipelineResult;
           break;

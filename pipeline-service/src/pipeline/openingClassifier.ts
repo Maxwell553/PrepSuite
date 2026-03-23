@@ -125,128 +125,50 @@ function normalizeToStandardPgn(movetext: string): string {
   return movetext.replace(/\s+\d+\.\.\.\s+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+export interface IdentifyOpeningsBatchOptions {
+  onProgress?: (current: number, total: number) => void;
+}
+
 /**
  * Batch identify openings using the ECO library.
  * Returns a Map from game index → OpeningResult | null.
+ * Uses worker threads when beneficial (see implementation); Vitest runs on the main thread only.
  */
 export async function identifyOpeningsBatch(
   games: Array<{ pgn: string; eco?: string }>,
+  options?: IdentifyOpeningsBatchOptions,
 ): Promise<Map<number, OpeningResult | null>> {
-  let book: Awaited<ReturnType<typeof openingBook>>;
-  let posBook: ReturnType<typeof getPositionBook>;
-  try {
-    const result = await getOpeningBook();
-    book = result.book;
-    posBook = result.posBook;
-  } catch (err) {
-    logger.error({ err }, '[OpeningClassifier] ECO book load failed');
-    return new Map(games.map((_, i) => [i, null]));
-  }
+  const total = games.length;
+  const onProgress = options?.onProgress;
+  let completed = 0;
+  const bumpProgress = () => {
+    completed += 1;
+    onProgress?.(completed, total);
+  };
 
-  const results = new Map<number, OpeningResult | null>();
-  const CHUNK_SIZE = 50;
+  if (total === 0) return new Map();
 
-  function tryMoveBasedFallback(pgn: string): OpeningResult | null {
-    const name = identifyOpeningFromMoves(pgn, 'white');
-    if (!name || name === 'Unknown') return null;
-    const eco = NAME_TO_ECO[name];
-    if (!eco) return null;
-    return { name, eco, moves: '' };
-  }
+  onProgress?.(0, total);
 
-  async function processChunk(indices: number[]): Promise<{ pgnMatch: number; ecoMatch: number; moveFallback: number; noMatch: number; parseFail: number }> {
-    let pgnMatch = 0;
-    let ecoMatch = 0;
-    let moveFallback = 0;
-    let noMatch = 0;
-    let parseFail = 0;
-    for (const i of indices) {
-      const g = games[i];
-      if (!g.pgn || g.pgn.trim().length < 10) {
-        parseFail++;
-        results.set(i, null);
-        continue;
-      }
-      try {
-        const chess = new Chess();
-        const movetext = extractMovetext(g.pgn);
-        if (!movetext) {
-          parseFail++;
-          results.set(i, null);
-          continue;
-        }
-        const standardPgn = normalizeToStandardPgn(movetext);
-        try {
-          chess.loadPgn(`[White "?"]\n[Black "?"]\n\n${standardPgn}`);
-        } catch {
-          parseFail++;
-          results.set(i, null);
-          continue;
-        }
-        const result = lookupByMoves(chess, book, {
-          positionBook: posBook,
-          maxMovesBack: 30,
-        });
-        if (result.opening) {
-          pgnMatch++;
-          results.set(i, {
-            name: result.opening.name,
-            eco: result.opening.eco,
-            moves: result.opening.moves || '',
-          });
-        } else {
-          const ecoCode = normalizeEco(g.eco);
-          if (ecoCode) {
-            const name = await lookupByEcoCode(book, ecoCode);
-            if (name) {
-              ecoMatch++;
-              results.set(i, { name, eco: ecoCode, moves: '' });
-            } else {
-              const fallback = tryMoveBasedFallback(g.pgn);
-              if (fallback) {
-                moveFallback++;
-                results.set(i, fallback);
-              } else {
-                noMatch++;
-                results.set(i, null);
-              }
-            }
-          } else {
-            const fallback = tryMoveBasedFallback(g.pgn);
-            if (fallback) {
-              moveFallback++;
-              results.set(i, fallback);
-            } else {
-              noMatch++;
-              results.set(i, null);
-            }
-          }
-        }
-      } catch {
-        parseFail++;
-        results.set(i, null);
-      }
+  const buildTasks = () => games.map((g, i) => ({ idx: i, pgn: g.pgn, eco: g.eco }));
+
+  const useWorkers = process.env.VITEST !== 'true' && total >= 4;
+
+  if (useWorkers) {
+    try {
+      const map = await runOpeningClassificationWorkerPool(buildTasks(), bumpProgress);
+      logOpeningBatchSummary(map, total);
+      return map;
+    } catch (err) {
+      logger.warn({ err }, '[OpeningClassifier] Worker pool failed, using main thread');
     }
-    return { pgnMatch, ecoMatch, moveFallback, noMatch, parseFail };
   }
 
-  const chunks: number[][] = [];
-  for (let i = 0; i < games.length; i += CHUNK_SIZE) {
-    chunks.push(Array.from({ length: Math.min(CHUNK_SIZE, games.length - i) }, (_, j) => i + j));
-  }
-
-  const chunkResults = await Promise.all(chunks.map(processChunk));
-  const pgnMatchCount = chunkResults.reduce((s, r) => s + r.pgnMatch, 0);
-  const ecoMatchCount = chunkResults.reduce((s, r) => s + r.ecoMatch, 0);
-  const moveFallbackCount = chunkResults.reduce((s, r) => s + r.moveFallback, 0);
-  const noMatchCount = chunkResults.reduce((s, r) => s + r.noMatch, 0);
-  const parseFailCount = chunkResults.reduce((s, r) => s + r.parseFail, 0);
-
-  logger.info(
-    { total: games.length, pgnMatch: pgnMatchCount, ecoMatch: ecoMatchCount, moveFallback: moveFallbackCount, noMatch: noMatchCount, parseFail: parseFailCount },
-    '[OpeningClassifier] Batch complete',
-  );
-
+  completed = 0;
+  const rows = await classifyOpeningTasksForWorker(buildTasks(), bumpProgress);
+  const results = new Map<number, OpeningResult | null>();
+  for (const r of rows) results.set(r.idx, r.result);
+  logOpeningBatchSummary(results, total);
   return results;
 }
 
@@ -431,6 +353,152 @@ export function identifyOpeningFromMoves(pgn: string, _side: 'white' | 'black'):
   if (nm[0] === 'b4') return 'Polish Opening';
 
   return 'Unknown';
+}
+
+function tryMoveBasedFallback(pgn: string): OpeningResult | null {
+  const name = identifyOpeningFromMoves(pgn, 'white');
+  if (!name || name === 'Unknown') return null;
+  const eco = NAME_TO_ECO[name];
+  if (!eco) return null;
+  return { name, eco, moves: '' };
+}
+
+async function classifySingleOpeningForGame(
+  g: { pgn: string; eco?: string },
+  book: Awaited<ReturnType<typeof openingBook>>,
+  posBook: ReturnType<typeof getPositionBook>,
+): Promise<OpeningResult | null> {
+  if (!g.pgn || g.pgn.trim().length < 10) return null;
+  try {
+    const chess = new Chess();
+    const movetext = extractMovetext(g.pgn);
+    if (!movetext) return null;
+    const standardPgn = normalizeToStandardPgn(movetext);
+    try {
+      chess.loadPgn(`[White "?"]\n[Black "?"]\n\n${standardPgn}`);
+    } catch {
+      return null;
+    }
+    const result = lookupByMoves(chess, book, {
+      positionBook: posBook,
+      maxMovesBack: 30,
+    });
+    if (result.opening) {
+      return {
+        name: result.opening.name,
+        eco: result.opening.eco,
+        moves: result.opening.moves || '',
+      };
+    }
+    const ecoCode = normalizeEco(g.eco);
+    if (ecoCode) {
+      const name = await lookupByEcoCode(book, ecoCode);
+      if (name) {
+        return { name, eco: ecoCode, moves: '' };
+      }
+      const fallback = tryMoveBasedFallback(g.pgn);
+      return fallback ?? null;
+    }
+    return tryMoveBasedFallback(g.pgn);
+  } catch {
+    return null;
+  }
+}
+
+/** Classify a batch of games (used on the main thread and inside worker threads). */
+export async function classifyOpeningTasksForWorker(
+  tasks: Array<{ idx: number; pgn: string; eco?: string }>,
+  onProgress?: () => void,
+): Promise<Array<{ idx: number; result: OpeningResult | null }>> {
+  let book: Awaited<ReturnType<typeof openingBook>>;
+  let posBook: ReturnType<typeof getPositionBook>;
+  try {
+    const loaded = await getOpeningBook();
+    book = loaded.book;
+    posBook = loaded.posBook;
+  } catch (err) {
+    logger.error({ err }, '[OpeningClassifier] ECO book load failed');
+    return tasks.map((t) => ({ idx: t.idx, result: null }));
+  }
+  const out: Array<{ idx: number; result: OpeningResult | null }> = [];
+  for (const t of tasks) {
+    const result = await classifySingleOpeningForGame({ pgn: t.pgn, eco: t.eco }, book, posBook);
+    out.push({ idx: t.idx, result });
+    onProgress?.();
+  }
+  return out;
+}
+
+function logOpeningBatchSummary(results: Map<number, OpeningResult | null>, total: number): void {
+  let matched = 0;
+  for (const v of results.values()) {
+    if (v) matched += 1;
+  }
+  logger.info({ total, matched, unmatched: total - matched }, '[OpeningClassifier] Batch complete');
+}
+
+async function runOpeningClassificationWorkerPool(
+  tasks: Array<{ idx: number; pgn: string; eco?: string }>,
+  bumpProgress: () => void,
+): Promise<Map<number, OpeningResult | null>> {
+  const { Worker } = await import('node:worker_threads');
+  const { availableParallelism } = await import('node:os');
+  const { existsSync } = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+
+  const dir = path.dirname(fileURLToPath(import.meta.url));
+  const jsWorker = path.join(dir, 'openingClassifierWorker.js');
+  const tsWorker = path.join(dir, 'openingClassifierWorker.ts');
+  let filename: string;
+  let execArgv: string[] | undefined;
+  if (existsSync(jsWorker)) {
+    filename = jsWorker;
+  } else if (existsSync(tsWorker)) {
+    filename = tsWorker;
+    execArgv = ['--import', 'tsx'];
+  } else {
+    throw new Error('[OpeningClassifier] openingClassifierWorker script not found');
+  }
+
+  const poolSize = Math.min(Math.max(1, availableParallelism() - 1), tasks.length, 8);
+  const slices: Array<Array<{ idx: number; pgn: string; eco?: string }>> = Array.from({ length: poolSize }, () => []);
+  for (let i = 0; i < tasks.length; i++) {
+    slices[i % poolSize]!.push(tasks[i]!);
+  }
+
+  const runSlice = (slice: typeof tasks) =>
+    new Promise<Array<{ idx: number; result: OpeningResult | null }>>((resolve, reject) => {
+      if (slice.length === 0) {
+        resolve([]);
+        return;
+      }
+      const worker = new Worker(filename, execArgv ? { execArgv } : undefined);
+      worker.on('message', (msg: { type: string; results?: Array<{ idx: number; result: OpeningResult | null }>; message?: string }) => {
+        if (msg.type === 'progress') bumpProgress();
+        else if (msg.type === 'done' && msg.results) {
+          void worker.terminate().catch(() => {});
+          resolve(msg.results);
+        } else if (msg.type === 'error') {
+          void worker.terminate().catch(() => {});
+          reject(new Error(msg.message ?? 'worker error'));
+        }
+      });
+      worker.on('error', (err) => {
+        void worker.terminate().catch(() => {});
+        reject(err instanceof Error ? err : new Error(String(err)));
+      });
+      worker.postMessage({ tasks: slice });
+    });
+
+  const rowArrays = await Promise.all(slices.map(runSlice));
+  const map = new Map<number, OpeningResult | null>();
+  for (const rows of rowArrays) {
+    for (const r of rows) {
+      map.set(r.idx, r.result);
+    }
+  }
+  return map;
 }
 
 /** ECO-to-name mapping for white games (more granular) */

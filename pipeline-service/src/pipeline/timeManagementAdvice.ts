@@ -33,7 +33,7 @@ export async function generateTimeManagementAdvice(
       ? (tm.lostOnTimeShareAmongFlagDecisive * 100).toFixed(0)
       : null;
 
-  const prompt = `You are a chess preparation assistant. Based on this opponent's time management stats from online games, write exactly 1-2 short sentences (max 25 words) advising whether to make the position complicated or keep it simple to exploit their time usage. Be direct and actionable.
+  const prompt = `You are a chess preparation assistant. Based on this opponent's time management stats from online games, write exactly 1-2 short sentences (max 25 words) advising whether to make the position complicated or keep it simple to exploit their time usage. Be direct and actionable. Use complete words only (e.g. say "scramble", never truncate mid-word).
 
 CRITICAL: Base your advice strictly on the numbers. If they WON more often than LOST on time, do NOT say they struggle with time or lose on time—instead advise keeping things simple or avoiding time scrambles. Only advise complicating positions if they LOSE more often than WIN on time.
 

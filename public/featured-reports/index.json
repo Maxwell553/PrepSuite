@@ -4,5 +4,7 @@
   { "slug": "levy-rozman", "name": "Levy Rozman", "title": "IM", "federation": "USA", "rating": 2318 },
   { "slug": "alexandra-botez", "name": "Alexandra Botez", "title": "WFM", "federation": "CAN", "rating": 2044 },
   { "slug": "gukesh-dommaraju", "name": "Gukesh Dommaraju", "title": "GM", "federation": "IND", "rating": 2754 },
-  { "slug": "ju-wenjun", "name": "Ju Wenjun", "title": "GM", "federation": "CHN", "rating": 2559 }
+  { "slug": "ju-wenjun", "name": "Ju Wenjun", "title": "GM", "federation": "CHN", "rating": 2559 },
+  { "slug": "fabiano-caruana", "name": "Fabiano Caruana", "title": "GM", "federation": "USA", "rating": 2795 },
+  { "slug": "nodirbek-abdusattorov", "name": "Nodirbek Abdusattorov", "title": "GM", "federation": "UZB", "rating": 2751 }
 ]

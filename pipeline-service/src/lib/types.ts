@@ -274,7 +274,7 @@ export interface PhaseEvent {
 
 /** SSE event: progress within a phase */
 export interface ProgressEvent {
-  phase: 'identity' | 'games' | 'engine';
+  phase: 'identity' | 'games' | 'parsing' | 'engine';
   current: number;
   total: number;
 }
