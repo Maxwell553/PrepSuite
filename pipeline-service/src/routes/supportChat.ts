@@ -5,6 +5,7 @@
 
 import { Hono } from 'hono';
 import { logger } from '../lib/logger.js';
+import { SSEStream } from '../lib/sse.js';
 import { chatRateLimitMiddleware } from '../middleware/rateLimit.js';
 import { getAccessToken, getVertexUrl, invalidateAccessTokenCache } from '../lib/vertexAuth.js';
 import { z } from 'zod';
@@ -116,70 +117,93 @@ supportChatRoute.post('/support-chat', chatRateLimitMiddleware, async (c) => {
     },
   };
 
-  let lastError = '';
-  for (let i = 0; i < GEMINI_MODELS.length; i++) {
-    const model = GEMINI_MODELS[i];
-    logger.info({ requestId, model }, '[SupportChat] Calling Gemini');
+  const sse = new SSEStream();
 
+  void (async () => {
     try {
-      const geminiUrl = getVertexUrl(model);
-      const accessToken = await getAccessToken();
+      let lastError = '';
+      for (let i = 0; i < GEMINI_MODELS.length; i++) {
+        const model = GEMINI_MODELS[i];
+        logger.info({ requestId, model }, '[SupportChat] Calling Gemini');
 
-      const res = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-      });
+        try {
+          const geminiUrl = getVertexUrl(model);
+          const accessToken = await getAccessToken();
 
-      if (res.status === 401) {
-        invalidateAccessTokenCache();
-        throw new Error('Auth token invalid');
+          const res = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(requestBody),
+            signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+          });
+
+          if (res.status === 401) {
+            invalidateAccessTokenCache();
+            throw new Error('Auth token invalid');
+          }
+
+          if (!res.ok) {
+            const errorText = await res.text().catch(() => '');
+            lastError = `${model}: ${res.status} - ${errorText.slice(0, 150)}`;
+            logger.error({ requestId, model, status: res.status }, '[SupportChat] API error');
+            if (i < GEMINI_MODELS.length - 1) continue;
+            sse.sendError({ error: `AI service error: ${res.status}` });
+            return;
+          }
+
+          const data = (await res.json()) as {
+            candidates?: Array<{
+              content?: { parts?: Array<{ text?: string }> };
+              finishReason?: string;
+            }>;
+          };
+          const candidate = data.candidates?.[0];
+          const text = candidate?.content?.parts?.[0]?.text ?? '';
+
+          // If blocked by safety filter, return a friendly message instead of error
+          if (!text && candidate?.finishReason === 'SAFETY') {
+            sse.sendEvent('chat_text', {
+              text: "I couldn't generate a response for that. Please rephrase your message or try a different question.",
+            });
+            return;
+          }
+
+          if (!text) {
+            sse.sendError({ error: 'AI returned empty response' });
+            return;
+          }
+
+          sse.sendEvent('chat_text', { text: text.replace(/\*\*/g, '') });
+          return;
+        } catch (err) {
+          const errObj = err as { name?: string; message?: string };
+          lastError = errObj.message ?? String(err);
+          if (errObj.name === 'AbortError' || errObj.name === 'TimeoutError') {
+            sse.sendError({ error: 'Request timed out' });
+            return;
+          }
+          if (i < GEMINI_MODELS.length - 1) continue;
+          logger.error({ requestId, err }, '[SupportChat] Error');
+          sse.sendError({ error: `Support chat failed: ${lastError.slice(0, 100)}` });
+          return;
+        }
       }
 
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => '');
-        lastError = `${model}: ${res.status} - ${errorText.slice(0, 150)}`;
-        logger.error({ requestId, model, status: res.status }, '[SupportChat] API error');
-        if (i < GEMINI_MODELS.length - 1) continue;
-        return c.json({ error: `AI service error: ${res.status}` }, 502);
-      }
-
-      const data = (await res.json()) as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ text?: string }> };
-          finishReason?: string;
-        }>;
-      };
-      const candidate = data.candidates?.[0];
-      const text = candidate?.content?.parts?.[0]?.text ?? '';
-
-      // If blocked by safety filter, return a friendly message instead of error
-      if (!text && candidate?.finishReason === 'SAFETY') {
-        return c.json({
-          text: "I couldn't generate a response for that. Please rephrase your message or try a different question.",
-        });
-      }
-
-      if (!text) {
-        return c.json({ error: 'AI returned empty response' }, 502);
-      }
-
-      return c.json({ text: text.replace(/\*\*/g, '') });
-    } catch (err) {
-      const errObj = err as { name?: string; message?: string };
-      lastError = errObj.message ?? String(err);
-      if (errObj.name === 'AbortError' || errObj.name === 'TimeoutError') {
-        return c.json({ error: 'Request timed out' }, 504);
-      }
-      if (i < GEMINI_MODELS.length - 1) continue;
-      logger.error({ requestId, err }, '[SupportChat] Error');
-      return c.json({ error: `Support chat failed: ${lastError.slice(0, 100)}` }, 500);
+      sse.sendError({ error: `AI unavailable. ${lastError.slice(0, 150)}` });
+    } catch (unexpected: unknown) {
+      logger.error({ requestId, err: unexpected }, '[SupportChat] Unexpected error');
+      sse.sendError({ error: 'Support chat failed unexpectedly' });
+    } finally {
+      sse.close();
     }
-  }
+  })().catch((err) => {
+    logger.error({ requestId, err }, '[SupportChat] Promise rejection');
+    sse.sendError({ error: 'Support chat failed unexpectedly' });
+    void sse.close();
+  });
 
-  return c.json({ error: `AI unavailable. ${lastError.slice(0, 150)}` }, 502);
+  return sse.response();
 });

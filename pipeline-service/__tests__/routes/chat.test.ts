@@ -125,8 +125,10 @@ describe('POST /api/chat', () => {
     });
 
     expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.text).toBe(responseText);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+    const body = await res.text();
+    expect(body).toContain('event: chat_text');
+    expect(body).toContain(responseText);
   });
 
   it('handles Gemini error gracefully', async () => {
@@ -141,9 +143,11 @@ describe('POST /api/chat', () => {
       body: JSON.stringify(validBody),
     });
 
-    expect(res.status).toBe(502);
-    const json = await res.json();
-    expect(json.error).toContain('AI service error');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+    const body = await res.text();
+    expect(body).toContain('event: error');
+    expect(body).toContain('AI service error');
   });
 
   it('builds correct chat prompt (includes player name)', async () => {
@@ -161,7 +165,7 @@ describe('POST /api/chat', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const fetchCallBody = JSON.parse(mockFetch.mock.calls[0][1].body as string);
-    const promptText = fetchCallBody.contents[0].parts[0].text;
-    expect(promptText).toContain('Test Player');
+    const systemText = fetchCallBody.systemInstruction.parts[0].text as string;
+    expect(systemText).toContain('Test Player');
   });
 });

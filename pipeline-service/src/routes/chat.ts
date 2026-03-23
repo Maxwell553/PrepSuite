@@ -5,6 +5,7 @@
 
 import { Hono } from 'hono';
 import { logger } from '../lib/logger.js';
+import { SSEStream } from '../lib/sse.js';
 import { chatRateLimitMiddleware } from '../middleware/rateLimit.js';
 import { getAccessToken, getVertexUrl, invalidateAccessTokenCache } from '../lib/vertexAuth.js';
 import { validateChatRequest } from '../lib/validation.js';
@@ -344,170 +345,196 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
     '[Chat] Request body prepared',
   );
 
-  let lastError = '';
-  for (let i = 0; i < GEMINI_CHAT_MODELS.length; i++) {
-    const model = GEMINI_CHAT_MODELS[i];
-    logger.info({ requestId, model }, '[Chat] Calling Gemini API');
-    const MAX_AUTH_RETRIES = 2;
-    let authRetries = 0;
-    let res: Response;
+  // SSE + periodic keepalive (see sse.ts) so the browser/proxy does not close the connection
+  // while Vertex AI runs multi-round tool calls with long idle gaps.
+  const sse = new SSEStream();
+
+  void (async () => {
     try {
-      for (;;) {
-        const geminiUrl = getVertexUrl(model);
-        const accessToken = await getAccessToken();
+      let lastError = '';
+      for (let i = 0; i < GEMINI_CHAT_MODELS.length; i++) {
+        const model = GEMINI_CHAT_MODELS[i];
+        logger.info({ requestId, model }, '[Chat] Calling Gemini API');
+        const MAX_AUTH_RETRIES = 2;
+        let authRetries = 0;
+        let res: Response;
+        try {
+          for (;;) {
+            const geminiUrl = getVertexUrl(model);
+            const accessToken = await getAccessToken();
 
-        res = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(requestBody),
-          signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-        });
+            res = await fetch(geminiUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify(requestBody),
+              signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+            });
 
-        if (res.status === 401 && authRetries < MAX_AUTH_RETRIES) {
-          logger.warn({ requestId, authRetries: authRetries + 1, max: MAX_AUTH_RETRIES }, '[Chat] Auth token invalid (401), refreshing and retrying');
-          invalidateAccessTokenCache();
-          authRetries++;
-          continue;
-        }
+            if (res.status === 401 && authRetries < MAX_AUTH_RETRIES) {
+              logger.warn({ requestId, authRetries: authRetries + 1, max: MAX_AUTH_RETRIES }, '[Chat] Auth token invalid (401), refreshing and retrying');
+              invalidateAccessTokenCache();
+              authRetries++;
+              continue;
+            }
 
-        if (!res.ok) {
-          const errorText = await res.text().catch(() => 'unable to read');
-          lastError = `Vertex AI ${model}: ${res.status} - ${errorText.slice(0, 150)}`;
-          logger.error({ requestId, model, status: res.status, errorText: errorText.slice(0, 300) }, '[Chat] Gemini API error');
-          if (shouldTryNextModel(res.status, errorText) && i < GEMINI_CHAT_MODELS.length - 1) {
-            logger.warn({ requestId, model, nextModel: GEMINI_CHAT_MODELS[i + 1] }, '[Chat] Model failed, trying next');
+            if (!res.ok) {
+              const errorText = await res.text().catch(() => 'unable to read');
+              lastError = `Vertex AI ${model}: ${res.status} - ${errorText.slice(0, 150)}`;
+              logger.error({ requestId, model, status: res.status, errorText: errorText.slice(0, 300) }, '[Chat] Gemini API error');
+              if (shouldTryNextModel(res.status, errorText) && i < GEMINI_CHAT_MODELS.length - 1) {
+                logger.warn({ requestId, model, nextModel: GEMINI_CHAT_MODELS[i + 1] }, '[Chat] Model failed, trying next');
+                break;
+              }
+              sse.sendError({ error: `AI service error: ${res.status}. ${errorText.slice(0, 100)}` });
+              return;
+            }
             break;
           }
-          return c.json({ error: `AI service error: ${res.status}. ${errorText.slice(0, 100)}` }, 502);
-        }
-        break;
-      }
 
-      if (!res.ok) continue;
+          if (!res.ok) continue;
 
-      let data = await res.json();
-      let round = 0;
-      let openingBreakdownCount = 0;
+          let data = await res.json();
+          let round = 0;
+          let openingBreakdownCount = 0;
 
-      // Tool-calling loop
-      while (round < MAX_TOOL_ROUNDS) {
-        const candidate = data.candidates?.[0];
-        const parts = candidate?.content?.parts || [];
-        let text = '';
-        /** All function calls from model — Gemini 3 can return multiple in one turn */
-        const functionCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
-        /** Parts from model that contain functionCall — must be passed through with thought_signature for Gemini 3 */
-        const modelPartsWithFc: Array<Record<string, unknown>> = [];
+          // Tool-calling loop
+          while (round < MAX_TOOL_ROUNDS) {
+            const candidate = data.candidates?.[0];
+            const parts = candidate?.content?.parts || [];
+            let text = '';
+            /** All function calls from model — Gemini 3 can return multiple in one turn */
+            const functionCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+            /** Parts from model that contain functionCall — must be passed through with thought_signature for Gemini 3 */
+            const modelPartsWithFc: Array<Record<string, unknown>> = [];
 
-        logger.debug(
-          { requestId, round, partCount: parts.length, finishReason: candidate?.finishReason },
-          '[Chat] Gemini response received',
-        );
+            logger.debug(
+              { requestId, round, partCount: parts.length, finishReason: candidate?.finishReason },
+              '[Chat] Gemini response received',
+            );
 
-        for (const part of parts) {
-          if (part.text) text += part.text;
-          const fc = part.functionCall ?? part.function_call;
-          if (fc) {
-            const parsed = fc as { name: string; args: Record<string, unknown> };
-            functionCalls.push(parsed);
-            // Preserve full part (including thought_signature/thoughtSignature) for Gemini 3
-            modelPartsWithFc.push({ ...part } as Record<string, unknown>);
-          }
-        }
-
-        if (functionCalls.length > 0) {
-          // Execute all function calls and build one functionResponse per call (required for Gemini 3 parallel calls)
-          const functionResponseParts: Array<{ functionResponse: { name: string; response: { result: string } } }> = [];
-          for (const fc of functionCalls) {
-            const atLimit = fc.name === 'get_opening_breakdown' && openingBreakdownCount >= MAX_OPENING_BREAKDOWN_PER_REQUEST;
-            let result: string;
-            if (atLimit) {
-              result = `[Limit reached: You have already used get_opening_breakdown ${MAX_OPENING_BREAKDOWN_PER_REQUEST} times. Synthesize the data from your previous queries and respond to the user now. Do NOT make any more tool calls.]`;
-              logger.info({ requestId, round, tool: fc.name }, '[Chat] get_opening_breakdown limit reached, returning synthetic response');
-            } else {
-              logger.info(
-                { requestId, round, tool: fc.name, args: fc.args },
-                '[Chat] Tool call requested',
-              );
-              result = await executeTool(fc.name, fc.args, report);
-              if (fc.name === 'get_opening_breakdown') openingBreakdownCount++;
-              logger.info(
-                { requestId, round, tool: fc.name, resultLength: result.length, resultPreview: result.slice(0, 120) },
-                '[Chat] Tool executed',
-              );
+            for (const part of parts) {
+              if (part.text) text += part.text;
+              const fc = part.functionCall ?? part.function_call;
+              if (fc) {
+                const parsed = fc as { name: string; args: Record<string, unknown> };
+                functionCalls.push(parsed);
+                // Preserve full part (including thought_signature/thoughtSignature) for Gemini 3
+                modelPartsWithFc.push({ ...part } as Record<string, unknown>);
+              }
             }
-            functionResponseParts.push({
-              functionResponse: { name: fc.name, response: { result } },
-            });
+
+            if (functionCalls.length > 0) {
+              // Execute all function calls and build one functionResponse per call (required for Gemini 3 parallel calls)
+              const functionResponseParts: Array<{ functionResponse: { name: string; response: { result: string } } }> = [];
+              for (const fc of functionCalls) {
+                const atLimit = fc.name === 'get_opening_breakdown' && openingBreakdownCount >= MAX_OPENING_BREAKDOWN_PER_REQUEST;
+                let result: string;
+                if (atLimit) {
+                  result = `[Limit reached: You have already used get_opening_breakdown ${MAX_OPENING_BREAKDOWN_PER_REQUEST} times. Synthesize the data from your previous queries and respond to the user now. Do NOT make any more tool calls.]`;
+                  logger.info({ requestId, round, tool: fc.name }, '[Chat] get_opening_breakdown limit reached, returning synthetic response');
+                } else {
+                  logger.info(
+                    { requestId, round, tool: fc.name, args: fc.args },
+                    '[Chat] Tool call requested',
+                  );
+                  result = await executeTool(fc.name, fc.args, report);
+                  if (fc.name === 'get_opening_breakdown') openingBreakdownCount++;
+                  logger.info(
+                    { requestId, round, tool: fc.name, resultLength: result.length, resultPreview: result.slice(0, 120) },
+                    '[Chat] Tool executed',
+                  );
+                }
+                functionResponseParts.push({
+                  functionResponse: { name: fc.name, response: { result } },
+                });
+              }
+              // Append model parts (with thought_signature) and function responses — one response per call
+              contents.push({
+                role: 'model',
+                parts: modelPartsWithFc.length > 0 ? modelPartsWithFc : functionCalls.map((fc) => ({ functionCall: { name: fc.name, args: fc.args } })),
+              });
+              contents.push({
+                role: 'user',
+                parts: functionResponseParts,
+              });
+              requestBody.contents = contents;
+
+              res = await fetch(getVertexUrl(model), {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${await getAccessToken()}`,
+                },
+                body: JSON.stringify(requestBody),
+                signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+              });
+
+              if (!res.ok) {
+                const errorText = await res.text().catch(() => '');
+                lastError = `Vertex AI ${model}: ${res.status} - ${errorText.slice(0, 150)}`;
+                logger.error({ requestId, model, status: res.status, errorText }, '[Chat] Tool-round API error');
+                sse.sendError({ error: `AI service error: ${res.status}` });
+                return;
+              }
+              data = await res.json();
+              round++;
+              continue;
+            }
+
+            if (!text) {
+              logger.warn(
+                { requestId, round, parts: JSON.stringify(parts).slice(0, 500), candidate: JSON.stringify(candidate).slice(0, 300) },
+                '[Chat] AI returned empty text',
+              );
+              sse.sendError({ error: 'AI returned empty response' });
+              return;
+            }
+
+            logger.info(
+              { requestId, textLength: text.length, textPreview: text.slice(0, 150) },
+              '[Chat] Final response ready',
+            );
+            text = text.replace(/\*\*/g, '');
+            sse.sendEvent('chat_text', { text });
+            return;
           }
-          // Append model parts (with thought_signature) and function responses — one response per call
-          contents.push({
-            role: 'model',
-            parts: modelPartsWithFc.length > 0 ? modelPartsWithFc : functionCalls.map((fc) => ({ functionCall: { name: fc.name, args: fc.args } })),
-          });
-          contents.push({
-            role: 'user',
-            parts: functionResponseParts,
-          });
-          requestBody.contents = contents;
 
-          res = await fetch(getVertexUrl(model), {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${await getAccessToken()}`,
-            },
-            body: JSON.stringify(requestBody),
-            signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-          });
-
-          if (!res.ok) {
-            const errorText = await res.text().catch(() => '');
-            lastError = `Vertex AI ${model}: ${res.status} - ${errorText.slice(0, 150)}`;
-            logger.error({ requestId, model, status: res.status, errorText }, '[Chat] Tool-round API error');
-            return c.json({ error: `AI service error: ${res.status}` }, 502);
+          logger.warn({ requestId, rounds: MAX_TOOL_ROUNDS }, '[Chat] Exceeded max tool rounds');
+          sse.sendError({ error: 'AI exceeded maximum tool rounds' });
+          return;
+        } catch (err: unknown) {
+          const errObj = err as { name?: string; message?: string };
+          lastError = errObj.message ?? String(err);
+          if (errObj.name === 'AbortError' || errObj.name === 'TimeoutError') {
+            logger.warn({ requestId }, '[Chat] Request timed out');
+            sse.sendError({ error: 'AI request timed out' });
+            return;
           }
-          data = await res.json();
-          round++;
-          continue;
+          if (i < GEMINI_CHAT_MODELS.length - 1 && /404|501|model|not found|thought_signature/i.test(errObj.message ?? '')) {
+            logger.warn({ requestId, model, err: errObj.message, nextModel: GEMINI_CHAT_MODELS[i + 1] }, '[Chat] Model failed, trying next');
+            continue;
+          }
+          logger.error({ requestId, model, err }, '[Chat] Error');
+          sse.sendError({ error: `Chat request failed: ${lastError.slice(0, 100)}` });
+          return;
         }
-
-        if (!text) {
-          logger.warn(
-            { requestId, round, parts: JSON.stringify(parts).slice(0, 500), candidate: JSON.stringify(candidate).slice(0, 300) },
-            '[Chat] AI returned empty text',
-          );
-          return c.json({ error: 'AI returned empty response' }, 502);
-        }
-
-        logger.info(
-          { requestId, textLength: text.length, textPreview: text.slice(0, 150) },
-          '[Chat] Final response ready',
-        );
-        text = text.replace(/\*\*/g, '');
-        return c.json({ text });
       }
 
-      logger.warn({ requestId, rounds: MAX_TOOL_ROUNDS }, '[Chat] Exceeded max tool rounds');
-      return c.json({ error: 'AI exceeded maximum tool rounds' }, 502);
-    } catch (err: unknown) {
-      const errObj = err as { name?: string; message?: string };
-      lastError = errObj.message ?? String(err);
-      if (errObj.name === 'AbortError' || errObj.name === 'TimeoutError') {
-        logger.warn({ requestId }, '[Chat] Request timed out');
-        return c.json({ error: 'AI request timed out' }, 504);
-      }
-      if (i < GEMINI_CHAT_MODELS.length - 1 && /404|501|model|not found|thought_signature/i.test(errObj.message ?? '')) {
-        logger.warn({ requestId, model, err: errObj.message, nextModel: GEMINI_CHAT_MODELS[i + 1] }, '[Chat] Model failed, trying next');
-        continue;
-      }
-      logger.error({ requestId, model, err }, '[Chat] Error');
-      return c.json({ error: `Chat request failed: ${lastError.slice(0, 100)}` }, 500);
+      sse.sendError({ error: `AI service unavailable. Last error: ${lastError.slice(0, 150)}` });
+    } catch (unexpected: unknown) {
+      logger.error({ requestId, err: unexpected }, '[Chat] Unexpected error');
+      sse.sendError({ error: 'Chat request failed unexpectedly' });
+    } finally {
+      sse.close();
     }
-  }
+  })().catch((err) => {
+    logger.error({ requestId, err }, '[Chat] Promise rejection');
+    sse.sendError({ error: 'Chat request failed unexpectedly' });
+    void sse.close();
+  });
 
-  return c.json({ error: `AI service unavailable. Last error: ${lastError.slice(0, 150)}` }, 502);
+  return sse.response();
 });

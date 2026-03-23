@@ -235,6 +235,109 @@ export async function runPipeline(
   });
 }
 
+/** Client-side ceiling for chat; server uses SSE keepalive so long multi-tool replies complete reliably */
+const CHAT_CLIENT_TIMEOUT_MS = 10 * 60 * 1000;
+
+/**
+ * Read POST /api/chat (or /api/support-chat) body: SSE with event `chat_text` or `error`, or legacy JSON.
+ */
+async function readChatResponse(response: Response): Promise<string> {
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(errorBody.error || `Chat service error: ${response.status}`);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/event-stream')) {
+    return readChatSseBody(response);
+  }
+
+  const data = (await response.json()) as { text?: string; error?: string };
+  if (data.error) throw new Error(data.error);
+  return data.text || '';
+}
+
+function readChatSseBody(response: Response): Promise<string> {
+  if (!response.body) {
+    return Promise.reject(new Error('Chat service returned no body'));
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let currentEvent = '';
+
+    function settleError(err: Error) {
+      if (settled) return;
+      settled = true;
+      void reader.cancel().catch(() => {});
+      reject(err);
+    }
+
+    function settleOk(text: string) {
+      if (settled) return;
+      settled = true;
+      void reader.cancel().catch(() => {});
+      resolve(text);
+    }
+
+    function processLines() {
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line || line.startsWith(':')) continue;
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6);
+          try {
+            const data = JSON.parse(dataStr) as { text?: string; error?: string };
+            if (currentEvent === 'chat_text') {
+              settleOk(data.text ?? '');
+              return;
+            }
+            if (currentEvent === 'error') {
+              settleError(new Error(data.error || 'Chat error'));
+              return;
+            }
+          } catch {
+            // ignore malformed chunk
+          }
+        }
+      }
+    }
+
+    function read() {
+      reader
+        .read()
+        .then(({ done, value }) => {
+          if (value) {
+            buffer += decoder.decode(value, { stream: !done });
+            processLines();
+            if (settled) return;
+          }
+          if (done) {
+            if (buffer.trim()) {
+              buffer += '\n';
+              processLines();
+            }
+            if (!settled) {
+              settleError(new Error('Chat stream ended without a response'));
+            }
+            return;
+          }
+          read();
+        })
+        .catch((e) => settleError(e instanceof Error ? e : new Error(String(e))));
+    }
+
+    read();
+  });
+}
+
 /**
  * Send a chat request to the pipeline service.
  * Supports conversation history and tools (get_game, get_pgn, run_stockfish).
@@ -255,15 +358,10 @@ export async function chatWithPipeline(
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ report, messages }),
+    signal: AbortSignal.timeout(CHAT_CLIENT_TIMEOUT_MS),
   });
 
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-    throw new Error(errorBody.error || `Chat service error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.text || '';
+  return readChatResponse(response);
 }
 
 /** Support category for filtering */
@@ -285,14 +383,9 @@ export async function supportChatWithPipeline(
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ messages, category }),
+    signal: AbortSignal.timeout(CHAT_CLIENT_TIMEOUT_MS),
   });
 
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-    throw new Error(errorBody.error || `Support chat error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.text || '';
+  return readChatResponse(response);
 }
 
