@@ -18,6 +18,7 @@ import { chatRoute } from './routes/chat.js';
 import { supportChatRoute } from './routes/supportChat.js';
 import { practiceMoveRoute } from './routes/practiceMove.js';
 import { fideRatingHistoryRoute } from './routes/fideRatingHistory.js';
+import { analyzeGuestRoute } from './routes/analyzeGuest.js';
 import { logger } from './lib/logger.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,6 +32,9 @@ app.use('*', corsMiddleware);
 // Public routes
 app.route('/health', healthRoute);
 app.route('/', fideRatingHistoryRoute); // /fide-rating-history/:fideId — public (FIDE data from ChessTools)
+
+// Guest analyze (no auth, rate-limited, 500-game cap)
+app.route('/api', analyzeGuestRoute);
 
 // Protected routes
 app.use('/api/*', authMiddleware);

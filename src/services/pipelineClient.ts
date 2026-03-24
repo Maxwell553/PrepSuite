@@ -240,6 +240,138 @@ export async function runPipeline(
   });
 }
 
+const GUEST_MAX_GAMES = 500;
+
+/**
+ * Run the guest pipeline (no auth required, 500-game cap).
+ * Hits /api/analyze-guest which is rate-limited by IP.
+ */
+export async function runGuestPipeline(
+  params: PipelineParams,
+  callbacks: PipelineCallbacks = {},
+): Promise<PipelineResult> {
+  const baseUrl = import.meta.env.VITE_PIPELINE_SERVICE_URL || '';
+  const url = `${baseUrl}/api/analyze-guest`;
+
+  const cappedParams = {
+    ...params,
+    gameLimit: Math.min(params.gameLimit ?? GUEST_MAX_GAMES, GUEST_MAX_GAMES),
+    onlineLimit: Math.min(params.onlineLimit ?? 250, GUEST_MAX_GAMES),
+    otbLimit: Math.min(params.otbLimit ?? 250, GUEST_MAX_GAMES),
+  };
+  // Ensure split adds up
+  if (cappedParams.onlineLimit + cappedParams.otbLimit !== cappedParams.gameLimit) {
+    cappedParams.onlineLimit = Math.min(cappedParams.onlineLimit, cappedParams.gameLimit);
+    cappedParams.otbLimit = cappedParams.gameLimit - cappedParams.onlineLimit;
+  }
+
+  const pipelineStartMs = Date.now();
+  const PIPELINE_TIMEOUT_MS = 10 * 60 * 1000;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cappedParams),
+    signal: AbortSignal.timeout(PIPELINE_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(errorBody.error || `Pipeline service error: ${response.status}`);
+  }
+
+  if (!response.body) {
+    throw new Error('Pipeline service returned no body');
+  }
+
+  return new Promise<PipelineResult>((resolve, reject) => {
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let result: PipelineResult | null = null;
+    let currentEvent = '';
+
+    function processLines() {
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6);
+          try {
+            const data = JSON.parse(dataStr);
+            handleEvent(currentEvent, data);
+          } catch (e) {
+            console.warn(`[GuestPipeline] Failed to parse SSE data for event "${currentEvent}":`,
+              (e as Error).message);
+          }
+        }
+      }
+    }
+
+    function handleEvent(event: string, data: Record<string, unknown>) {
+      switch (event) {
+        case 'phase': {
+          const phase = data.phase as string;
+          const status = data.status as string;
+          const durationMs = data.durationMs as number | undefined;
+          const extra = {
+            gameCount: data.gameCount as number | undefined,
+            gamesAnalyzed: data.gamesAnalyzed as number | undefined,
+            message: data.message as string | undefined,
+          };
+          callbacks.onPhase?.(phase, status, durationMs, extra);
+          break;
+        }
+        case 'progress': {
+          const phase = data.phase as string;
+          const current = data.current as number;
+          const total = data.total as number;
+          setTimeout(() => callbacks.onProgress?.(phase, current, total), 0);
+          break;
+        }
+        case 'complete':
+          result = data as unknown as PipelineResult;
+          break;
+        case 'identity':
+          callbacks.onIdentity?.(data as unknown as IdentityEventData);
+          break;
+        case 'parsing':
+          callbacks.onParsing?.(data as unknown as ParsingEventData);
+          break;
+        case 'error':
+          callbacks.onError?.(data.error as string, data.phase as string | undefined);
+          reject(new Error(data.error as string));
+          break;
+      }
+    }
+
+    function read() {
+      reader.read().then(({ done, value }) => {
+        if (value) {
+          buffer += decoder.decode(value, { stream: !done });
+          processLines();
+        }
+        if (done) {
+          if (buffer.trim()) { buffer += '\n'; processLines(); }
+          if (result) {
+            const durationMs = Date.now() - pipelineStartMs;
+            console.log(`[GuestPipeline] Complete in ${(durationMs / 1000).toFixed(1)}s`);
+            resolve(result);
+          } else {
+            reject(new Error('Pipeline stream ended without complete event'));
+          }
+          return;
+        }
+        read();
+      }).catch(reject);
+    }
+
+    read();
+  });
+}
+
 /** Client-side ceiling for chat; server uses SSE keepalive so long multi-tool replies complete reliably */
 const CHAT_CLIENT_TIMEOUT_MS = 10 * 60 * 1000;
 

@@ -3,7 +3,7 @@ import { logger } from '../lib/logger.js';
 
 const BASE_URL = 'https://api.chess.com/pub/player';
 const USER_AGENT = 'PrepSuite-Pipeline/1.0';
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 8;
 const MAX_RECENT_ARCHIVES = 60;
 
 export interface ChessComGamesFetchResult {
@@ -82,12 +82,14 @@ export async function fetchChessComGames(
     }
 
     if (onProgress) {
-      onProgress(allGames.length, limit);
+      onProgress(Math.min(allGames.length, limit), limit);
     }
 
-    // Respect rate limits
+    if (allGames.length >= limit) break;
+
+    // Respect rate limits between batches
     if (i + BATCH_SIZE < recentArchives.length) {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 300));
     }
   }
 

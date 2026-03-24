@@ -201,8 +201,9 @@ export function usePipelineProgressCallbacks({
       },
 
       onProgress: (phase: string, current: number, total: number) => {
+        const safeCurrent = Math.min(current, total);
         if (phase === 'games') {
-          setLoadingProgress(Math.round((current / total) * 30));
+          setLoadingProgress(Math.round((safeCurrent / Math.max(1, total)) * 30));
           setScanningStatus('Step 2: Fetching Games...');
         } else if (phase === 'parsing') {
           const s = parseAnimRef.current;
@@ -225,7 +226,7 @@ export function usePipelineProgressCallbacks({
             scheduleParsePump();
           }
         } else if (phase === 'engine') {
-          setLoadingProgress(Math.round(50 + (current / total) * 30));
+          setLoadingProgress(Math.round(50 + (safeCurrent / Math.max(1, total)) * 30));
           setScanningStatus('Step 4: Analyzing Games...');
         }
       },

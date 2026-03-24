@@ -20,8 +20,9 @@ const SupportChat = lazy(() => import('./components/SupportChat'));
 import { ThemeProvider } from './lib/themeContext';
 import { setSentryUser, clearSentryUser } from './lib/sentry';
 import { trackSignUpConversion, trackSignUpConversionIfNewUser } from './lib/googleAds';
-import { mergeReport } from './lib/reportUtils';
+import { mergeReport, createEmptyReport } from './lib/reportUtils';
 import { useCredits } from './hooks/useCredits';
+import { runGuestPipeline } from './services/pipelineClient';
 function FeaturedReportLayout({
   report,
   user,
@@ -47,6 +48,56 @@ function FeaturedReportLayout({
       <main className="max-w-6xl mx-auto p-6">
         <Suspense fallback={<div className="flex items-center justify-center min-h-[400px]"><Loader2 className="w-10 h-10 animate-spin text-indigo-400" /></div>}>
           <ReportDashboard report={report} requiresSignInForChat={!user} hideCreditsBadge />
+        </Suspense>
+      </main>
+    </div>
+  );
+}
+
+function GuestReportLayout({
+  report,
+  onBack,
+  onSignUp,
+  isGenerating,
+  generatingStatus,
+}: {
+  report: ScoutingReport;
+  onBack: () => void;
+  onSignUp: () => void;
+  isGenerating?: boolean;
+  generatingStatus?: string;
+}) {
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    scrollRef.current?.scrollTo(0, 0);
+  }, [report]);
+
+  return (
+    <div ref={scrollRef} className="h-screen overflow-y-auto bg-slate-950">
+      <header className="sticky top-0 z-10 backdrop-blur-md bg-slate-950/80 border-b border-slate-800 p-4 flex flex-wrap gap-3 justify-between items-center">
+        <button type="button" onClick={onBack} className="text-slate-400 hover:text-white flex items-center gap-2">
+          <ChevronLeft className="w-4 h-4" /> Back to home
+        </button>
+        <div className="flex items-center gap-3">
+          <span className="text-slate-500 text-xs hidden sm:inline">Guest Report — 500 game limit</span>
+          <button
+            type="button"
+            onClick={onSignUp}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg transition-colors"
+          >
+            Sign up for full access
+          </button>
+        </div>
+      </header>
+      <main className="max-w-6xl mx-auto p-6">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-[400px]"><Loader2 className="w-10 h-10 animate-spin text-indigo-400" /></div>}>
+          <ReportDashboard
+            report={report}
+            requiresSignInForChat
+            hideCreditsBadge
+            isGenerating={isGenerating}
+            generatingStatus={generatingStatus}
+          />
         </Suspense>
       </main>
     </div>
@@ -91,6 +142,11 @@ const App: React.FC = () => {
   const [loadingStage, setLoadingStage] = useState<'identity' | 'fetching' | 'analyzing' | 'generating' | null>(null);
   const [scanningStatus, setScanningStatus] = useState<string>('');
   const [creditsDeductedForReport, setCreditsDeductedForReport] = useState<number | null>(null);
+
+  // Guest analysis state
+  const [guestReport, setGuestReport] = useState<ScoutingReport | null>(null);
+  const [isGuestAnalyzing, setIsGuestAnalyzing] = useState(false);
+  const [guestAnalyzingStatus, setGuestAnalyzingStatus] = useState('');
 
   // MONETIZATION_DISABLED: useCredits commented out for deployment
   const { credits, hasEnoughCredits, refetch: refetchCredits } = useCredits(user?.id);
@@ -488,6 +544,72 @@ const App: React.FC = () => {
     setActiveTab('dashboard');
   };
 
+  const handleGuestSearch = async (name: string, chessComUsername?: string, lichessUsername?: string) => {
+    setIsGuestAnalyzing(true);
+    setGuestAnalyzingStatus('Starting analysis...');
+    const empty = createEmptyReport(name);
+    setGuestReport(empty);
+
+    try {
+      const result = await runGuestPipeline(
+        {
+          name,
+          chessComUsername,
+          lichessUsername,
+          gameLimit: 500,
+          onlineLimit: 250,
+          otbLimit: 250,
+        },
+        {
+          onPhase: (phase, status, _dur, extra) => {
+            const labels: Record<string, string> = {
+              identity: 'Step 1: Identifying player...',
+              games: 'Step 2: Fetching games...',
+              parsing: 'Step 3: Analyzing openings...',
+              engine: 'Step 4: Engine analysis...',
+              report: 'Step 5: Generating report...',
+            };
+            if (status === 'started' || status === 'progress') {
+              setGuestAnalyzingStatus(extra?.message || labels[phase] || `${phase}...`);
+            }
+          },
+          onProgress: (phase, current, total) => {
+            const clamped = Math.min(current, total);
+            if (phase === 'games') {
+              setGuestAnalyzingStatus(`Step 2: Fetching games... (${clamped}/${total})`);
+            } else if (phase === 'parsing') {
+              setGuestAnalyzingStatus(`Step 3: Analyzing openings... (${clamped}/${total})`);
+            } else if (phase === 'engine') {
+              setGuestAnalyzingStatus(`Step 4: Engine analysis... (${clamped}/${total})`);
+            }
+          },
+          onIdentity: (data) => {
+            setGuestReport((prev) => prev ? mergeReport(prev, { player: data.player as ScoutingReport['player'] }) : prev);
+          },
+          onParsing: (data) => {
+            setGuestReport((prev) => prev ? mergeReport(prev, {
+              whiteOpenings: data.whiteOpenings,
+              blackDefenses: data.blackDefenses,
+              mostPlayedLines: data.mostPlayedLines,
+              games: data.games as ScoutingReport['games'],
+            }) : prev);
+          },
+        },
+      );
+
+      if (result.report) {
+        setGuestReport(result.report);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Analysis failed';
+      showToast(errorMessage, 'error');
+      setGuestReport(null);
+    } finally {
+      setIsGuestAnalyzing(false);
+      setGuestAnalyzingStatus('');
+    }
+  };
+
   const handleLogin = async (loginData: 'google' | { email: string; password?: string; isNewUser?: boolean }) => {
     try {
       if (typeof loginData === 'string') {
@@ -659,6 +781,34 @@ const App: React.FC = () => {
     );
   }
 
+  if (guestReport) {
+    return (
+      <ThemeProvider>
+        {isOffline && <OfflineBanner />}
+        <GuestReportLayout
+          report={guestReport}
+          isGenerating={isGuestAnalyzing}
+          generatingStatus={guestAnalyzingStatus}
+          onBack={() => {
+            setGuestReport(null);
+            setIsGuestAnalyzing(false);
+            setGuestAnalyzingStatus('');
+          }}
+          onSignUp={() => {
+            setGuestReport(null);
+            setIsGuestAnalyzing(false);
+            setGuestAnalyzingStatus('');
+            setTimeout(() => {
+              const el = document.getElementById('access');
+              el?.scrollIntoView({ behavior: 'smooth' });
+            }, 100);
+          }}
+        />
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </ThemeProvider>
+    );
+  }
+
   if (!user || showLandingPage) {
     return (
       <ThemeProvider>
@@ -681,6 +831,9 @@ const App: React.FC = () => {
           onShowAboutPrepSuite={openAboutPrepSuite}
           onViewFeaturedReport={handleViewFeaturedReport}
           showToast={showToast}
+          onGuestSearch={handleGuestSearch}
+          isGuestAnalyzing={isGuestAnalyzing}
+          guestAnalyzingStatus={guestAnalyzingStatus}
         />
         </div>
         {user ? (
@@ -876,7 +1029,23 @@ const App: React.FC = () => {
                       )}
                     </div>
                     {history.length === 0 ? (
-                      <p className="text-slate-400 dark:text-slate-400 text-gray-600 italic">No historical searches available.</p>
+                      <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
+                        <div className="w-20 h-20 rounded-2xl bg-slate-800/60 border border-slate-700/50 flex items-center justify-center mb-6">
+                          <Search className="w-9 h-9 text-slate-600" />
+                        </div>
+                        <h3 className="text-xl font-semibold text-slate-300 mb-2">No reports yet</h3>
+                        <p className="text-sm text-slate-500 max-w-md mb-8">
+                          Search for a player to generate your first scouting report. Your reports will appear here so you can revisit them anytime.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('search')}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-colors"
+                        >
+                          <Search className="w-4 h-4" />
+                          Scout a player
+                        </button>
+                      </div>
                     ) : historyView === 'individual' ? (
                       <div className="space-y-4">
                         {allReportsFlat.map((h) => (

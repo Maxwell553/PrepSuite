@@ -35,16 +35,18 @@ export async function fetchGames(
     logger.info({ lichess: lichessUsername, chessCom: chessComUsername, limit: gameLimit }, '[GameFetcher] Fetching both platforms in parallel');
     let lichessCount = 0;
     let chessComCount = 0;
+    const combinedTotal = gameLimit * 2;
     const onProgress = () => {
-      sse.sendProgress({ phase: 'games', current: lichessCount + chessComCount, total: gameLimit });
+      const current = Math.min(lichessCount + chessComCount, combinedTotal);
+      sse.sendProgress({ phase: 'games', current, total: combinedTotal });
     };
     const [lichessResult, chessComResult] = await Promise.all([
       fetchLichessGames(lichessUsername, gameLimit, (cur, _tot) => {
-        lichessCount = cur;
+        lichessCount = Math.min(cur, gameLimit);
         onProgress();
       }),
       fetchChessComGames(chessComUsername, gameLimit, (cur, _tot) => {
-        chessComCount = cur;
+        chessComCount = Math.min(cur, gameLimit);
         onProgress();
       }),
     ]);

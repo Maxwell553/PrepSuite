@@ -306,3 +306,16 @@ body {
         border-color: #e2e8f0 !important;
     }
 }
+
+/* PDF export capture mode — hide interactive elements during html-to-image */
+.pdf-export-active #chat-section,
+.pdf-export-active [data-practice-opponent],
+.pdf-export-active .print\\:hidden {
+    display: none !important;
+}
+.pdf-export-active button:not([data-pdf-include]) {
+    visibility: hidden;
+}
+.pdf-export-active .recharts-tooltip-wrapper {
+    display: none !important;
+}

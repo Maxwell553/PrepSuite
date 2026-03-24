@@ -1,6 +1,11 @@
+/**
+ * Guest analyze endpoint — no JWT required.
+ * Caps at 500 games, IP-based rate limiting (3 per hour).
+ * Returns the same SSE format as the authenticated endpoint.
+ */
+
 import { Hono } from 'hono';
 import { logger } from '../lib/logger.js';
-import { analyzeRateLimitMiddleware } from '../middleware/rateLimit.js';
 import { validateAnalyzeRequest } from '../lib/validation.js';
 import { SSEStream } from '../lib/sse.js';
 import type { ResolvedIdentity, PlayerMetadata } from '../lib/types.js';
@@ -19,11 +24,30 @@ import { sampleGamesForAnalysis } from '../pipeline/engineSampler.js';
 import { generateReportParallel } from '../pipeline/geminiReport.js';
 import { postProcessReport } from '../pipeline/reportPostProcessor.js';
 import { generateTimeManagementAdvice } from '../pipeline/timeManagementAdvice.js';
-// MONETIZATION_DISABLED: import { hasEnoughCredits, deductCredits } from '../lib/credits.js';
 
-export const analyzeRoute = new Hono();
+export const analyzeGuestRoute = new Hono();
 
-/** Pick the identity username that appears in the most games. Prevents empty stats when platform usernames differ. */
+const GUEST_MAX_GAMES = 500;
+const GUEST_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const GUEST_RATE_MAX = 3;
+const GUEST_CONCURRENT_MAX = 2;
+
+interface GuestLimit {
+  concurrent: number;
+  windowStart: number;
+  windowCount: number;
+}
+
+const guestLimits = new Map<string, GuestLimit>();
+
+function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string {
+  return (
+    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+    c.req.header('x-real-ip') ||
+    'unknown'
+  );
+}
+
 function resolveTargetUsername(games: GameData[], identity: ResolvedIdentity): string {
   const candidates = [
     identity.chessComUsername,
@@ -36,9 +60,7 @@ function resolveTargetUsername(games: GameData[], identity: ResolvedIdentity): s
   if (games.length === 0) return candidates[0];
 
   const counts = new Map<string, number>();
-  for (const c of candidates) {
-    counts.set(c, 0);
-  }
+  for (const c of candidates) counts.set(c, 0);
 
   for (const g of games) {
     const w = g.white.toLowerCase().trim();
@@ -56,48 +78,79 @@ function resolveTargetUsername(games: GameData[], identity: ResolvedIdentity): s
   let bestCount = counts.get(best) ?? 0;
   for (const c of candidates.slice(1)) {
     const n = counts.get(c) ?? 0;
-    if (n > bestCount) {
-      best = c;
-      bestCount = n;
-    }
+    if (n > bestCount) { best = c; bestCount = n; }
   }
   return best;
 }
 
-analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
-  // Validate input
+analyzeGuestRoute.post('/analyze-guest', async (c) => {
+  const ip = getClientIp(c);
+  const now = Date.now();
+
+  // Rate limiting by IP
+  let limit = guestLimits.get(ip);
+  if (!limit) {
+    limit = { concurrent: 0, windowStart: now, windowCount: 0 };
+    guestLimits.set(ip, limit);
+  }
+  if (now - limit.windowStart > GUEST_RATE_WINDOW_MS) {
+    limit.windowStart = now;
+    limit.windowCount = 0;
+  }
+  if (limit.concurrent >= GUEST_CONCURRENT_MAX) {
+    return c.json({ error: 'Too many guest analyses in progress. Please wait for the current one to finish.' }, 429);
+  }
+  if (limit.windowCount >= GUEST_RATE_MAX) {
+    return c.json({ error: `Guest rate limit exceeded. Maximum ${GUEST_RATE_MAX} analyses per hour. Sign up for unlimited access.` }, 429);
+  }
+
+  limit.concurrent++;
+  limit.windowCount++;
+
+  const releaseSlot = () => {
+    limit!.concurrent = Math.max(0, limit!.concurrent - 1);
+    // Cleanup stale entries
+    for (const [key, val] of guestLimits.entries()) {
+      if (now - val.windowStart > GUEST_RATE_WINDOW_MS * 2 && val.concurrent === 0) {
+        guestLimits.delete(key);
+      }
+    }
+  };
+
   let input;
   try {
     const body = await c.req.json();
-    input = validateAnalyzeRequest(body);
+    // Force guest limits before validation
+    const capped = {
+      ...body,
+      gameLimit: Math.min(body.gameLimit ?? 500, GUEST_MAX_GAMES),
+      onlineLimit: Math.min(body.onlineLimit ?? 250, GUEST_MAX_GAMES),
+      otbLimit: Math.min(body.otbLimit ?? 250, GUEST_MAX_GAMES),
+    };
+    // Ensure split adds up to gameLimit
+    const total = capped.gameLimit;
+    if (capped.onlineLimit + capped.otbLimit !== total) {
+      capped.onlineLimit = Math.min(capped.onlineLimit, total);
+      capped.otbLimit = total - capped.onlineLimit;
+    }
+    input = validateAnalyzeRequest(capped);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Invalid request';
-    c.get('releaseAnalyzeSlot')?.();
+    releaseSlot();
     return c.json({ error: message }, 400);
   }
 
-  const user = c.get('user');
-  logger.info({ userId: user.sub, name: input.name }, '[Analyze] Starting pipeline');
+  logger.info({ ip, name: input.name }, '[AnalyzeGuest] Starting guest pipeline');
 
-  // Create SSE stream
   const sse = new SSEStream();
 
-  // Create a promise that resolves when the pipeline finishes.
-  // We must NOT return the response until we start piping, and
-  // we must keep the async pipeline referenced so the stream stays open.
   const pipelinePromise = (async () => {
     try {
-      const userId = user.sub;
-      const gameLimit = input.gameLimit || 1500;
-      const onlineLimit = input.onlineLimit ?? gameLimit;
-      const otbLimit = input.otbLimit ?? 0;
+      const gameLimit = input.gameLimit || GUEST_MAX_GAMES;
+      const onlineLimit = Math.min(input.onlineLimit ?? gameLimit, GUEST_MAX_GAMES);
+      const otbLimit = Math.min(input.otbLimit ?? 0, GUEST_MAX_GAMES);
 
-      // MONETIZATION_DISABLED: Credit check bypassed for deployment
-      // const creditsNeeded = Math.ceil(gameLimit / 5);
-      // const enoughCredits = await hasEnoughCredits(userId, creditsNeeded);
-      // if (!enoughCredits) { sse.sendError(...); return; }
-
-      // ── Phase 1: Identity ──────────────────────────────────
+      // Phase 1: Identity
       const identityStart = Date.now();
       sse.sendPhase({ phase: 'identity', status: 'started', message: 'Identifying player...' });
 
@@ -140,13 +193,8 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
       );
 
       const identityDurationMs = Date.now() - identityStart;
-      sse.sendPhase({
-        phase: 'identity',
-        status: 'complete',
-        durationMs: identityDurationMs,
-      });
+      sse.sendPhase({ phase: 'identity', status: 'complete', durationMs: identityDurationMs });
 
-      // Final identity event (ensures complete state)
       const playerFromIdentity: PlayerMetadata = {
         name: identity.verifiedName,
         fideId: identity.fideId || undefined,
@@ -162,42 +210,21 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
       };
       sse.sendEvent('identity', { player: playerFromIdentity });
 
-      logger.info(
-        {
-          name: identity.verifiedName,
-          chessCom: identity.chessComUsername,
-          lichess: identity.lichessUsername,
-          hasFide: !!identity.fideProfile,
-          hasUscf: !!identity.uscfProfile,
-        },
-        '[Analyze] Identity resolved',
-      );
-
-      // Only treat as "has online" when user actually requested online games (onlineLimit > 0)
-      let hasOnline =
-        onlineLimit > 0 && !!(identity.chessComUsername || identity.lichessUsername);
+      let hasOnline = onlineLimit > 0 && !!(identity.chessComUsername || identity.lichessUsername);
       let effectiveOtbLimit = otbLimit;
       let hasOtb = otbLimit > 0 && !!identity.fideId;
 
-      // When we have FIDE ID but no Chess.com/Lichess: use OTB games instead of failing.
-      // User may have requested online-only (otbLimit=0) but we can still deliver via OTB.
       if (!hasOnline && identity.fideId && gameLimit > 0) {
         effectiveOtbLimit = gameLimit;
         hasOtb = true;
-        logger.info(
-          { fideId: identity.fideId, effectiveOtbLimit },
-          '[Analyze] No online platforms; using OTB games via FIDE ID',
-        );
       }
 
       if (!hasOnline && !hasOtb) {
-        const msg = 'Could not find Chess.com, Lichess username, or FIDE ID. Please provide at least one.';
-        logger.warn({ name: identity.verifiedName }, '[Analyze] No platform usernames or FIDE ID found');
-        sse.sendError({ error: msg });
+        sse.sendError({ error: 'Could not find Chess.com, Lichess username, or FIDE ID. Please provide at least one.' });
         return;
       }
 
-      // ── Phase 2: Game Fetching ─────────────────────────────
+      // Phase 2: Game Fetching
       const gamesStart = Date.now();
       let gameResult: Awaited<ReturnType<typeof fetchGames>> = {
         chessComGames: [],
@@ -206,11 +233,10 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         durationMs: 0,
       };
 
-      // OTB + Online in parallel when both are needed
       const onlineFetchLimit = onlineLimit;
       const otbPromise = (effectiveOtbLimit > 0 && identity.fideId)
         ? fetchOtbGames(identity.fideId, effectiveOtbLimit)
-        : Promise.resolve([] as import('../lib/types.js').GameData[]);
+        : Promise.resolve([] as GameData[]);
       const onlinePromise = (onlineFetchLimit > 0 && hasOnline)
         ? fetchGames(identity.chessComUsername || '', identity.lichessUsername || '', onlineFetchLimit, sse)
         : Promise.resolve(gameResult);
@@ -219,70 +245,30 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
       gameResult = onlineResult;
 
       const gamesDurationMs = Date.now() - gamesStart;
-      logger.info(
-        {
-          chessComGames: gameResult.chessComGames.length,
-          lichessGames: gameResult.lichessGamesNdjson
-            ? gameResult.lichessGamesNdjson.split('\n').filter((l) => l.trim()).length
-            : 0,
-          durationMs: gamesDurationMs,
-        },
-        '[Analyze] Games fetched',
-      );
 
-      // ── Phase 3: Parsing + Stats ───────────────────────────
+      // Phase 3: Parsing + Stats
       const parsingStart = Date.now();
       sse.sendPhase({ phase: 'parsing', status: 'started' });
 
-      // Parse raw games into GameData[]
-      const chessComGames = parseChessComGames(
-        gameResult.chessComGames,
-        identity.chessComUsername,
-      );
-      const lichessGames = parseLichessGames(
-        gameResult.lichessGamesNdjson,
-        identity.lichessUsername,
-      );
+      const chessComGames = parseChessComGames(gameResult.chessComGames, identity.chessComUsername);
+      const lichessGames = parseLichessGames(gameResult.lichessGamesNdjson, identity.lichessUsername);
 
-      // Lichess PGN refetch is handled once in validateAndRefetchPgn (batched) to avoid duplicate export calls
-
-      // Respect OTB/online split: take up to otbLimit from OTB, up to onlineLimit from online, then combine
       const otbSlice = otbGames.slice(0, otbLimit);
       const onlineMerged = [...chessComGames, ...lichessGames].sort(
         (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
       );
-      let onlineSlice = onlineMerged.slice(0, onlineLimit);
+      const onlineSlice = onlineMerged.slice(0, onlineLimit);
       let allGames = [...otbSlice, ...onlineSlice].sort(
         (a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime(),
       );
 
-      // Validate PGN and refetch missing/invalid notation once. After one refetch attempt, drop games that still lack valid PGN.
       const validationResult = await validateAndRefetchPgn(
         allGames,
         identity.chessComUsername || '',
         identity.lichessUsername || '',
       );
       allGames = validationResult.valid;
-      if (validationResult.invalidCount > 0) {
-        logger.info(
-          { dropped: validationResult.invalidCount },
-          '[Analyze] Dropped games with no valid PGN after single refetch attempt',
-        );
-      }
 
-      logger.info(
-        {
-          chessCom: chessComGames.length,
-          lichess: lichessGames.length,
-          otb: otbGames.length,
-          otbSlice: otbSlice.length,
-          onlineSlice: onlineSlice.length,
-          total: allGames.length,
-        },
-        '[Analyze] Games parsed',
-      );
-
-      // Enrich with ECO library opening names and codes
       const openingResults = await identifyOpeningsBatch(
         allGames.map((g) => ({ pgn: g.pgn, eco: g.eco })),
         {
@@ -298,82 +284,42 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         }
       }
 
-      // Resolve target username: use the identity username that actually appears in games.
-      // Prevents empty stats when e.g. chessCom is primary but all games are from Lichess.
       const targetUsername = resolveTargetUsername(allGames, identity);
-
-      // Generate opening stats for both sides
       const whiteStats = generateStats(allGames, targetUsername, 'white');
       const blackStats = generateStats(allGames, targetUsername, 'black');
-
-      // Extract most-played lines
       const moveSequences = extractMostPlayedLines(allGames, targetUsername, 10, 10);
 
       const parsingDurationMs = Date.now() - parsingStart;
-      sse.sendPhase({
-        phase: 'parsing',
-        status: 'complete',
-        durationMs: parsingDurationMs,
-        gameCount: allGames.length,
-      });
+      sse.sendPhase({ phase: 'parsing', status: 'complete', durationMs: parsingDurationMs, gameCount: allGames.length });
+      sse.sendEvent('parsing', { whiteOpenings: whiteStats, blackDefenses: blackStats, mostPlayedLines: moveSequences, games: allGames });
 
-      // Stream parsing result for progressive report filling (openings, games)
-      sse.sendEvent('parsing', {
-        whiteOpenings: whiteStats,
-        blackDefenses: blackStats,
-        mostPlayedLines: moveSequences,
-        games: allGames,
-      });
-
-      logger.info(
-        { whiteOpenings: whiteStats.length, blackOpenings: blackStats.length },
-        '[Analyze] Stats generated',
-      );
-
-      // ── Phase 4: Engine Analysis ───────────────────────────
+      // Phase 4: Engine Analysis (lighter for guest — fewer samples)
       const engineStart = Date.now();
       sse.sendPhase({ phase: 'engine', status: 'started' });
 
       let engineAnalysis: import('../lib/types.js').GameAnalysis[] = [];
-
-      const sampled = sampleGamesForAnalysis(allGames, 80);
-      const engineDepth = 7;
+      const sampled = sampleGamesForAnalysis(allGames, 40); // Guest gets fewer engine samples
       if (sampled.length > 0) {
         let pool: StockfishPool | null = null;
         try {
-          pool = new StockfishPool({ workerCount: 4, depth: engineDepth });
+          pool = new StockfishPool({ workerCount: 2, depth: 7 });
           await pool.initialize();
-
           engineAnalysis = await pool.analyzeGames(sampled, targetUsername, (current, total) => {
             sse.sendProgress({ phase: 'engine', current, total });
           });
         } catch (err) {
-          logger.warn({ err }, '[Analyze] Engine analysis failed, continuing without it');
+          logger.warn({ err }, '[AnalyzeGuest] Engine analysis failed, continuing without it');
         } finally {
-          if (pool) await pool.shutdown().catch(() => { });
+          if (pool) await pool.shutdown().catch(() => {});
         }
       }
 
       const engineDurationMs = Date.now() - engineStart;
-      sse.sendPhase({
-        phase: 'engine',
-        status: 'complete',
-        durationMs: engineDurationMs,
-        gamesAnalyzed: engineAnalysis.length,
-      });
+      sse.sendPhase({ phase: 'engine', status: 'complete', durationMs: engineDurationMs, gamesAnalyzed: engineAnalysis.length });
 
-      logger.info(
-        { gamesAnalyzed: engineAnalysis.length, durationMs: engineDurationMs },
-        '[Analyze] Engine analysis complete',
-      );
-
-      // ── Phase 5: Report Generation ─────────────────────────
+      // Phase 5: Report Generation
       const reportStart = Date.now();
       sse.sendPhase({ phase: 'report', status: 'started' });
-
-
-
-      logger.info('[Analyze] Generating report (rule-based + engine stats)');
 
       const rawReport = await generateReportParallel({
         identity,
@@ -398,57 +344,27 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         try {
           report.timeManagementAdvice = await generateTimeManagementAdvice(report.timeManagement);
         } catch (err) {
-          logger.warn({ err: err instanceof Error ? err.message : String(err) }, '[Analyze] Time management advice failed');
+          logger.warn({ err: err instanceof Error ? err.message : String(err) }, '[AnalyzeGuest] Time management advice failed');
         }
       }
 
       const reportDurationMs = Date.now() - reportStart;
-      sse.sendPhase({
-        phase: 'report',
-        status: 'complete',
-        durationMs: reportDurationMs,
-      });
+      sse.sendPhase({ phase: 'report', status: 'complete', durationMs: reportDurationMs });
 
-      const totalDurationMs = identityDurationMs + gamesDurationMs + parsingDurationMs + engineDurationMs + reportDurationMs;
-      logger.info(
-        {
-          reportId: report.id,
-          phaseTimingMs: {
-            identity: identityDurationMs,
-            games: gamesDurationMs,
-            parsing: parsingDurationMs,
-            engine: engineDurationMs,
-            report: reportDurationMs,
-          },
-          totalMs: totalDurationMs,
-        },
-        '[Analyze] Report generated',
-      );
+      sse.sendComplete({ report });
+      logger.info({ ip, reportId: report.id }, '[AnalyzeGuest] Guest pipeline complete');
 
-      // MONETIZATION_DISABLED: Credit deduction bypassed for deployment
-      // const creditsToDeduct = Math.ceil(allGames.length / 5);
-      // const deducted = await deductCredits(userId, creditsToDeduct);
-      // if (!deducted) { sse.sendError(...); return; }
-
-      // ── Complete ───────────────────────────────────────────
-      sse.sendComplete({ report /* creditsDeducted omitted when monetization disabled */ });
-
-      logger.info('[Analyze] Pipeline complete, sent complete event');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Pipeline error';
-      logger.error({ err }, '[Analyze] Pipeline error');
+      logger.error({ err }, '[AnalyzeGuest] Pipeline error');
       sse.sendError({ error: message });
     } finally {
       sse.close();
-      c.get('releaseAnalyzeSlot')?.();
+      releaseSlot();
     }
   })();
 
-  // Attach the pipeline promise to the response so node-server keeps
-  // the connection alive until the async work (and stream writes) finish.
   const resp = sse.response();
-  // Keep the pipeline referenced to prevent GC and ensure the stream stays open.
-  // @hono/node-server will keep writing chunks as long as the ReadableStream is open.
-  pipelinePromise.catch(() => { });  // Prevent unhandled rejection (errors go via SSE)
+  pipelinePromise.catch(() => {});
   return resp;
 });

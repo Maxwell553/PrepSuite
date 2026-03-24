@@ -5,7 +5,7 @@ import {
   LineChart, Line, ResponsiveContainer, Legend,
   PieChart, Pie, Cell,
 } from 'recharts';
-import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, ChevronRight, Activity, Crown, X, BarChart3, Coins } from 'lucide-react';
+import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, ChevronRight, Activity, Crown, X, BarChart3, Coins, Download } from 'lucide-react';
 import { ScoutingReport, OpeningStat, TimeManagementStats } from '../types';
 import AnalysisBoard from './AnalysisBoard';
 import PracticeOpponent from './PracticeOpponent';
@@ -14,6 +14,7 @@ import RepertoireChat from './RepertoireChat';
 import { aggregateOpeningsBySource } from '../lib/openingStats';
 import { formatTimeControlForDisplay, getTimeControlSecondsForSort } from '../lib/timeControlUtils';
 import { supabase } from '../lib/supabase';
+import { exportReportAsPdf } from '../lib/pdfExport';
 
 interface ReportDashboardProps {
   report: ScoutingReport;
@@ -762,6 +763,8 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
   hideCreditsBadge = false,
   onGoToSearch,
 }) => {
+  const [pdfExporting, setPdfExporting] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   // Fallback: compute from games if pipeline didn't send creditsDeducted (0 when no games)
   const creditsDeducted = creditsDeductedProp ?? (report.games?.length ? Math.ceil(report.games.length / 5) : 0);
   const { player, whiteOpenings, blackDefenses } = report;
@@ -818,15 +821,49 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const showMainContent = hasReportContent || !!isGenerating;
 
   return (
-    <div className={`relative space-y-8 pb-12 print:space-y-6 min-w-0 w-full max-w-full ${isGenerating ? 'pointer-events-none' : ''}`}>
+    <div id="report-pdf-root" className={`relative space-y-8 pb-12 print:space-y-6 min-w-0 w-full max-w-full ${isGenerating ? 'pointer-events-none' : ''}`}>
       {/* Dossier Header */}
       <div className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-3xl overflow-hidden shadow-2xl">
-        <div className="h-44 bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-950 dark:from-indigo-900/40 dark:via-slate-900 dark:to-slate-950 from-indigo-50 via-white to-gray-50 relative p-10 flex flex-col justify-end">
-          {/* MONETIZATION_DISABLED: Credits badge commented out for deployment
-          {!hideCreditsBadge && creditsDeducted != null && (
-            <div className="..."><Coins /> −{creditsDeducted} credits</div>
+        <div className="h-auto min-h-[11rem] bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-950 dark:from-indigo-900/40 dark:via-slate-900 dark:to-slate-950 from-indigo-50 via-white to-gray-50 relative p-10 flex flex-col justify-end">
+          {/* PDF export — top-right */}
+          {!isGenerating && (report.games?.length ?? 0) > 0 && (
+              <div className="absolute top-4 right-4 print:hidden">
+                <button
+                  type="button"
+                  disabled={pdfExporting}
+                  onClick={async () => {
+                    const el = document.getElementById('report-pdf-root');
+                    if (!el) return;
+                    setPdfExporting(true);
+                    setPdfError(null);
+                    try {
+                      await exportReportAsPdf(el, player.name);
+                    } catch (err) {
+                      console.error('PDF export failed:', err);
+                      setPdfError('PDF export failed. Try again or use browser Print (Ctrl+P).');
+                    } finally {
+                      setPdfExporting(false);
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                    pdfExporting
+                      ? 'bg-indigo-600/30 border-indigo-500/40 text-indigo-300 cursor-wait'
+                      : pdfError
+                        ? 'bg-red-800/30 border-red-500/40 text-red-300 hover:text-red-200'
+                        : 'bg-slate-800/60 border-slate-700/50 text-slate-300 hover:text-white hover:border-indigo-500/40'
+                  }`}
+                  title={pdfError || 'Download report as PDF'}
+                >
+                  {pdfExporting ? (
+                    <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" /></svg>
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
+                  {pdfExporting ? 'Exporting…' : 'PDF'}
+                </button>
+              </div>
           )}
-          */}
+
           <div>
             <div className="min-w-0">
               <div className="flex items-center gap-3 text-indigo-400 dark:text-indigo-400 text-indigo-600 font-bold text-xs uppercase tracking-[0.2em] mb-2">
@@ -834,7 +871,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
                 Verified Tournament Profile
               </div>
               <h2 className="text-5xl font-serif font-bold tracking-tight text-white dark:text-white text-gray-900 mb-2">{player.name}</h2>
-              <div className="flex items-center gap-4 text-slate-400 dark:text-slate-400 text-gray-600 font-medium">
+              <div className="flex flex-wrap items-center gap-4 text-slate-400 dark:text-slate-400 text-gray-600 font-medium">
                 {player.titles?.length ? (
                   <span className="bg-slate-800 dark:bg-slate-800 bg-gray-100 px-3 py-1 rounded text-sm text-indigo-300 dark:text-indigo-300 text-indigo-600 border border-slate-700 dark:border-slate-700 border-gray-200">
                     {player.titles.join(', ')}

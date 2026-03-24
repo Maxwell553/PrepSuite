@@ -137,20 +137,25 @@ export async function validateAndRefetchPgn(
     logger.info({ lichessRefetched: lichessIds.length, lichessFixed }, '[PgnValidator] Lichess batch refetch complete');
   }
 
-  // Chess.com and OTB: refetch one-by-one (no batch API)
-  for (const g of toRefetch) {
-    if (valid.includes(g)) continue; // Already fixed by Lichess batch
-    let pgn: string | null = null;
-    if (g.source === 'chess.com' && chessComUsername) {
-      pgn = await refetchChessComPgn(chessComUsername, g.id, g.playedAt);
-    }
-
-    if (pgn && isValidPgn(pgn)) {
-      g.pgn = pgn;
-      valid.push(g);
-    } else if (g.source === 'otb' && g.pgn && g.pgn.trim().length > 20) {
-      valid.push(g);
-    }
+  // Chess.com and OTB: refetch in parallel batches (no batch API, so concurrent with limit)
+  const remaining = toRefetch.filter((g) => !valid.includes(g));
+  const REFETCH_CONCURRENCY = 6;
+  for (let i = 0; i < remaining.length; i += REFETCH_CONCURRENCY) {
+    const batch = remaining.slice(i, i + REFETCH_CONCURRENCY);
+    await Promise.all(
+      batch.map(async (g) => {
+        let pgn: string | null = null;
+        if (g.source === 'chess.com' && chessComUsername) {
+          pgn = await refetchChessComPgn(chessComUsername, g.id, g.playedAt);
+        }
+        if (pgn && isValidPgn(pgn)) {
+          g.pgn = pgn;
+          valid.push(g);
+        } else if (g.source === 'otb' && g.pgn && g.pgn.trim().length > 20) {
+          valid.push(g);
+        }
+      }),
+    );
   }
 
   // invalidCount = how many we couldn't fix (slots to fill via refetching more games)
