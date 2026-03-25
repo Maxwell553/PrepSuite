@@ -57,6 +57,7 @@ const RecentGamesList: React.FC<RecentGamesListProps> = ({
         </div>
         <button
           type="button"
+          data-pdf-include
           onClick={() => setShowGamesModal(true)}
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-700/60 hover:bg-slate-600/60 text-slate-400 hover:text-white text-sm font-medium transition-colors"
         >
@@ -64,7 +65,7 @@ const RecentGamesList: React.FC<RecentGamesListProps> = ({
           {games.length}
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0" style={{ contain: 'layout' }}>
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
         {games.slice(0, 12).map((g, idx) => {
           const isWhite = identifiers.some((id) => namesMatch(g.white, id));
           const isBlack = identifiers.some((id) => namesMatch(g.black, id));
@@ -77,6 +78,7 @@ const RecentGamesList: React.FC<RecentGamesListProps> = ({
             <button
               key={idx}
               type="button"
+              data-pdf-include
               onClick={() => handleGameClick(idx)}
               className="w-full flex items-center gap-4 p-4 rounded-xl text-left transition-colors hover:bg-slate-700/40"
             >

@@ -156,6 +156,16 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     return aggregateMovesAtPosition(parsedGames, gamesSafe, identifiersForFilter, repertoireSide, path);
   }, [parsedGames, gamesSafe, identifiersForFilter, repertoireSide, path]);
 
+  const quickInsight = useMemo(() => {
+    if (!moveStats.length || path.length > 0) return null;
+    const sorted = [...moveStats].filter((m) => m.totalGames >= 3);
+    const best = sorted.sort((a, b) => b.winRate - a.winRate)[0];
+    const worst = sorted.sort((a, b) => a.winRate - b.winRate)[0];
+    if (!best || !worst || best === worst) return null;
+    const name = playerName.split(/\s+/).pop() || playerName;
+    return `${name} scores best with ${best.moveLabel} (${(best.winRate * 100).toFixed(0)}% WR), but struggles with ${worst.moveLabel} (${(worst.winRate * 100).toFixed(0)}% WR).`;
+  }, [moveStats, path, playerName]);
+
   const displayPosition = useMemo(() => {
     if (path.length === 0) return 'start';
     try {
@@ -255,8 +265,31 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-            <div className="text-slate-400 text-xs text-center">
-              {path.length > 0 ? `${path.length} move(s) from start` : 'Starting position'}
+            <div className="text-xs text-center px-2 min-h-[1.25rem]">
+              {path.length > 0 ? (
+                <span className="inline-flex flex-wrap items-center gap-0.5 justify-center">
+                  <button type="button" onClick={handleNavStart} className="text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer">Start</button>
+                  {path.map((san, i) => {
+                    const moveNum = Math.floor(i / 2) + 1;
+                    const isBlack = i % 2 === 1;
+                    const label = isBlack ? `${moveNum}...${san}` : (i === 0 || i % 2 === 0 ? `${moveNum}.${san}` : san);
+                    return (
+                      <span key={i} className="inline-flex items-center">
+                        <span className="text-slate-600 mx-0.5">›</span>
+                        <button
+                          type="button"
+                          onClick={() => setPath(path.slice(0, i + 1))}
+                          className={`font-mono transition-colors cursor-pointer ${i === path.length - 1 ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                          {label}
+                        </button>
+                      </span>
+                    );
+                  })}
+                </span>
+              ) : (
+                <span className="text-slate-500">Starting position</span>
+              )}
             </div>
           </div>
         </div>
@@ -291,6 +324,11 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
                 </button>
               </div>
             </div>
+            {quickInsight && (
+              <div className="px-4 py-2.5 bg-indigo-500/[0.06] border-b border-indigo-500/10">
+                <p className="text-xs text-indigo-300/80 leading-relaxed">{quickInsight}</p>
+              </div>
+            )}
             <div className="flex-1 overflow-y-auto p-4 min-h-0 flex flex-col gap-6" style={{ contain: 'layout' }}>
               {/* Repertoire stats: MOVE | GAMES | PERFORMANCE */}
               {(() => {

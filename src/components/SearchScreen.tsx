@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Loader2, Play, Cpu, User, Shield, AlertTriangle, GitBranch, ChevronDown, ChevronUp, Users, FolderPlus } from 'lucide-react';
+import { AlertCircle, Loader2, Play, Cpu, User, Shield, AlertTriangle, GitBranch, ChevronDown, Users, FolderPlus, BarChart3, Globe, Database } from 'lucide-react';
+import { OTB_GAMES_DISPLAY, FIDE_PLAYERS_DISPLAY } from '../services/platformStats';
 import { ScoutingReport } from '../types';
 import { playerRepository } from '../services/playerRepository';
 import { folderRepository } from '../services/folderRepository';
@@ -277,7 +278,13 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto py-8 px-4 sm:px-6">
+    <div className="w-full max-w-6xl mx-auto py-8 px-4 sm:px-6 relative">
+      {/* Background depth blobs */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden -z-10" aria-hidden>
+        <div className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full bg-indigo-600/[0.06] blur-[100px]" />
+        <div className="absolute -bottom-40 -right-40 w-[400px] h-[400px] rounded-full bg-cyan-600/[0.04] blur-[100px]" />
+      </div>
+
       <div className="text-center mb-12">
         <h2 className="text-4xl font-sans font-bold tracking-tight mb-4 text-white dark:text-white text-gray-900">Opponent Analysis</h2>
         <p className="text-slate-400 dark:text-slate-400 text-gray-600 text-lg italic">Verified search across online platforms and OTB tournament databases.</p>
@@ -285,7 +292,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
 
       <div className="flex flex-col lg:flex-row gap-8 justify-center items-stretch w-full">
         <div className="flex-[2] min-w-0">
-          <form onSubmit={handleSubmit} className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-8 space-y-6 shadow-2xl relative overflow-hidden">
+          <form onSubmit={handleSubmit} className="bg-slate-900/70 dark:bg-slate-900/70 bg-white/80 backdrop-blur-xl border border-white/[0.08] dark:border-white/[0.08] border-gray-200 rounded-2xl p-8 space-y-6 shadow-2xl shadow-indigo-950/20 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-5">
               <Cpu className="w-24 h-24" />
             </div>
@@ -332,13 +339,13 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                   </div>
 
                   {/* Advanced: Manually link accounts */}
-              <div>
+              <div className={`rounded-xl transition-all duration-300 ${showAdvanced ? 'border border-dashed border-slate-700/60 bg-slate-950/30 p-3' : ''}`}>
                 <button
                   type="button"
                   onClick={() => setShowAdvanced(!showAdvanced)}
                   className="flex items-center gap-2 text-xs font-bold text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 transition-colors uppercase tracking-widest"
                 >
-                  {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showAdvanced ? 'rotate-180' : ''}`} />
                   Manually link accounts (optional)
                 </button>
                 {showAdvanced && (
@@ -455,9 +462,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
 
                     {/* Total Games Slider */}
                     <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
+                      <div className="flex justify-between text-xs items-baseline">
                         <span className="text-slate-400 dark:text-slate-400 text-gray-600">Total games</span>
-                        <span className="font-bold text-indigo-400 dark:text-indigo-400 text-indigo-600">{gameLimit.toLocaleString()}</span>
+                        <span className="font-bold text-indigo-400 dark:text-indigo-400 text-indigo-600 tabular-nums transition-transform duration-150 origin-right">{gameLimit.toLocaleString()}</span>
                       </div>
                       <input
                         type="range"
@@ -473,7 +480,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                           setOtbLimit(newTotal - Math.round(ratio * newTotal));
                         }}
                         disabled={loading}
-                        className="w-full h-2.5 bg-slate-800 dark:bg-slate-800 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb slider-indigo disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{
                           background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${((gameLimit - 500) / (maxGames - 500)) * 100}%, rgb(30, 41, 59) ${((gameLimit - 500) / (maxGames - 500)) * 100}%, rgb(30, 41, 59) 100%)`
                         }}
@@ -482,9 +489,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
 
                     {/* Online Games Slider */}
                     <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
+                      <div className="flex justify-between text-xs items-baseline">
                         <span className="text-slate-400 dark:text-slate-400 text-gray-600">Online (Chess.com, Lichess)</span>
-                        <span className="font-bold text-emerald-400 dark:text-emerald-400 text-emerald-600">{onlineLimit.toLocaleString()}</span>
+                        <span className="font-bold text-emerald-400 dark:text-emerald-400 text-emerald-600 tabular-nums transition-transform duration-150 origin-right">{onlineLimit.toLocaleString()}</span>
                       </div>
                       <input
                         type="range"
@@ -498,7 +505,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                           setOtbLimit(gameLimit - newOnline);
                         }}
                         disabled={loading}
-                        className="w-full h-2.5 bg-slate-800 dark:bg-slate-800 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb slider-emerald disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{
                           background: `linear-gradient(to right, rgb(16, 185, 129) 0%, rgb(16, 185, 129) ${gameLimit > 0 ? (onlineLimit / gameLimit) * 100 : 0}%, rgb(30, 41, 59) ${gameLimit > 0 ? (onlineLimit / gameLimit) * 100 : 0}%, rgb(30, 41, 59) 100%)`
                         }}
@@ -507,9 +514,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
 
                     {/* OTB Games Slider */}
                     <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
+                      <div className="flex justify-between text-xs items-baseline">
                         <span className="text-slate-400 dark:text-slate-400 text-gray-600">OTB (over-the-board)</span>
-                        <span className="font-bold text-amber-400 dark:text-amber-400 text-amber-600">{otbLimit.toLocaleString()}</span>
+                        <span className="font-bold text-amber-400 dark:text-amber-400 text-amber-600 tabular-nums transition-transform duration-150 origin-right">{otbLimit.toLocaleString()}</span>
                       </div>
                       <input
                         type="range"
@@ -523,7 +530,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                           setOnlineLimit(gameLimit - newOtb);
                         }}
                         disabled={loading}
-                        className="w-full h-2.5 bg-slate-800 dark:bg-slate-800 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb slider-amber disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{
                           background: `linear-gradient(to right, rgb(245, 158, 11) 0%, rgb(245, 158, 11) ${gameLimit > 0 ? (otbLimit / gameLimit) * 100 : 0}%, rgb(30, 41, 59) ${gameLimit > 0 ? (otbLimit / gameLimit) * 100 : 0}%, rgb(30, 41, 59) 100%)`
                         }}
@@ -573,9 +580,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
               <button
                 type="submit"
                 disabled={loading}
-                className={`w-full py-4 rounded-xl flex items-center justify-center gap-3 font-bold text-lg transition-all px-4 ${loading
+                className={`w-full py-4 rounded-xl flex items-center justify-center gap-3 font-bold text-lg transition-all duration-200 px-4 ${loading
                   ? 'bg-slate-800 dark:bg-slate-800 bg-gray-200 text-slate-400 dark:text-slate-400 text-gray-500 cursor-not-allowed'
-                  : batchMode ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xl shadow-amber-500/20' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-500/20'
+                  : batchMode ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xl shadow-amber-500/20' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 hover:shadow-indigo-500/40'
                   } `}
               >
                 {loading ? (
@@ -601,37 +608,62 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
           </form>
         </div>
 
-        <div className="space-y-6 w-full lg:w-[12.65rem] shrink-0">
-          <div className="bg-slate-800/50 dark:bg-slate-800/50 border border-slate-700/80 dark:border-slate-700/80 rounded-2xl overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
+        <div className="space-y-4 w-full lg:w-[14rem] shrink-0">
+          {/* Data Sources */}
+          <div className="relative rounded-2xl p-4 space-y-3 bg-slate-800/30" style={{ border: '1px solid transparent', backgroundClip: 'padding-box' }}>
+            <div className="absolute inset-0 rounded-2xl -z-10" style={{ background: 'linear-gradient(135deg, transparent, rgba(99,102,241,0.15), transparent)', mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)', maskComposite: 'exclude', WebkitMaskComposite: 'xor', padding: '1px', borderRadius: 'inherit' }} />
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Live Data Sources</p>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <Globe className="w-4 h-4 text-amber-400 shrink-0" />
+              <p className="text-xs font-semibold text-slate-300">{FIDE_PLAYERS_DISPLAY} FIDE players</p>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <Database className="w-4 h-4 text-emerald-400 shrink-0" />
+              <p className="text-xs font-semibold text-slate-300">{OTB_GAMES_DISPLAY} OTB games</p>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <BarChart3 className="w-4 h-4 text-indigo-400 shrink-0" />
+              <p className="text-xs font-semibold text-slate-300">Chess.com + Lichess</p>
+            </div>
+          </div>
+
+          {/* Tips */}
+          <div className="bg-slate-800/30 border border-slate-700/60 rounded-2xl overflow-hidden">
             <button
               type="button"
               onClick={() => setTipsExpanded(!tipsExpanded)}
-              className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-800/30 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-800/30 transition-colors"
             >
-              <span className="text-indigo-400 dark:text-indigo-400 font-bold text-sm uppercase tracking-widest">Tips</span>
-              {tipsExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+              <span className="text-indigo-400 font-bold text-[10px] uppercase tracking-widest">Tips</span>
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${tipsExpanded ? 'rotate-180' : ''}`} />
             </button>
             {tipsExpanded && (
-              <div className="px-5 pb-5 space-y-4 border-t border-slate-700/50">
-                <div className="flex gap-3 pt-4">
-                  <Shield className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+              <div className="px-4 pb-4 space-y-3 border-t border-slate-700/50">
+                <div className="flex gap-2.5 pt-3">
+                  <Shield className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-semibold text-slate-200 text-sm">Accuracy without usernames</p>
-                    <p className="text-slate-400 text-sm mt-0.5">Well-known players (titled, high-rated) resolve more accurately when usernames aren&apos;t provided.</p>
+                    <p className="font-semibold text-slate-200 text-xs">Accuracy without usernames</p>
+                    <p className="text-slate-400 text-[11px] mt-0.5">Well-known players resolve more accurately without usernames.</p>
                   </div>
                 </div>
-                <div className="flex gap-3">
-                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-semibold text-slate-200 text-sm">AI insights</p>
-                    <p className="text-slate-400 text-sm mt-0.5">Treat recommendations as guidance. Cross-check critical conclusions.</p>
+                    <p className="font-semibold text-slate-200 text-xs">AI insights</p>
+                    <p className="text-slate-400 text-[11px] mt-0.5">Treat recommendations as guidance.</p>
                   </div>
                 </div>
-                <div className="flex gap-3">
-                  <GitBranch className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="flex gap-2.5">
+                  <GitBranch className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-semibold text-slate-200 text-sm">OTB vs online</p>
-                    <p className="text-slate-400 text-sm mt-0.5">Tournament play often differs from online in openings, time controls, and style.</p>
+                    <p className="font-semibold text-slate-200 text-xs">OTB vs online</p>
+                    <p className="text-slate-400 text-[11px] mt-0.5">Tournament play differs from online in openings and style.</p>
                   </div>
                 </div>
               </div>

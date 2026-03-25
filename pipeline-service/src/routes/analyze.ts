@@ -14,8 +14,7 @@ import { validateAndRefetchPgn } from '../pipeline/pgnValidator.js';
 import { identifyOpeningsBatch } from '../pipeline/openingClassifier.js';
 import { generateStats } from '../pipeline/statsAggregator.js';
 import { extractMostPlayedLines } from '../pipeline/moveSequenceExtractor.js';
-import { StockfishPool } from '../pipeline/enginePool.js';
-import { sampleGamesForAnalysis } from '../pipeline/engineSampler.js';
+// Engine analysis removed — engineStats were never displayed in the UI
 import { generateReportParallel } from '../pipeline/geminiReport.js';
 import { postProcessReport } from '../pipeline/reportPostProcessor.js';
 import { generateTimeManagementAdvice } from '../pipeline/timeManagementAdvice.js';
@@ -330,50 +329,11 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         '[Analyze] Stats generated',
       );
 
-      // ── Phase 4: Engine Analysis ───────────────────────────
-      const engineStart = Date.now();
-      sse.sendPhase({ phase: 'engine', status: 'started' });
-
-      let engineAnalysis: import('../lib/types.js').GameAnalysis[] = [];
-
-      const sampled = sampleGamesForAnalysis(allGames, 80);
-      const engineDepth = 7;
-      if (sampled.length > 0) {
-        let pool: StockfishPool | null = null;
-        try {
-          pool = new StockfishPool({ workerCount: 4, depth: engineDepth });
-          await pool.initialize();
-
-          engineAnalysis = await pool.analyzeGames(sampled, targetUsername, (current, total) => {
-            sse.sendProgress({ phase: 'engine', current, total });
-          });
-        } catch (err) {
-          logger.warn({ err }, '[Analyze] Engine analysis failed, continuing without it');
-        } finally {
-          if (pool) await pool.shutdown().catch(() => { });
-        }
-      }
-
-      const engineDurationMs = Date.now() - engineStart;
-      sse.sendPhase({
-        phase: 'engine',
-        status: 'complete',
-        durationMs: engineDurationMs,
-        gamesAnalyzed: engineAnalysis.length,
-      });
-
-      logger.info(
-        { gamesAnalyzed: engineAnalysis.length, durationMs: engineDurationMs },
-        '[Analyze] Engine analysis complete',
-      );
-
-      // ── Phase 5: Report Generation ─────────────────────────
+      // ── Phase 4: Report Generation ─────────────────────────
       const reportStart = Date.now();
       sse.sendPhase({ phase: 'report', status: 'started' });
 
-
-
-      logger.info('[Analyze] Generating report (rule-based + engine stats)');
+      logger.info('[Analyze] Generating report (rule-based)');
 
       const rawReport = await generateReportParallel({
         identity,
@@ -381,7 +341,7 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         whiteStats,
         blackStats,
         moveSequences,
-        engineAnalysis,
+        engineAnalysis: [],
         targetUsername,
       });
 
@@ -409,7 +369,7 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
         durationMs: reportDurationMs,
       });
 
-      const totalDurationMs = identityDurationMs + gamesDurationMs + parsingDurationMs + engineDurationMs + reportDurationMs;
+      const totalDurationMs = identityDurationMs + gamesDurationMs + parsingDurationMs + reportDurationMs;
       logger.info(
         {
           reportId: report.id,
@@ -417,7 +377,6 @@ analyzeRoute.post('/analyze', analyzeRateLimitMiddleware, async (c) => {
             identity: identityDurationMs,
             games: gamesDurationMs,
             parsing: parsingDurationMs,
-            engine: engineDurationMs,
             report: reportDurationMs,
           },
           totalMs: totalDurationMs,

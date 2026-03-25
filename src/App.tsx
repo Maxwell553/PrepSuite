@@ -97,6 +97,8 @@ function GuestReportLayout({
             hideCreditsBadge
             isGenerating={isGenerating}
             generatingStatus={generatingStatus}
+            isGuestReport
+            onGuestSignUp={onSignUp}
           />
         </Suspense>
       </main>
@@ -566,8 +568,7 @@ const App: React.FC = () => {
               identity: 'Step 1: Identifying player...',
               games: 'Step 2: Fetching games...',
               parsing: 'Step 3: Analyzing openings...',
-              engine: 'Step 4: Engine analysis...',
-              report: 'Step 5: Generating report...',
+              report: 'Step 4: Generating report...',
             };
             if (status === 'started' || status === 'progress') {
               setGuestAnalyzingStatus(extra?.message || labels[phase] || `${phase}...`);
@@ -579,8 +580,6 @@ const App: React.FC = () => {
               setGuestAnalyzingStatus(`Step 2: Fetching games... (${clamped}/${total})`);
             } else if (phase === 'parsing') {
               setGuestAnalyzingStatus(`Step 3: Analyzing openings... (${clamped}/${total})`);
-            } else if (phase === 'engine') {
-              setGuestAnalyzingStatus(`Step 4: Engine analysis... (${clamped}/${total})`);
             }
           },
           onIdentity: (data) => {

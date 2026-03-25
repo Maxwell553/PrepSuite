@@ -19,11 +19,10 @@ import { validateAndRefetchPgn } from '../pipeline/pgnValidator.js';
 import { identifyOpeningsBatch } from '../pipeline/openingClassifier.js';
 import { generateStats } from '../pipeline/statsAggregator.js';
 import { extractMostPlayedLines } from '../pipeline/moveSequenceExtractor.js';
-import { StockfishPool } from '../pipeline/enginePool.js';
-import { sampleGamesForAnalysis } from '../pipeline/engineSampler.js';
+// Engine analysis removed — engineStats were never displayed in the UI
 import { generateReportParallel } from '../pipeline/geminiReport.js';
 import { postProcessReport } from '../pipeline/reportPostProcessor.js';
-import { generateTimeManagementAdvice } from '../pipeline/timeManagementAdvice.js';
+// TM advice skipped for guest reports
 
 export const analyzeGuestRoute = new Hono();
 
@@ -293,31 +292,7 @@ analyzeGuestRoute.post('/analyze-guest', async (c) => {
       sse.sendPhase({ phase: 'parsing', status: 'complete', durationMs: parsingDurationMs, gameCount: allGames.length });
       sse.sendEvent('parsing', { whiteOpenings: whiteStats, blackDefenses: blackStats, mostPlayedLines: moveSequences, games: allGames });
 
-      // Phase 4: Engine Analysis (lighter for guest — fewer samples)
-      const engineStart = Date.now();
-      sse.sendPhase({ phase: 'engine', status: 'started' });
-
-      let engineAnalysis: import('../lib/types.js').GameAnalysis[] = [];
-      const sampled = sampleGamesForAnalysis(allGames, 40); // Guest gets fewer engine samples
-      if (sampled.length > 0) {
-        let pool: StockfishPool | null = null;
-        try {
-          pool = new StockfishPool({ workerCount: 2, depth: 7 });
-          await pool.initialize();
-          engineAnalysis = await pool.analyzeGames(sampled, targetUsername, (current, total) => {
-            sse.sendProgress({ phase: 'engine', current, total });
-          });
-        } catch (err) {
-          logger.warn({ err }, '[AnalyzeGuest] Engine analysis failed, continuing without it');
-        } finally {
-          if (pool) await pool.shutdown().catch(() => {});
-        }
-      }
-
-      const engineDurationMs = Date.now() - engineStart;
-      sse.sendPhase({ phase: 'engine', status: 'complete', durationMs: engineDurationMs, gamesAnalyzed: engineAnalysis.length });
-
-      // Phase 5: Report Generation
+      // Phase 4: Report Generation
       const reportStart = Date.now();
       sse.sendPhase({ phase: 'report', status: 'started' });
 
@@ -327,7 +302,7 @@ analyzeGuestRoute.post('/analyze-guest', async (c) => {
         whiteStats,
         blackStats,
         moveSequences,
-        engineAnalysis,
+        engineAnalysis: [],
         targetUsername,
       });
 
@@ -340,13 +315,7 @@ analyzeGuestRoute.post('/analyze-guest', async (c) => {
         actualUsername: targetUsername,
       });
 
-      if (report.timeManagement && report.timeManagement.lostOnTime + report.timeManagement.wonOnTime > 0) {
-        try {
-          report.timeManagementAdvice = await generateTimeManagementAdvice(report.timeManagement);
-        } catch (err) {
-          logger.warn({ err: err instanceof Error ? err.message : String(err) }, '[AnalyzeGuest] Time management advice failed');
-        }
-      }
+      // Skip TM advice for guest reports — saves a Gemini round-trip
 
       const reportDurationMs = Date.now() - reportStart;
       sse.sendPhase({ phase: 'report', status: 'complete', durationMs: reportDurationMs });

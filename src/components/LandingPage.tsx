@@ -236,9 +236,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, user, 
                             )}
                         </form>
                         {!user && (
-                            <p className="mt-3 text-xs text-slate-600">
-                                Free trial — up to 500 games analyzed. <button type="button" onClick={() => document.getElementById('access')?.scrollIntoView({ behavior: 'smooth' })} className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2">Sign up</button> for 2,500 games, batch reports, AI chat, and more.
-                            </p>
+                            <div className="mt-3 flex flex-col items-center gap-1.5 text-center">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-semibold text-[11px]">Limited preview — 500 games max</span>
+                                <p className="text-xs text-slate-500">Repertoire charts, game explorer, and practice bot require a <button type="button" onClick={() => document.getElementById('access')?.scrollIntoView({ behavior: 'smooth' })} className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2">free account</button>.</p>
+                            </div>
                         )}
                     </div>
 

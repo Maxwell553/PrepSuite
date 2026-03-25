@@ -19,6 +19,7 @@ interface Message {
 
 const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requiresSignIn }) => {
   const playerName = report.player?.name ?? 'this player';
+  const firstName = playerName.split(/\s+/).pop() || playerName;
   const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -147,28 +148,28 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
 
   if (!isExpanded) {
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-lg">
+      <div className="bg-slate-900 border border-amber-500/20 rounded-2xl shadow-lg shadow-amber-900/5">
         <button
           onClick={() => setIsExpanded(true)}
-          className="w-full flex items-center justify-between p-4 hover:bg-slate-800 transition-colors rounded-2xl"
+          className="w-full flex items-center justify-between p-4 hover:bg-slate-800/80 transition-colors rounded-2xl"
         >
           <div className="flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-indigo-400" />
-            <h3 className="text-lg font-semibold text-white">Repertoire Analysis Chat</h3>
+            <MessageSquare className="w-5 h-5 text-amber-400" />
+            <h3 className="text-lg font-semibold text-amber-400">Repertoire Analysis Chat</h3>
           </div>
-          <ChevronRight className="w-5 h-5 text-slate-400" />
+          <ChevronRight className="w-5 h-5 text-amber-400/60" />
         </button>
       </div>
     );
   }
 
   return (
-    <div ref={chatRef} className="bg-slate-900 border border-slate-800 rounded-2xl shadow-lg flex flex-col h-[600px]">
+    <div ref={chatRef} className="bg-slate-900 border border-amber-500/20 rounded-2xl shadow-lg shadow-amber-900/5 flex flex-col h-[600px]">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-800">
+      <div className="flex items-center justify-between p-4 border-b border-amber-500/15">
         <div className="flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-indigo-400" />
-          <h3 className="text-lg font-semibold text-white">Repertoire Analysis Chat</h3>
+          <MessageSquare className="w-5 h-5 text-amber-400" />
+          <h3 className="text-lg font-semibold text-amber-400">Repertoire Analysis Chat</h3>
         </div>
         <button
           onClick={() => setIsExpanded(false)}
@@ -204,6 +205,24 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
             <div className="bg-slate-800 text-slate-200 rounded-lg p-3">
               <Loader2 className="w-5 h-5 animate-spin" />
             </div>
+          </div>
+        )}
+        {messages.length <= 1 && !isLoading && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {[
+              `What is ${firstName}'s biggest weakness?`,
+              `What should I play against their main opening?`,
+              `How does ${firstName} handle time pressure?`,
+            ].map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                onClick={() => { setInput(chip); }}
+                className="text-xs px-3 py-1.5 bg-indigo-600/10 border border-indigo-500/20 text-indigo-300 rounded-full hover:bg-indigo-600/20 hover:border-indigo-500/30 transition-colors"
+              >
+                {chip}
+              </button>
+            ))}
           </div>
         )}
       </div>

@@ -5,7 +5,7 @@ import {
   LineChart, Line, ResponsiveContainer, Legend,
   PieChart, Pie, Cell,
 } from 'recharts';
-import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, ChevronRight, Activity, Crown, X, BarChart3, Coins, Download } from 'lucide-react';
+import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, ChevronRight, Activity, Crown, X, BarChart3, Coins, Download, Lock } from 'lucide-react';
 import { ScoutingReport, OpeningStat, TimeManagementStats } from '../types';
 import AnalysisBoard from './AnalysisBoard';
 import PracticeOpponent from './PracticeOpponent';
@@ -15,6 +15,35 @@ import { aggregateOpeningsBySource } from '../lib/openingStats';
 import { formatTimeControlForDisplay, getTimeControlSecondsForSort } from '../lib/timeControlUtils';
 import { supabase } from '../lib/supabase';
 import { exportReportAsPdf } from '../lib/pdfExport';
+
+function GuestBlurOverlay({ label, onSignUp }: { label: string; onSignUp?: () => void }) {
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center backdrop-blur-md bg-slate-950/60 rounded-2xl">
+      <Lock className="w-6 h-6 text-slate-400 mb-3" />
+      <p className="text-sm font-semibold text-slate-300 mb-1">{label}</p>
+      <p className="text-xs text-slate-500 mb-4 max-w-xs text-center">
+        Sign up for a free account to unlock full reports with up to 2,500 games.
+      </p>
+      {onSignUp && (
+        <button
+          type="button"
+          onClick={onSignUp}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition-colors"
+        >
+          Sign up for full access
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ReportCard({ children, className = '', ...rest }: React.HTMLAttributes<HTMLDivElement> & { children: React.ReactNode }) {
+  return (
+    <div className={`bg-slate-900/70 backdrop-blur-sm border border-white/[0.06] rounded-2xl p-8 shadow-lg report-card ${className}`} {...rest}>
+      {children}
+    </div>
+  );
+}
 
 interface ReportDashboardProps {
   report: ScoutingReport;
@@ -30,6 +59,10 @@ interface ReportDashboardProps {
   hideCreditsBadge?: boolean;
   /** Called when user wants to retry with usernames (no games found) */
   onGoToSearch?: () => void;
+  /** Guest report: blur premium sections with sign-up CTAs */
+  isGuestReport?: boolean;
+  /** Callback when user clicks sign-up from a blurred section */
+  onGuestSignUp?: () => void;
 }
 
 const WINS_PIE_COLORS = { resignation: '#14532d', onTime: '#86efac', checkmate: '#22c55e', other: '#052e16' };
@@ -62,29 +95,29 @@ function TimeManagementSection({ tm }: { tm: TimeManagementStats }) {
   ].filter((d) => d.value > 0);
 
   return (
-    <section className="mt-10 space-y-6 min-w-0 w-full max-w-full">
+    <ReportCard className="!mt-8 space-y-6 min-w-0 w-full max-w-full" data-pdf-section>
       <div className="flex items-center gap-2">
         <Clock className="w-5 h-5 text-amber-400" />
-        <h3 className="text-xl font-bold text-white">Time management</h3>
+        <h3 className="text-xl font-bold text-white">Clock Pressure</h3>
       </div>
       <p className="text-sm text-slate-400 max-w-3xl">
-        Based on online game metadata from Chess.com and Lichess (timeouts / clock flags). Over-the-board games are excluded.
+        Based on online game metadata from Chess.com and Lichess. Over-the-board games are excluded.
       </p>
 
       <div className="grid grid-cols-1 min-[420px]:grid-cols-2 xl:grid-cols-4 gap-4 min-w-0">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 min-w-0">
+        <div className="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4 min-w-0">
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Online games</div>
           <div className="text-2xl font-bold text-slate-100 mt-1 tabular-nums">{tm.onlineGames.toLocaleString()}</div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 min-w-0">
+        <div className="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4 min-w-0">
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Lost on time</div>
           <div className="text-2xl font-bold text-rose-400 mt-1 tabular-nums">{tm.lostOnTime.toLocaleString()}</div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 min-w-0">
+        <div className="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4 min-w-0">
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Won on time</div>
           <div className="text-2xl font-bold text-emerald-400 mt-1 tabular-nums">{tm.wonOnTime.toLocaleString()}</div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 min-w-0">
+        <div className="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4 min-w-0">
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Share of losses</div>
           <div className="text-2xl font-bold text-amber-300 mt-1 tabular-nums">{lossPct}%</div>
           <div className="text-[11px] text-slate-400 mt-0.5 text-pretty">Decisive losses ending on time</div>
@@ -212,7 +245,7 @@ function TimeManagementSection({ tm }: { tm: TimeManagementStats }) {
           </div>
         )}
       </div>
-    </section>
+    </ReportCard>
   );
 }
 
@@ -402,10 +435,14 @@ function StrategicProfileWithRecent({
   report,
   isGenerating,
   player,
+  isGuestReport = false,
+  onGuestSignUp,
 }: {
   report: ScoutingReport;
   isGenerating: boolean;
   player: ScoutingReport['player'];
+  isGuestReport?: boolean;
+  onGuestSignUp?: () => void;
 }) {
   const leftRef = React.useRef<HTMLElement | null>(null);
   const [maxHeight, setMaxHeight] = React.useState<number | null>(null);
@@ -442,10 +479,10 @@ function StrategicProfileWithRecent({
   }, [strongOpenings, weakOpenings, isGenerating]);
 
   return (
-    <div className="grid lg:grid-cols-[1fr_minmax(0,380px)] gap-8 items-start">
+    <div className="grid lg:grid-cols-[1fr_minmax(0,380px)] gap-8 items-start" data-pdf-section>
       <section
         ref={leftRef}
-        className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg"
+        className="bg-slate-900/70 backdrop-blur-sm border border-white/[0.06] rounded-2xl p-8 shadow-lg report-card"
       >
         <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
           <Target className="w-5 h-5 text-indigo-400" />
@@ -556,24 +593,29 @@ function StrategicProfileWithRecent({
             )}
           </div>
 
-          {report.games && report.games.length > 0 && (
+          {report.games && report.games.length > 0 && !isGuestReport && (
             <PracticeBarWithModals report={report} playerName={player.name} />
           )}
         </div>
       </section>
 
       {report.games && report.games.length > 0 && (
-        <RecentGamesList
-          games={report.games}
-          playerName={player.name}
-          playerUsername={[
-            (player as { actualUsername?: string }).actualUsername,
-            (player as { fideName?: string }).fideName,
-            player.platforms?.chessCom,
-            player.platforms?.lichess,
-          ].filter(Boolean) as string[]}
-          maxHeight={maxHeight}
-        />
+        <div className="relative">
+          {isGuestReport && <GuestBlurOverlay label="Recent Games" onSignUp={onGuestSignUp} />}
+          <div className={isGuestReport ? 'max-h-[300px] overflow-hidden' : ''}>
+            <RecentGamesList
+              games={report.games}
+              playerName={player.name}
+              playerUsername={[
+                (player as { actualUsername?: string }).actualUsername,
+                (player as { fideName?: string }).fideName,
+                player.platforms?.chessCom,
+                player.platforms?.lichess,
+              ].filter(Boolean) as string[]}
+              maxHeight={maxHeight}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -594,51 +636,68 @@ function RepertoireChartSection({
 }) {
   if (isSkeleton) {
     return (
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg flex flex-col">
+      <ReportCard>
         <h3 className="text-lg font-bold mb-1 flex items-center gap-2 text-white">
           <Icon className="w-5 h-5 text-indigo-400" />
           {title}
         </h3>
         <p className="text-sm text-slate-400 mb-6">{gamesLabel}</p>
-        <div className="h-64 mb-6 flex flex-col justify-end gap-3 w-full">
+        <div className="space-y-3">
           {[90, 65, 50, 75, 55].map((w, i) => (
             <div key={i} className="animate-shimmer h-6 rounded" style={{ width: `${w}%` }} aria-hidden />
           ))}
         </div>
-        <div className="space-y-2">
-          <SkeletonLine width="60%" />
-          <SkeletonLine width="40%" />
-        </div>
-      </section>
+      </ReportCard>
     );
   }
+
+  const chartData = (openings || []).slice(0, 12).map((o) => ({
+    name: o.name?.length > 28 ? o.name.slice(0, 26) + '…' : o.name,
+    fullName: o.name,
+    wins: o.wins ?? 0,
+    draws: o.draws ?? 0,
+    losses: o.losses ?? 0,
+    total: o.totalGames ?? 0,
+  }));
+  const chartHeight = Math.max(200, chartData.length * 32 + 40);
+
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg flex flex-col">
+    <ReportCard>
       <h3 className="text-lg font-bold mb-1 flex items-center gap-2 text-white">
         <Icon className="w-5 h-5 text-indigo-400" />
         {title}
       </h3>
-      <p className="text-sm text-slate-400 mb-6">{gamesLabel}</p>
-      <div className="h-64 mb-6 overflow-x-auto overflow-y-hidden w-full">
-        <BarChart
-          data={openings}
-          width={Math.max(400, (openings?.length || 0) * 30)}
-          height={256}
-          margin={{ bottom: 40 }}
-          barSize={20}
-          barCategoryGap={10}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-          <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} angle={-45} textAnchor="end" height={60} />
-          <YAxis stroke="#475569" fontSize={10} />
-          <Tooltip cursor={{ fill: '#ffffff08' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }} />
-          <Bar dataKey="wins" name="Wins" fill="#10b981" stackId="a" barSize={20} />
-          <Bar dataKey="draws" name="Draws" fill="#64748b" stackId="a" barSize={20} />
-          <Bar dataKey="losses" name="Losses" fill="#ef4444" stackId="a" barSize={20} />
-        </BarChart>
-      </div>
+      <p className="text-sm text-slate-400 mb-5">{gamesLabel}</p>
+      {chartData.length > 0 && (
+        <div className="mb-5 w-full" style={{ height: chartHeight }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={chartData}
+              layout="vertical"
+              margin={{ left: 10, right: 16, top: 4, bottom: 4 }}
+              barCategoryGap={6}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+              <XAxis type="number" stroke="#475569" fontSize={10} />
+              <YAxis type="category" dataKey="name" stroke="#94a3b8" fontSize={11} width={140} tick={{ fill: '#cbd5e1' }} />
+              <Tooltip
+                cursor={{ fill: '#ffffff06' }}
+                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }}
+                formatter={(value: number, name: string) => [value, name]}
+                labelFormatter={(label) => {
+                  const item = chartData.find((d) => d.name === label);
+                  return item?.fullName || label;
+                }}
+              />
+              <Bar dataKey="wins" name="Wins" fill="#10b981" stackId="a" />
+              <Bar dataKey="draws" name="Draws" fill="#475569" stackId="a" />
+              <Bar dataKey="losses" name="Losses" fill="#ef4444" stackId="a" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
       <OpeningList openings={openings} id={title.replace(/\s+/g, '-').toLowerCase()} />
-    </section>
+    </ReportCard>
   );
 }
 
@@ -704,7 +763,7 @@ function ActivityReportSection({ player }: { player: ScoutingReport['player'] })
   );
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
+    <section data-pdf-section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
       <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">
         <Activity className="w-5 h-5 text-indigo-400" />
         Player Activity
@@ -762,6 +821,8 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
   creditsDeducted: creditsDeductedProp,
   hideCreditsBadge = false,
   onGoToSearch,
+  isGuestReport = false,
+  onGuestSignUp,
 }) => {
   const [pdfExporting, setPdfExporting] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -816,14 +877,54 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const hasNoGames = !report.games || report.games.length === 0;
   const hasFideOrUscf = !!(player.fideId || (player.currentRating != null && player.currentRating > 0) || (player.uscfRating != null && player.uscfRating > 0));
   const showActivityReport = hasFideOrUscf;
-  // Show main content when we have report data OR when generating (skeleton layout)
   const hasReportContent = (report.games && report.games.length > 0) || (report.strategicSummary && report.strategicSummary.length > 0);
   const showMainContent = hasReportContent || !!isGenerating;
+
+  const tacticalBullets = React.useMemo(() => {
+    const bullets: { icon: string; text: string }[] = [];
+    const wOpenings = whiteOpenings || [];
+    const bOpenings = blackDefenses || [];
+    const allOpenings = [...wOpenings, ...bOpenings];
+
+    // 1) Find their actual weakest opening (lowest WR with meaningful sample)
+    const weakCandidates = allOpenings
+      .filter((o) => (o.totalGames || 0) >= 10 && (o.winRate ?? 1) < 0.5);
+    const weakest = weakCandidates.sort((a, b) => (a.winRate ?? 1) - (b.winRate ?? 1))[0];
+    if (weakest) {
+      const wr = ((weakest.winRate ?? 0) * 100).toFixed(0);
+      const side = wOpenings.includes(weakest) ? 'as White' : 'as Black';
+      bullets.push({ icon: '🎯', text: `Weakest in the ${weakest.name} ${side} — only ${wr}% win rate across ${weakest.totalGames} games` });
+    }
+
+    // 2) Time management — pick the most specific insight
+    const tm = report.timeManagement;
+    if (tm) {
+      const totalDecisive = tm.lostOnTime + tm.wonOnTime;
+      if (totalDecisive > 10) {
+        const flagLossRate = totalDecisive > 0 ? tm.lostOnTime / totalDecisive : 0;
+        if (flagLossRate > 0.6) {
+          bullets.push({ icon: '⏱', text: `Loses ${(flagLossRate * 100).toFixed(0)}% of flag games — struggles with time management under pressure` });
+        } else if (flagLossRate < 0.35 && tm.wonOnTime > 10) {
+          bullets.push({ icon: '⏱', text: `Strong clock player — wins ${tm.wonOnTime} games on time vs only ${tm.lostOnTime} losses, likely plays well in time scrambles` });
+        } else if (tm.lostOnTime > 15) {
+          const lossPct = ((tm.lostOnTimeShareOfLosses ?? 0) * 100).toFixed(0);
+          bullets.push({ icon: '⏱', text: `${lossPct}% of decisive losses are on time (${tm.lostOnTime} games) — time trouble is a recurring pattern` });
+        } else if (tm.wonOnTime > 5) {
+          const bestSpeed = tm.bySpeed?.sort((a, b) => b.wonOnTime - a.wonOnTime)[0];
+          if (bestSpeed && bestSpeed.wonOnTime > 3) {
+            bullets.push({ icon: '⏱', text: `Wins ${bestSpeed.wonOnTime} games on time in ${bestSpeed.speed} — effective at converting time advantages in faster controls` });
+          }
+        }
+      }
+    }
+
+    return bullets;
+  }, [whiteOpenings, blackDefenses, report.timeManagement]);
 
   return (
     <div id="report-pdf-root" className={`relative space-y-8 pb-12 print:space-y-6 min-w-0 w-full max-w-full ${isGenerating ? 'pointer-events-none' : ''}`}>
       {/* Dossier Header */}
-      <div className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-3xl overflow-hidden shadow-2xl">
+      <div data-pdf-section className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-3xl overflow-hidden shadow-2xl">
         <div className="h-auto min-h-[11rem] bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-950 dark:from-indigo-900/40 dark:via-slate-900 dark:to-slate-950 from-indigo-50 via-white to-gray-50 relative p-10 flex flex-col justify-end">
           {/* PDF export — top-right */}
           {!isGenerating && (report.games?.length ?? 0) > 0 && (
@@ -960,6 +1061,24 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
         </div>
       </div>
 
+      {/* Tactical Summary — quick-glance bullets */}
+      {tacticalBullets.length > 0 && !isGenerating && (
+        <ReportCard className="!p-6" data-pdf-section>
+          <div className="flex items-center gap-2 mb-4">
+            <Target className="w-5 h-5 text-amber-400" />
+            <h3 className="text-lg font-bold text-white">Tactical Summary</h3>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {tacticalBullets.map((b, i) => (
+              <div key={i} className="flex items-start gap-3 bg-slate-950/40 border border-slate-800/60 rounded-xl p-4">
+                <span className="text-lg shrink-0 mt-0.5">{b.icon}</span>
+                <p className="text-sm text-slate-300 leading-relaxed">{b.text}</p>
+              </div>
+            ))}
+          </div>
+        </ReportCard>
+      )}
+
       <div className="space-y-8 min-w-0">
         {/* Main content: hide when no games and we're showing activity report only */}
         {showMainContent && (
@@ -969,9 +1088,14 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
           report={report}
           isGenerating={!!isGenerating}
           player={player}
+          isGuestReport={isGuestReport}
+          onGuestSignUp={onGuestSignUp}
         />
 
         {/* Repertoire Graphs - 4 when online+OTB, else 2 */}
+        <div className="relative" data-pdf-section>
+          {isGuestReport && <GuestBlurOverlay label="Repertoire Analysis" onSignUp={onGuestSignUp} />}
+          <div className={isGuestReport ? 'max-h-[400px] overflow-hidden' : ''}>
         {hasBothSources && openingsBySource ? (
           <div className="space-y-8">
             <h3 className="text-xl font-bold text-white">Online (Chess.com, Lichess)</h3>
@@ -1023,6 +1147,8 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
             />
           </div>
         )}
+          </div>
+        </div>
 
         {report.timeManagement && report.timeManagement.onlineGames > 0 && (
           <TimeManagementSection tm={report.timeManagement} />
@@ -1031,31 +1157,34 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
         </>
         )}
 
-      {/* Progress chart: below repertoire strategy & defensive philosophy, above Game Analysis Board */}
+      {/* Chat Section - Above Activity Report */}
+      <section className="mt-8" id="chat-section" style={{ scrollMarginTop: '0px' }}>
+        <RepertoireChat report={report} requiresSignIn={requiresSignInForChat} />
+      </section>
+
+      {/* Progress chart: below chat, above Game Analysis Board */}
       {showActivityReport && (
         <ActivityReportSection player={player} />
       )}
 
-      {/* Repertoire Analysis Board (repertoire only, no game selection) */}
+      {/* Repertoire Analysis Board */}
       {report.games && report.games.length > 0 && (
-        <section className="mt-8">
-          <AnalysisBoard 
-            games={report.games} 
-            playerName={player.name}
-            playerUsername={[
-              (player as { actualUsername?: string }).actualUsername,
-              player.platforms?.chessCom,
-              player.platforms?.lichess,
-            ].filter(Boolean) as string[]}
-            mode="repertoire"
-          />
+        <section className="mt-8 relative" data-pdf-section>
+          {isGuestReport && <GuestBlurOverlay label="Repertoire Analysis" onSignUp={onGuestSignUp} />}
+          <div className={isGuestReport ? 'pointer-events-none' : ''}>
+            <AnalysisBoard 
+              games={report.games} 
+              playerName={player.name}
+              playerUsername={[
+                (player as { actualUsername?: string }).actualUsername,
+                player.platforms?.chessCom,
+                player.platforms?.lichess,
+              ].filter(Boolean) as string[]}
+              mode="repertoire"
+            />
+          </div>
         </section>
       )}
-
-      {/* Chat Section - At Bottom, Collapsed by Default */}
-      <section className="mt-8" id="chat-section" style={{ scrollMarginTop: '0px' }}>
-        <RepertoireChat report={report} requiresSignIn={requiresSignInForChat} />
-      </section>
 
       {/* Generating status - centered overlay with backdrop */}
       {isGenerating && (

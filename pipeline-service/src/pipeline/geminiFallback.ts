@@ -127,8 +127,8 @@ async function callGeminiWithModel(
     } catch (err: unknown) {
       const errObj = err as { name?: string; message?: string };
       if (errObj.name === 'AbortError' || errObj.name === 'TimeoutError') {
-        logger.warn('[GeminiFallback] Request timed out');
-        return '';
+        logger.warn('[GeminiFallback] Request timed out, falling back to next model');
+        return null;
       }
       if (attempt === MAX_RETRIES) {
         logger.error({ err }, '[GeminiFallback] All retries exhausted');

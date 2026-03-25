@@ -6,7 +6,7 @@ import { jsPDF } from 'jspdf';
  * Uses html-to-image (foreignObject-based) which handles inline SVGs
  * (Recharts, etc.) far more reliably than html2canvas.
  *
- * Throws on failure so the caller can show a toast.
+ * Section-aware page breaks avoid cutting cards/charts in half.
  */
 export async function exportReportAsPdf(
   element: HTMLElement,
@@ -15,9 +15,35 @@ export async function exportReportAsPdf(
   const PDF_CLASS = 'pdf-export-active';
   element.classList.add(PDF_CLASS);
 
-  await new Promise((r) => setTimeout(r, 150));
+  const inlineFixups: { el: HTMLElement; orig: string }[] = [];
+
+  element.querySelectorAll<HTMLElement>('*').forEach((el) => {
+    const needsFix =
+      el.style.maxHeight ||
+      el.style.overflow ||
+      el.classList.contains('overflow-hidden') ||
+      el.classList.contains('overflow-y-auto') ||
+      el.classList.contains('overflow-auto') ||
+      el.classList.contains('overflow-x-auto');
+    if (needsFix) {
+      inlineFixups.push({ el, orig: el.style.cssText });
+      el.style.overflow = 'visible';
+      el.style.maxHeight = 'none';
+    }
+  });
+
+  await new Promise((r) => setTimeout(r, 300));
 
   try {
+    const rootRect = element.getBoundingClientRect();
+    const sections = Array.from(
+      element.querySelectorAll<HTMLElement>('[data-pdf-section]'),
+    );
+    const sectionTops = sections
+      .map((s) => s.getBoundingClientRect().top - rootRect.top)
+      .filter((t) => t > 0)
+      .sort((a, b) => a - b);
+
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
 
     const dataUrl = await toPng(element, {
@@ -29,11 +55,6 @@ export async function exportReportAsPdf(
         if (node.classList?.contains('print:hidden')) return false;
         if (node.id === 'chat-section') return false;
         if (node.hasAttribute('data-practice-opponent')) return false;
-        if (
-          node.tagName === 'BUTTON' &&
-          !node.hasAttribute('data-pdf-include')
-        )
-          return false;
         return true;
       },
     });
@@ -50,32 +71,51 @@ export async function exportReportAsPdf(
 
     const pdfWidth = 210; // A4 mm
     const pdfHeight = 297;
-    const margin = 10;
+    const margin = 14;
     const headerH = 8;
     const footerH = 8;
     const contentWidth = pdfWidth - margin * 2;
     const contentHeight = pdfHeight - margin * 2 - headerH - footerH;
 
-    const ratio = contentWidth / (imgWidth / pixelRatio);
-    const scaledTotalHeight = (imgHeight / pixelRatio) * ratio;
-    const totalPages = Math.max(1, Math.ceil(scaledTotalHeight / contentHeight));
+    const scale = contentWidth / (imgWidth / pixelRatio);
+    const cssPageHeight = contentHeight / scale;
+    const totalCssHeight = imgHeight / pixelRatio;
 
+    const pageStartsCss: number[] = [0];
+    let cursor = 0;
+
+    while (cursor + cssPageHeight < totalCssHeight) {
+      const idealEnd = cursor + cssPageHeight;
+
+      let bestBreak = idealEnd;
+      for (const top of sectionTops) {
+        if (top > cursor + 40 && top <= idealEnd) {
+          bestBreak = top;
+        }
+      }
+      pageStartsCss.push(bestBreak);
+      cursor = bestBreak;
+    }
+
+    const totalPages = pageStartsCss.length;
     const pdf = new jsPDF('p', 'mm', 'a4');
 
-    for (let page = 0; page < totalPages; page++) {
-      if (page > 0) pdf.addPage();
+    for (let p = 0; p < totalPages; p++) {
+      if (p > 0) pdf.addPage();
 
       pdf.setFontSize(8);
       pdf.setTextColor(120, 120, 140);
       pdf.text('PrepSuite.ai Scouting Report', margin, margin);
       pdf.text(playerName, pdfWidth - margin, margin, { align: 'right' });
 
-      const srcYPx = page * (contentHeight / ratio) * pixelRatio;
-      const srcHPx = Math.min(
-        (contentHeight / ratio) * pixelRatio,
-        imgHeight - srcYPx,
-      );
-      const destH = (srcHPx / pixelRatio) * ratio;
+      const startCss = pageStartsCss[p];
+      const endCss =
+        p + 1 < totalPages ? pageStartsCss[p + 1] : totalCssHeight;
+      const sliceCss = endCss - startCss;
+
+      const srcYPx = startCss * pixelRatio;
+      const srcHPx = Math.min(sliceCss * pixelRatio, imgHeight - srcYPx);
+      const destH = sliceCss * scale;
 
       const pageCanvas = document.createElement('canvas');
       pageCanvas.width = imgWidth;
@@ -112,7 +152,7 @@ export async function exportReportAsPdf(
         pdfHeight - 5,
       );
       pdf.text(
-        `Page ${page + 1} of ${totalPages}`,
+        `Page ${p + 1} of ${totalPages}`,
         pdfWidth - margin,
         pdfHeight - 5,
         { align: 'right' },
@@ -124,6 +164,9 @@ export async function exportReportAsPdf(
       `PrepSuite_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf`,
     );
   } finally {
+    inlineFixups.forEach(({ el, orig }) => {
+      el.style.cssText = orig;
+    });
     element.classList.remove(PDF_CLASS);
   }
 }

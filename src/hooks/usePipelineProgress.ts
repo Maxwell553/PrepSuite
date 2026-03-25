@@ -186,16 +186,12 @@ export function usePipelineProgressCallbacks({
           } else {
             setScanningStatus('Step 3: Analyzing Openings...');
           }
-        } else if (phase === 'engine' && status === 'started') {
-          setScanningStatus('Step 4: Analyzing Games...');
-        } else if (phase === 'engine' && status === 'complete') {
-          setScanningStatus('Step 4: Analyzing Games...');
         } else if (phase === 'report' && status === 'started') {
-          setScanningStatus('Step 5: Generating Report...');
+          setScanningStatus('Step 4: Generating Report...');
           setLoadingStage('generating');
           setLoadingProgress(85);
         } else if (phase === 'report' && status === 'complete') {
-          setScanningStatus('Step 5: Generating Report...');
+          setScanningStatus('Step 4: Generating Report...');
           setLoadingProgress(95);
         }
       },
@@ -225,9 +221,6 @@ export function usePipelineProgressCallbacks({
           if (s.displayed < s.target && s.raf == null) {
             scheduleParsePump();
           }
-        } else if (phase === 'engine') {
-          setLoadingProgress(Math.round(50 + (safeCurrent / Math.max(1, total)) * 30));
-          setScanningStatus('Step 4: Analyzing Games...');
         }
       },
 
