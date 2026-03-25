@@ -156,15 +156,6 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     return aggregateMovesAtPosition(parsedGames, gamesSafe, identifiersForFilter, repertoireSide, path);
   }, [parsedGames, gamesSafe, identifiersForFilter, repertoireSide, path]);
 
-  const quickInsight = useMemo(() => {
-    if (!moveStats.length || path.length > 0) return null;
-    const sorted = [...moveStats].filter((m) => m.totalGames >= 3);
-    const best = sorted.sort((a, b) => b.winRate - a.winRate)[0];
-    const worst = sorted.sort((a, b) => a.winRate - b.winRate)[0];
-    if (!best || !worst || best === worst) return null;
-    const name = playerName.split(/\s+/).pop() || playerName;
-    return `${name} scores best with ${best.moveLabel} (${(best.winRate * 100).toFixed(0)}% WR), but struggles with ${worst.moveLabel} (${(worst.winRate * 100).toFixed(0)}% WR).`;
-  }, [moveStats, path, playerName]);
 
   const displayPosition = useMemo(() => {
     if (path.length === 0) return 'start';
@@ -324,11 +315,6 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
                 </button>
               </div>
             </div>
-            {quickInsight && (
-              <div className="px-4 py-2.5 bg-indigo-500/[0.06] border-b border-indigo-500/10">
-                <p className="text-xs text-indigo-300/80 leading-relaxed">{quickInsight}</p>
-              </div>
-            )}
             <div className="flex-1 overflow-y-auto p-4 min-h-0 flex flex-col gap-6" style={{ contain: 'layout' }}>
               {/* Repertoire stats: MOVE | GAMES | PERFORMANCE */}
               {(() => {
