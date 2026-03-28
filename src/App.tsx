@@ -126,6 +126,7 @@ const App: React.FC = () => {
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; reportIds: string[] }>({ isOpen: false, reportIds: [] });
   const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [historyView, setHistoryView] = useState<'folders' | 'individual'>('individual');
   const [showUserSettings, setShowUserSettings] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(true);
@@ -330,14 +331,18 @@ const App: React.FC = () => {
   // Fetch history when user is available (only once, not on every render)
   useEffect(() => {
     const fetchHistory = async () => {
-      if (!user) return;
+      if (!user) {
+        setLoadingHistory(false);
+        return;
+      }
+      setLoadingHistory(true);
       try {
         const data = await playerRepository.getUserHistory(user.id);
         setHistory(data);
       } catch (error) {
         console.error('Failed to fetch history:', error);
-        // Don't show error toast here as it's a background operation
-        // User can retry by navigating to history tab
+      } finally {
+        setLoadingHistory(false);
       }
     };
     fetchHistory();
@@ -1027,7 +1032,12 @@ const App: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    {history.length === 0 ? (
+                    {loadingHistory ? (
+                      <div className="flex flex-col items-center justify-center py-24 px-6 text-center gap-3">
+                        <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+                        <p className="text-sm text-slate-400">Loading your reports...</p>
+                      </div>
+                    ) : history.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
                         <div className="w-20 h-20 rounded-2xl bg-slate-800/60 border border-slate-700/50 flex items-center justify-center mb-6">
                           <Search className="w-9 h-9 text-slate-600" />
