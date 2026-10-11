@@ -1,11 +1,19 @@
-PrepSuite desktop walkthrough — 28 seconds
-Actual footage captured from prepsuite.ai, featuring the public Magnus Carlsen sample report.
-No voiceover. Original mellow instrumental backing track.
+PrepSuite signed-in desktop walkthrough — 52 seconds
+Real website footage. Captions, no voiceover. Original upbeat 120 BPM instrumental. Account email concealed.
 
-0–4s: Search by player name or online handle
-4–7s: Report tabs: overview, openings, preparation, games and chat
-7–12s: Openings: compare the repertoire by color and game source
-12–17s: Preparation: start with the opponent’s most common openings
-17–23s: Game explorer: use the controls below the board to replay moves
-23–25s: Games & practice: choose a side and rehearse the repertoire
-25–28s: Practice board: rehearse recorded lines from either side
+0s: Sign in to search opponents, save reports and use AI chat
+3s: Enter a name; optionally link known Chess.com or Lichess accounts
+6s: Batch mode prepares up to five players and groups their reports
+9s: Analyze resolves the player, finds accounts and collects available games
+13s: Available games become a report; source coverage varies by player
+16s: History keeps saved scouting reports ready for your next round
+19s: Reports combine online and tournament games with linked sources
+22s: Ask a specific question: the AI investigates this report’s games
+25s: Gemini can call game, opening and Stockfish tools before answering
+28s: The answer uses game counts and opening results to guide review
+32s: Switch color and source to compare opening frequency and results
+35s: Preparation ranks frequent replies for your color and chosen filters
+38s: Download a one-page round sheet, or export the full report as PDF
+41s: Activity tracks rating history and adds time-control context
+44s: Replay source games move by move to inspect the evidence
+48s: Practice follows recorded opening lines, then uses an approximate engine
