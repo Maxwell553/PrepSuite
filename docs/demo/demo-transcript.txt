@@ -1,0 +1,29 @@
+PrepSuite demo video
+Actual captures of prepsuite.ai; public historical Magnus Carlsen sample. Synthetic narration. Agentic workflow diagram describes implementation; no chat response is fabricated.
+
+1. Know your opponent. Before move one.
+PrepSuite brings chess opponent preparation into one place. Start with a player name or an online handle, connect the available accounts, and turn scattered games into a preparation report.
+
+2. One player. Multiple sources.
+Here is the public Magnus Carlsen sample report. This is a historical snapshot, not a fresh search. It combines eleven hundred twenty-eight Chess dot com games with eleven hundred sixty over-the-board games, and keeps the source counts visible.
+
+3. See what they actually play.
+The openings view breaks down the repertoire by color and source. You can compare how often an opening appears and how the games ended. The numbers come from recorded games, and a low historical score is not automatically a proven weakness.
+
+4. Turn the report into a plan.
+In Preparation, choose the color you will play, then filter by source, speed, and date. The cards show frequent replies, sample sizes, and scores including draws. Supporting games are one click away, and the round sheet gives you a compact export.
+
+5. Follow the evidence.
+Opening a preparation card brings up the games behind it. You can narrow them by time control, color, or result, and choose an individual game to inspect.
+
+6. Play through the positions.
+The game viewer lets you step through the actual moves. This connects the statistics to concrete positions you can study before your round.
+
+7. Practice the recorded lines.
+Practice mode lets you rehearse the opponent’s recorded opening repertoire from either side. Here the opponent starts with e four, and the interface labels it as a move from the recorded repertoire.
+
+8. An assistant that uses chess tools.
+The signed-in AI assistant adds a tool loop. Gemini can choose to retrieve games, inspect their notation, calculate opening breakdowns, or request Stockfish analysis. Tool results return to the model so it can continue investigating and answer using the report data. This diagram explains that flow; it is not a recorded chat response.
+
+9. Less searching. More preparing.
+The goal is simple: go from an opponent’s name to a clear plan, with the games behind it. Explore the live project and public sample reports at PrepSuite dot A I.
