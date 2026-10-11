@@ -35,12 +35,12 @@ export async function fetchGames(
     logger.info({ lichess: lichessUsername, chessCom: chessComUsername, limit: gameLimit }, '[GameFetcher] Fetching both platforms in parallel');
     let lichessCount = 0;
     let chessComCount = 0;
-    const combinedTotal = gameLimit * 2;
+    const combinedTotal = gameLimit;
     const onProgress = () => {
       const current = Math.min(lichessCount + chessComCount, combinedTotal);
       sse.sendProgress({ phase: 'games', current, total: combinedTotal });
     };
-    const [lichessResult, chessComResult] = await Promise.all([
+    const [lichessSettled, chessComSettled] = await Promise.allSettled([
       fetchLichessGames(lichessUsername, gameLimit, (cur, _tot) => {
         lichessCount = Math.min(cur, gameLimit);
         onProgress();
@@ -50,6 +50,12 @@ export async function fetchGames(
         onProgress();
       }),
     ]);
+    const lichessResult = lichessSettled.status === 'fulfilled' ? lichessSettled.value : {ndjson:'',totalFetched:0};
+    const chessComResult = chessComSettled.status === 'fulfilled' ? chessComSettled.value : {games:[],totalFetched:0};
+    if (lichessSettled.status === 'rejected' || chessComSettled.status === 'rejected') {
+      if (!lichessResult.totalFetched && !chessComResult.totalFetched) throw new Error('Game sources are unavailable. Please try again.');
+      logger.warn('[GameFetcher] One platform unavailable; continuing with the other platform');
+    }
     lichessNdjson = lichessResult.ndjson;
     chessComGames = chessComResult.games;
     logger.info({ lichess: lichessResult.totalFetched, chessCom: chessComResult.totalFetched }, '[GameFetcher] Both complete');

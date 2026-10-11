@@ -328,3 +328,13 @@ describe('generateStats', () => {
     expect(result[2].name).toBe('French Defense');
   });
 });
+
+describe('account aggregation regression',()=>{
+ it('keeps Chess.com, Lichess and full-name OTB games without merging namesakes',async()=>{
+  const {aggregateOpeningsBySource}=await import('../../src/pipeline/statsAggregator.js');
+  const games=[makeGame({white:'chess_handle',black:'Other',result:'1-0'}),makeGame({white:'lichess_handle',black:'Other',source:'lichess',result:'0-1'}),makeGame({white:'Smith, John',black:'Other',source:'otb',result:'1/2-1/2'}),makeGame({white:'Jane Smith',black:'Other',source:'otb'})];
+  const result=aggregateOpeningsBySource(games,['chess_handle','lichess_handle','John Smith']);
+  expect(result.online.white[0].totalGames).toBe(2);expect(result.online.white[0].winRate).toBe(.5);
+  expect(result.otb.white[0].totalGames).toBe(1);expect(result.otb.white[0].drawRate).toBe(1);
+ });
+});

@@ -1,4 +1,5 @@
-import React from 'react';
+import MotionSurface from './MotionSurface';
+import React, { useEffect, useRef } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmationModalProps {
@@ -22,11 +23,30 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     cancelText = 'Cancel',
     type = 'danger'
 }) => {
+    const dialogRef = useRef<HTMLDivElement>(null);
+    const cancelRef = useRef<HTMLButtonElement>(null);
+    useEffect(() => {
+        if (!isOpen) return;
+        const previous = document.activeElement as HTMLElement | null;
+        cancelRef.current?.focus();
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') { event.preventDefault(); onClose(); }
+            if (event.key !== 'Tab') return;
+            const buttons = dialogRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
+            if (!buttons?.length) return;
+            const first = buttons[0], last = buttons[buttons.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => { document.removeEventListener('keydown', onKeyDown); previous?.focus(); };
+    }, [isOpen, onClose]);
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div
+            <MotionSurface
+                ref={dialogRef} role="dialog" aria-modal="true" aria-label={title}
                 className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200"
                 onClick={(e) => e.stopPropagation()}
             >
@@ -39,6 +59,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                         <h3 className="text-lg font-semibold text-white">{title}</h3>
                     </div>
                     <button
+                        aria-label="Close confirmation"
                         onClick={onClose}
                         className="text-slate-400 hover:text-white transition-colors"
                     >
@@ -54,6 +75,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 
                 <div className="flex gap-3 px-6 py-4 bg-slate-950/50 border-t border-slate-800">
                     <button
+                        ref={cancelRef}
                         onClick={onClose}
                         className="flex-1 px-4 py-2 text-sm font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
                     >
@@ -72,7 +94,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                         {confirmText}
                     </button>
                 </div>
-            </div>
+            </MotionSurface>
         </div>
     );
 };

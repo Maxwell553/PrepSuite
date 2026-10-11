@@ -1,74 +1,21 @@
 import { test, expect } from '@playwright/test';
-
-test.describe('Search Flow', () => {
-  test.beforeEach(async ({ page }) => {
-    // Navigate to the app
-    await page.goto('/');
-    
-    // Wait for the page to load
-    await page.waitForLoadState('networkidle');
-  });
-
-  test('should display search screen', async ({ page }) => {
-    // When not logged in: LandingPage with hero. When logged in: SearchScreen with form.
-    // Use .first() to avoid strict mode violation when multiple elements match
-    const heroHeading = page.getByRole('heading', { name: /master your opponent/i });
-    const searchForm = page.locator('form').first();
-    await expect(heroHeading.or(searchForm).first()).toBeVisible();
-  });
-
-  test('should show validation error for empty name', async ({ page }) => {
-    // Try to submit without entering a name
-    const submitButton = page.locator('button[type="submit"]').first();
-    
-    // If submit button exists, click it
-    if (await submitButton.isVisible()) {
-      await submitButton.click();
-      
-      // Wait a bit for validation
-      await page.waitForTimeout(500);
-      
-      // Check for error message (adjust selector based on your UI)
-      const errorMessage = page.locator('text=/required|invalid|error/i').first();
-      if (await errorMessage.isVisible()) {
-        await expect(errorMessage).toBeVisible();
-      }
-    }
-  });
-
-  test('should navigate through app sections', async ({ page }) => {
-    // Check if navigation/sidebar exists
-    const sidebar = page.locator('nav, aside, [role="navigation"]').first();
-    
-    if (await sidebar.isVisible()) {
-      // Try clicking on different sections if they exist
-      const links = sidebar.locator('a, button').first();
-      if (await links.isVisible()) {
-        await links.click();
-        await page.waitForTimeout(500);
-      }
-    }
-  });
+import {mockBackend,login} from './helpers/mockBackend';
+test.beforeEach(async({page})=>mockBackend(page));
+test('invalid empty search does not start analysis',async({page})=>{
+ let called=false;page.on('request',r=>{if(r.url().endsWith('/api/jobs'))called=true;});
+ await login(page);await page.getByRole('button',{name:'Analyze Opponent',exact:true}).click();
+ await expect(page.getByText(/name.*(required|characters)|at least.*characters/i).first()).toBeVisible();expect(called).toBe(false);
 });
-
-test.describe('Error Handling', () => {
-  test('should handle network errors gracefully', async ({ page }) => {
-    // Intercept network requests and simulate failure
-    await page.route('**/api/**', route => route.abort());
-    
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-    
-    // App should still load even with network errors
-    const body = page.locator('body');
-    await expect(body).toBeVisible();
-  });
-
-  test('should display error boundary on component errors', async ({ page }) => {
-    await page.goto('/');
-    
-    // Try to trigger an error (this depends on your app structure)
-    // For now, just verify the page loads
-    await expect(page.locator('body')).toBeVisible();
-  });
+test('game limit sliders maintain the requested total',async({page})=>{
+ await login(page);await page.getByLabel('Total games to analyze').fill('500');
+ await expect(page.getByLabel('Online games to analyze')).toHaveValue('250');await expect(page.getByLabel('Over-the-board games to analyze')).toHaveValue('250');
+ await page.getByLabel('Online games to analyze').fill('400');await expect(page.getByLabel('Over-the-board games to analyze')).toHaveValue('100');
+ await page.getByLabel('Online games to analyze').press('ArrowLeft');
+ await expect(page.getByLabel('Online games to analyze')).toHaveValue('350');
+ await expect(page.getByLabel('Over-the-board games to analyze')).toHaveValue('150');
+ await expect(page.locator('.prep-range-track span').nth(1)).toHaveAttribute('style', 'width: 70%;');
+});
+test('offline state displays a recoverable connectivity notice',async({page,context})=>{
+ await page.goto('/');await context.setOffline(true);await expect(page.getByText(/you appear to be offline/i)).toBeVisible();
+ await context.setOffline(false);await expect(page.getByText(/you appear to be offline/i)).toHaveCount(0);
 });

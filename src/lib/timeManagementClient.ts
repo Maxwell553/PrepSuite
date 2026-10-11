@@ -1,3 +1,4 @@
+import {samePlayer as namesMatch} from './identity';
 /**
  * Client-side time management computation for featured reports.
  * Parses PGN Termination tag when chessComWhiteResult/chessComBlackResult are missing,
@@ -34,11 +35,7 @@ function parseTerminationFromPgn(pgn: string | undefined): { winnerName: string;
   return { winnerName, loserRes };
 }
 
-function namesMatch(a: string, b: string): boolean {
-  const x = a.toLowerCase().trim().replace(/\s+/g, '');
-  const y = b.toLowerCase().trim().replace(/\s+/g, '');
-  return x === y || x.includes(y) || y.includes(x);
-}
+
 
 /** Enrich Chess.com games with chessComWhiteResult/chessComBlackResult from PGN Termination. */
 export function enrichGamesFromPgnTermination(games: GameData[]): GameData[] {

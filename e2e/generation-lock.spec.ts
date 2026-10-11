@@ -1,0 +1,33 @@
+import {test,expect} from '@playwright/test';
+import {mockBackend} from './helpers/mockBackend';
+test.beforeEach(async({page})=>mockBackend(page));
+test('guest analysis blocks outside clicks and keyboard navigation until failure recovers',async({page})=>{
+ let release!:()=>void;
+ const held=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/api/analyze-guest',async route=>{await held;await route.fulfill({status:503,json:{error:'Please retry'}});});
+ await page.goto('/');await page.getByLabel('Player name',{exact:true}).fill('Magnus Carlsen');await page.getByRole('button',{name:'Scout opponent'}).click();
+ const overlay=page.getByRole('dialog',{name:'Report in progress'});
+ await expect(overlay).toBeVisible();
+ await page.mouse.click(20,20);await page.keyboard.press('Tab');await page.keyboard.press('Escape');
+ await expect(overlay).toBeVisible();await expect(overlay).toBeFocused();
+ await expect(page.locator('#root')).toHaveAttribute('inert','');
+ release();await expect(overlay).toHaveCount(0);await expect(page.locator('#root')).not.toHaveAttribute('inert','');
+});
+test('sample loading stays locked through outside clicks and browser back',async({page},testInfo)=>{
+ let release!:()=>void;
+ const held=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/featured-reports/magnus-carlsen-summary.json',async route=>{await held;await route.continue();});
+ await page.goto('/');await page.getByRole('button',{name:'Or explore a sample report',exact:true}).click();
+ const overlay=page.getByRole('dialog',{name:'Report in progress'});
+ await expect(overlay).toBeVisible();await page.mouse.click(10,10);await page.keyboard.press('Tab');await expect(overlay).toBeFocused();
+ release();await expect(page.getByRole('heading',{name:'Magnus Carlsen',exact:true})).toBeVisible();
+ let releaseGames!:()=>void;
+ const gamesHeld=new Promise<void>(resolve=>{releaseGames=resolve;});
+ await page.route('**/featured-reports/magnus-carlsen-games-*.json',async route=>{await gamesHeld;await route.continue();});
+ await page.getByRole('button',{name:'Load games',exact:true}).click();await expect(overlay).toBeVisible();
+ await expect(page.locator('#root')).toHaveAttribute('inert','');
+ await page.goBack();await expect(page).toHaveURL(/featured\/magnus-carlsen/);await expect(overlay).toBeVisible();
+ await expect.poll(()=>overlay.locator('canvas').evaluate(canvas=>{const c=canvas as HTMLCanvasElement;return c.getContext('2d')!.getImageData(0,0,c.width,c.height).data.some((value,index)=>index%4===3&&value>0);})).toBe(true);
+ await page.screenshot({path:testInfo.outputPath('generation-overlay.png')});
+ releaseGames();await expect(overlay).toHaveCount(0);await expect(page.getByRole('button',{name:'Back to home'})).toBeEnabled();
+});

@@ -1,4 +1,4 @@
-import { searchFideByName as searchLocal } from '../lib/fideLocalDb.js';
+import { fetchOfficialFideText, fetchRatingJson, isFideApiPlayer, fideApiProfile } from '../lib/ratingProvider.js';
 import { logger } from '../lib/logger.js';
 
 export interface FideSearchResult {
@@ -10,40 +10,17 @@ export interface FideSearchResult {
   birthYear: string;
 }
 
-/** Known aliases for players with abbreviated names in FIDE DB (e.g. "Gukesh D" for Gukesh Dommaraju) */
-const KNOWN_ALIASES: Record<string, string> = {
-  'gukesh dommaraju': '46616543',
-  'gukesh d': '46616543',
-  dommaraju: '46616543',
-};
-
-/**
- * Search FIDE ratings database by player name.
- * Uses local FIDE rating list (standard_rating_list.txt).
- * Checks known aliases first for players with abbreviated FIDE names.
- */
+/** Search FIDE directly, with its published list API as a bounded backup. */
 export async function searchFideByName(name: string): Promise<FideSearchResult[]> {
-  const norm = name.trim().toLowerCase().replace(/\s+/g, ' ');
-  const aliasId = KNOWN_ALIASES[norm] || KNOWN_ALIASES[norm.replace(/,/g, '')];
-  if (aliasId) {
-    const { getFideProfileById } = await import('../lib/fideLocalDb.js');
-    const profile = getFideProfileById(aliasId);
-    if (profile) {
-      logger.info({ name, fideId: aliasId }, '[FideSearch] Resolved via known alias');
-      return [
-        {
-          fideId: aliasId,
-          name: profile.name,
-          federation: profile.federation,
-          title: profile.title,
-          rating: profile.rating,
-          birthYear: profile.birthYear ?? '',
-        },
-      ];
-    }
-  }
-  logger.info({ name }, '[FideSearch] Searching FIDE by name (local DB)');
-  return searchLocal(name);
+  if (!name.trim()) return [];
+  try {
+    const results = parseFideSearchResults(await fetchOfficialFideText(`/incl_search_l.php?search=${encodeURIComponent(name.trim())}&simple=1`, 'GET', 3500));
+    if (results.length) return results;
+  } catch (err) { logger.warn({err}, '[FideSearch] Official source unavailable'); }
+  try {
+    const data = await fetchRatingJson(`https://lichess.org/api/fide/player?q=${encodeURIComponent(name.trim())}`);
+    return Array.isArray(data) ? data.filter(isFideApiPlayer).map(player => ({fideId: String(player.id), ...fideApiProfile(player)})) : [];
+  } catch (err) { logger.warn({err}, '[FideSearch] Lookup unavailable'); return []; }
 }
 
 /**

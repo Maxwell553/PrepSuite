@@ -1,5 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import MotionSurface from './MotionSurface';
+import {samePlayer as namesMatch} from '../lib/identity';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { X, Search, BarChart3 } from 'lucide-react';
+import { gameSpeed } from '../lib/preparation';
 import { GameData } from '../types';
 import { formatTimeControlForDisplay } from '../lib/timeControlUtils';
 
@@ -21,30 +24,7 @@ function normalizeNameForMatch(name: string): string {
   return s.toLowerCase();
 }
 
-function namesMatch(a: string, b: string): boolean {
-  const x = normalizeNameForMatch(a);
-  const y = normalizeNameForMatch(b);
-  return x === y || x.includes(y) || y.includes(x);
-}
 
-/** Parse timeControl to speed category. OTB is always classical. Online: bullet/blitz/rapid/classical by time. */
-function getSpeedFromTimeControl(tc: string, source?: string): 'bullet' | 'blitz' | 'rapid' | 'classical' | null {
-  const src = (source || '').toLowerCase();
-  if (src === 'otb') return 'classical';
-  const s = (tc || '').toLowerCase().trim();
-  if (s.includes('bullet')) return 'bullet';
-  if (s.includes('blitz')) return 'blitz';
-  if (s.includes('rapid')) return 'rapid';
-  if (s.includes('classical')) return 'classical';
-  const numMatch = s.match(/(\d+)/);
-  if (!numMatch) return null;
-  const num = parseInt(numMatch[1], 10);
-  const baseSeconds = num < 100 ? num * 60 : num;
-  if (baseSeconds < 180) return 'bullet';
-  if (baseSeconds < 600) return 'blitz';
-  if (baseSeconds < 3600) return 'rapid';
-  return 'classical'; // 60+ min = classical
-}
 
 const GamesModal: React.FC<GamesModalProps> = ({
   games,
@@ -53,6 +33,23 @@ const GamesModal: React.FC<GamesModalProps> = ({
   onSelectGame,
   onClose,
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialogRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.stopPropagation(); onClose(); }
+      if (event.key === 'Tab') {
+        const nodes = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input, select, a[href]');
+        if (!nodes?.length) return;
+        const first = nodes[0], last = nodes[nodes.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('keydown', onKey); previous?.focus(); };
+  }, [onClose]);
   const [search, setSearch] = useState('');
   const [speedFilter, setSpeedFilter] = useState<'all' | 'bullet' | 'blitz' | 'rapid' | 'classical'>('all');
   const [colorFilter, setColorFilter] = useState<'both' | 'white' | 'black'>('both');
@@ -82,7 +79,7 @@ const GamesModal: React.FC<GamesModalProps> = ({
       }
 
       if (speedFilter !== 'all') {
-        const speed = getSpeedFromTimeControl(g.timeControl || '', g.source);
+        const speed = gameSpeed(g);
         if (!speed || speed !== speedFilter) return false;
       }
       return true;
@@ -106,7 +103,7 @@ const GamesModal: React.FC<GamesModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+      <MotionSurface ref={dialogRef} role="dialog" aria-modal="true" aria-label={`${playerName} games`} className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
           <h2 className="text-xl font-bold text-white">
             {playerName}'s Games
@@ -115,6 +112,7 @@ const GamesModal: React.FC<GamesModalProps> = ({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close games"
             className="p-2 text-slate-400 hover:text-white rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
@@ -230,7 +228,7 @@ const GamesModal: React.FC<GamesModalProps> = ({
             <p className="text-center text-slate-400 py-8">No games match filters</p>
           )}
         </div>
-      </div>
+      </MotionSurface>
     </div>
   );
 };

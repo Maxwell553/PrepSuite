@@ -1,3 +1,5 @@
+import MotionSurface from './MotionSurface';
+import Brand from './Brand';
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
 
@@ -7,9 +9,9 @@ interface AboutPrepSuiteProps {
 
 const AboutPrepSuite: React.FC<AboutPrepSuiteProps> = ({ onBack }) => {
   return (
-    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-slate-950 dark:bg-slate-950 bg-white text-slate-100 dark:text-slate-100 text-gray-900">
+    <div className="prep-document flex h-dvh max-h-dvh flex-col overflow-hidden bg-slate-950 dark:bg-slate-950 bg-white text-slate-100 dark:text-slate-100 text-gray-900">
       <header className="shrink-0 z-10 bg-slate-950 dark:bg-slate-950 bg-white border-b border-slate-800 dark:border-slate-800 border-gray-200 p-4">
-        <div className="max-w-4xl mx-auto flex items-center gap-4">
+        <MotionSurface className="max-w-4xl mx-auto flex items-center gap-4">
           <button
             onClick={onBack}
             className="flex items-center gap-2 text-slate-300 dark:text-slate-300 text-gray-600 hover:text-white dark:hover:text-white hover:text-gray-900 transition-colors"
@@ -18,16 +20,16 @@ const AboutPrepSuite: React.FC<AboutPrepSuiteProps> = ({ onBack }) => {
             <span className="text-sm font-medium">Back</span>
           </button>
           <p className="text-xl font-semibold text-white dark:text-white text-gray-900">Why PrepSuite</p>
-        </div>
+        </MotionSurface>
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-      <div className="max-w-4xl mx-auto py-8 px-6">
+      <MotionSurface className="max-w-4xl mx-auto py-8 px-6">
         <div className="prose prose-invert dark:prose-invert max-w-none">
           {/* Logo */}
-          <div className="flex justify-center mb-12 select-none">
-            <div className="inline-flex items-center rounded-lg bg-[#0f172a] px-3 py-2 dark:bg-[#0f172a]">
-              <img src="/NewLogo.jpg" alt="PrepSuite.ai" width={565} height={144} className="h-10 w-auto max-h-10 object-contain object-center select-none" draggable={false} />
+          <div className="prep-document-brand-row">
+            <div className="prep-document-brand">
+              <Brand/>
             </div>
           </div>
 
@@ -64,7 +66,6 @@ const AboutPrepSuite: React.FC<AboutPrepSuiteProps> = ({ onBack }) => {
             <div className="mt-16 pt-8 border-t border-slate-700/50 dark:border-slate-700/50 border-gray-200/50 flex flex-col items-end">
               <p
                 className="text-3xl md:text-4xl font-medium text-white dark:text-white"
-                style={{ fontFamily: "'Dancing Script', cursive" }}
               >
                 Max Ingargiola
               </p>
@@ -72,7 +73,7 @@ const AboutPrepSuite: React.FC<AboutPrepSuiteProps> = ({ onBack }) => {
             </div>
           </div>
         </div>
-      </div>
+      </MotionSurface>
       </main>
     </div>
   );

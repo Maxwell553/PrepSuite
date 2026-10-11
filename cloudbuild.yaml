@@ -14,6 +14,10 @@ substitutions:
   _VITE_SUPABASE_URL: ''
   _VITE_SUPABASE_ANON_KEY: ''
   _VITE_PIPELINE_SERVICE_URL: ''
+  _JOBS_ENABLED: 'false'
+  _MIN_INSTANCES: '0'
+  # Direct Cloud Run ingress. Recheck this value when adding a load balancer/proxy.
+  _TRUST_PROXY_HOPS: '1'
 
 steps:
   - name: 'gcr.io/cloud-builders/docker'
@@ -55,14 +59,15 @@ steps:
       - '4'
       - '--timeout'
       - '300'
+      - '--no-cpu-throttling'
       - '--min-instances'
-      - '0'
+      - '${_MIN_INSTANCES}'
       - '--max-instances'
       - '5'
       - '--set-env-vars'
-      - 'NODE_ENV=production,VERTEX_PROJECT_ID=${PROJECT_ID},VERTEX_LOCATION=${_REGION}'
+      - 'NODE_ENV=production,VERTEX_PROJECT_ID=${PROJECT_ID},VERTEX_LOCATION=global,JOBS_ENABLED=${_JOBS_ENABLED},TRUST_PROXY_HOPS=${_TRUST_PROXY_HOPS}'
       - '--set-secrets'
-      - 'SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,SUPABASE_URL=supabase-url:latest,SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest,GEMINI_API_KEY=gemini-api-key:latest'
+      - 'SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,SUPABASE_URL=supabase-url:latest,SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest'
 
 images:
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE_NAME}:${BUILD_ID}'

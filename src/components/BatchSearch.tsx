@@ -1,3 +1,4 @@
+import type { ReportUpdate } from '../lib/reportUtils';
 /**
  * Batch search: Premium users can analyze up to 10 players at once.
  * Runs pipelines sequentially; each completion is shown and saved.
@@ -25,7 +26,7 @@ interface BatchPlayer {
 interface BatchSearchProps {
   user: SupabaseUser;
   onReportGenerated: (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean; fromBatch?: boolean; creditsDeducted?: number }) => void;
-  onReportPartialUpdate?: (partial: Partial<ScoutingReport>) => void;
+  onReportPartialUpdate?: (partial: ReportUpdate) => void;
   setIsAnalyzing: (v: boolean) => void;
   setScanningStatus: (v: string) => void;
 }
@@ -114,7 +115,6 @@ export const BatchSearch: React.FC<BatchSearchProps> = ({
             gameLimit: BATCH_GAME_LIMIT,
             onlineLimit: BATCH_GAME_LIMIT,
             otbLimit: 0,
-            isPremium: true,
           },
           session.access_token,
           {

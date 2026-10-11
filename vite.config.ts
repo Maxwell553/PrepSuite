@@ -2,11 +2,12 @@ import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { htmlOptimizationsPlugin } from './vite-plugin-html-optimizations';
+import { publicPagesPlugin } from './build/publicPages.ts';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   const isProduction = mode === 'production';
+  const pipelineTarget = env.PIPELINE_PROXY_TARGET || 'http://localhost:8080';
 
   return {
     server: {
@@ -22,13 +23,9 @@ export default defineConfig(({ mode }) => {
       },
       proxy: {
         '/api': {
-          target: 'http://localhost:8080',
+          target: pipelineTarget,
           changeOrigin: true,
           proxyTimeout: 300000, // 5 min — avoid socket hang up on long pipeline requests (FIDE, analyze)
-        },
-        '/fide-rating-history': {
-          target: 'http://localhost:8080',
-          changeOrigin: true,
         },
         '/lichess-export': {
           target: 'https://lichess.org',
@@ -36,24 +33,38 @@ export default defineConfig(({ mode }) => {
           rewrite: (path) => path.replace(/^\/lichess-export/, ''),
         },
         '/chesscom-pgn': {
-          target: 'http://localhost:8080',
+          target: pipelineTarget,
           changeOrigin: true,
         }
       }
     },
     plugins: [
+      publicPagesPlugin(),
+      {
+        name: 'local-rating-history',
+        // Exercise the current public rating route locally even when authenticated APIs
+        // use the remote pipeline. Production serves the same handler from Hono.
+        configureServer(server) {
+          server.middlewares.use('/fide-rating-history', async (req, res, next) => {
+            if (req.method !== 'GET') return next();
+            try {
+              const {fideRatingHistoryRoute} = await server.ssrLoadModule('/pipeline-service/src/routes/fideRatingHistory.ts');
+              const response = await fideRatingHistoryRoute.fetch(new Request(`http://localhost/fide-rating-history${req.url}`));
+              res.statusCode = response.status;
+              response.headers.forEach((value, key) => res.setHeader(key, value));
+              res.end(await response.text());
+            } catch { res.statusCode = 503; res.end(JSON.stringify({history: [], error: 'Rating history unavailable'})); }
+          });
+        },
+      },
       react(),
       tailwindcss(),
-      htmlOptimizationsPlugin(),
     ],
     build: {
-      minify: 'esbuild',
+      minify: true,
       /** Helps Lighthouse "Best Practices" and error tracking; maps are separate .map files. */
       sourcemap: isProduction,
-      // Remove console.log statements in production builds
-      esbuildOptions: {
-        drop: isProduction ? ['console', 'debugger'] : [],
-      },
+      rolldownOptions: {output: {minify: {compress: {dropConsole: isProduction, dropDebugger: isProduction}}}},
     },
     define: {
       // API keys are now server-side only (via Supabase Edge Functions)
@@ -61,7 +72,7 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, 'src'),
+        '@': path.resolve(import.meta.dirname, 'src'),
       }
     }
   };

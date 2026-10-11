@@ -1,3 +1,5 @@
+import { boardTheme } from '../lib/boardTheme';
+import {samePlayer as namesMatch} from '../lib/identity';
 import React, { useState, useMemo, useCallback, startTransition } from 'react';
 import { Database, ChevronLeft, ChevronRight, RotateCcw, Loader2 } from 'lucide-react';
 import { Chessboard } from 'react-chessboard';
@@ -12,11 +14,7 @@ function parseMoveLabelToSan(label: string): string {
   return m ? m[1] : label.trim();
 }
 
-function namesMatch(a: string, b: string): boolean {
-  const x = a.toLowerCase().trim();
-  const y = b.toLowerCase().trim();
-  return x === y || x.includes(y) || y.includes(x);
-}
+
 
 /** Aggregate moves at position using pre-parsed games. */
 function aggregateMovesAtPosition(
@@ -139,8 +137,8 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
       const whiteLower = firstGame.white.toLowerCase().trim();
       const blackLower = firstGame.black.toLowerCase().trim();
       const nameLower = playerName.toLowerCase().trim();
-      if (whiteLower === nameLower || whiteLower.includes(nameLower) || nameLower.includes(whiteLower)) return firstGame.white;
-      if (blackLower === nameLower || blackLower.includes(nameLower) || nameLower.includes(blackLower)) return firstGame.black;
+      if (namesMatch(firstGame.white,playerName)) return firstGame.white;
+      if (namesMatch(firstGame.black,playerName)) return firstGame.black;
       const whiteMatch = whiteLower.split('').filter((c) => nameLower.includes(c)).length;
       const blackMatch = blackLower.split('').filter((c) => nameLower.includes(c)).length;
       return whiteMatch > blackMatch ? firstGame.white : firstGame.black;
@@ -168,6 +166,18 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
     } catch {
       return 'start';
     }
+  }, [path]);
+
+  const onPieceDrop = useCallback((from: string, to: string, piece: string) => {
+    try {
+      const chess = new Chess();
+      for (const san of path) chess.move(san);
+      const promotion = piece[1]?.toLowerCase();
+      const move = chess.move({from, to, promotion: ['q','r','b','n'].includes(promotion) ? promotion : 'q'});
+      if (!move) return false;
+      setPath([...path, move.san]);
+      return true;
+    } catch { return false; }
   }, [path]);
 
   const boardOrientation: 'white' | 'black' = repertoireSide === 'white' ? 'white' : 'black';
@@ -211,6 +221,7 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
           <Database className="w-6 h-6 text-indigo-400" />
           Repertoire Analysis
         </h3>
+        <p className="text-slate-300 mt-2">Drag a piece or select a recorded move to explore a line.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
@@ -222,10 +233,11 @@ const AnalysisBoard: React.FC<AnalysisBoardProps> = ({ games, playerName, player
                 <Chessboard
                   position={displayPosition}
                   boardOrientation={boardOrientation}
-                  arePiecesDraggable={false}
-                  customBoardStyle={{ borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}
-                  customDarkSquareStyle={{ backgroundColor: '#769656' }}
-                  customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
+                  id="repertoire-board"
+                  animationDuration={0}
+                  arePiecesDraggable
+                  onPieceDrop={onPieceDrop}
+                  {...boardTheme}
                 />
               </div>
             </div>

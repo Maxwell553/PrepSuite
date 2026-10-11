@@ -1,5 +1,7 @@
 
 export interface PlayerMetadata {
+  discoverySources?: string[];
+  identityNote?: string;
   name: string;
   fideId?: string;
   uscfId?: string;
@@ -85,6 +87,9 @@ export interface GameData {
 }
 
 export interface ScoutingReport {
+  requestedGameCount?: number;
+  gameCount?: number;
+  gameSources?: string[];
   id: string;
   /** When saved from batch into a folder */
   folderId?: string;
@@ -127,7 +132,7 @@ export interface ScoutingReport {
     endgameAccuracy: number;
   };
   timeManagement?: TimeManagementStats;
-  /** AI-generated advice on whether to complicate positions based on opponent's time usage (Vertex: gemini-3.1-pro-preview) */
+  /** AI-generated advice on whether to complicate positions based on opponent's time usage (Vertex: gemini-3.8-flash) */
   timeManagementAdvice?: string;
   lastUpdated: string;
 }

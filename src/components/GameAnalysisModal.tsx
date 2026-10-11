@@ -1,3 +1,6 @@
+import { boardTheme } from '../lib/boardTheme';
+import MotionSurface from './MotionSurface';
+import {samePlayer as namesMatch} from '../lib/identity';
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight, Play, Pause, RotateCcw, FastForward } from 'lucide-react';
 import { Chessboard } from 'react-chessboard';
@@ -5,11 +8,7 @@ import { Chess } from 'chess.js';
 import { GameData } from '../types';
 import { loadPgn } from '../lib/pgnUtils';
 
-function namesMatch(a: string, b: string): boolean {
-  const x = a.toLowerCase().trim();
-  const y = b.toLowerCase().trim();
-  return x === y || x.includes(y) || y.includes(x);
-}
+
 
 interface GameAnalysisModalProps {
   game: GameData;
@@ -126,7 +125,8 @@ const GameAnalysisModal: React.FC<GameAnalysisModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={onClose}
     >
-      <div
+      <MotionSurface
+        role="dialog" aria-modal="true" aria-label="Game analysis"
         className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
@@ -170,13 +170,10 @@ const GameAnalysisModal: React.FC<GameAnalysisModalProps> = ({
           <div className="flex flex-col items-center gap-4">
             {chess ? (
               <div className="aspect-square w-full max-w-md">
-                <Chessboard
+                <Chessboard {...boardTheme}
                   position={position}
                   boardOrientation={boardOrientation}
                   arePiecesDraggable={false}
-                  customBoardStyle={{ borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}
-                  customDarkSquareStyle={{ backgroundColor: '#769656' }}
-                  customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
                 />
               </div>
             ) : (
@@ -187,6 +184,7 @@ const GameAnalysisModal: React.FC<GameAnalysisModalProps> = ({
 
             <div className="flex items-center gap-2">
               <button
+                aria-label="Previous game move"
                 onClick={() => { setCurrentMoveIndex((i) => Math.max(-1, i - 1)); setIsPlaying(false); }}
                 disabled={currentMoveIndex === -1}
                 className="p-2 bg-slate-700/80 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-white"
@@ -194,18 +192,21 @@ const GameAnalysisModal: React.FC<GameAnalysisModalProps> = ({
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
+                aria-label="Restart game"
                 onClick={() => { setCurrentMoveIndex(-1); setIsPlaying(false); }}
                 className="p-2 bg-slate-700/80 hover:bg-slate-600 rounded-lg text-white"
               >
                 <RotateCcw className="w-4 h-4" />
               </button>
               <button
+                aria-label={isPlaying ? "Pause game playback" : "Play game playback"}
                 onClick={() => setIsPlaying((p) => !p)}
                 className="p-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white"
               >
                 {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
               </button>
               <button
+                aria-label="Last game move"
                 onClick={() => { setCurrentMoveIndex(moveHistory.length - 1); setIsPlaying(false); }}
                 disabled={currentMoveIndex >= moveHistory.length - 1}
                 className="p-2 bg-slate-700/80 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-white"
@@ -213,6 +214,7 @@ const GameAnalysisModal: React.FC<GameAnalysisModalProps> = ({
                 <FastForward className="w-4 h-4" />
               </button>
               <button
+                aria-label="Next game move"
                 onClick={() => { setCurrentMoveIndex((i) => Math.min(i + 1, moveHistory.length - 1)); setIsPlaying(false); }}
                 disabled={currentMoveIndex >= moveHistory.length - 1}
                 className="p-2 bg-slate-700/80 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-white"
@@ -222,7 +224,7 @@ const GameAnalysisModal: React.FC<GameAnalysisModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      </MotionSurface>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 # ── Stage 1: Build Vite frontend ──────────────────────────────────────
-FROM node:22-slim AS frontend-builder
+FROM node:24-slim AS frontend-builder
 WORKDIR /app
 
 # Build args for frontend (passed at build time; anon key is public by design)
@@ -12,14 +12,14 @@ ENV VITE_PIPELINE_SERVICE_URL=${VITE_PIPELINE_SERVICE_URL}
 
 COPY package.json package-lock.json ./
 RUN npm ci
-# Include every file vite.config.ts imports (plugin lives at repo root, not under src/)
-COPY index.html vite.config.ts vite-plugin-html-optimizations.ts tsconfig.json tailwind.config.js postcss.config.js ./
+COPY index.html vite.config.ts tsconfig.json tailwind.config.js postcss.config.js ./
 COPY src/ ./src/
+COPY build/ ./build/
 COPY public/ ./public/
 RUN npx vite build
 
 # ── Stage 2: Build pipeline-service (TypeScript) ─────────────────────
-FROM node:22-slim AS backend-builder
+FROM node:24-slim AS backend-builder
 WORKDIR /app/pipeline-service
 COPY pipeline-service/package.json pipeline-service/package-lock.json* ./
 RUN npm ci
@@ -29,7 +29,7 @@ COPY pipeline-service/standard_rating_list.txt ./
 RUN npm run build
 
 # ── Stage 3: Production runtime ──────────────────────────────────────
-FROM node:22-slim
+FROM node:24-slim
 RUN apt-get update && apt-get install -y stockfish && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/games/stockfish /usr/local/bin/stockfish
 ENV STOCKFISH_PATH=/usr/games/stockfish

@@ -1,143 +1,58 @@
 name: Deploy
-
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to deploy to'
+        description: Deployment target
         required: true
-        default: 'staging'
+        default: staging
         type: choice
-        options:
-          - staging
-          - production
-
+        options: [staging, production]
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
 jobs:
-  deploy-staging:
-    name: Deploy to Staging
+  verify:
+    uses: ./.github/workflows/ci.yml
+  deploy:
+    needs: verify
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
-    environment:
-      name: staging
-      url: https://staging.prepsuite.ai
-    
+    environment: ${{ inputs.environment }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Run tests
-        run: npm run test:run
-        env:
-          CI: true
-      
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Deploy to Cloud Run (Staging)
-        run: |
-          gcloud builds submit . \
-            --config=cloudbuild.yaml \
-            --project=${{ secrets.GCP_PROJECT_ID }} \
-            --substitutions="_VITE_SUPABASE_URL=${{ secrets.STAGING_VITE_SUPABASE_URL }},_VITE_SUPABASE_ANON_KEY=${{ secrets.STAGING_VITE_SUPABASE_ANON_KEY }}"
-      
-      - name: Deploy Supabase Edge Functions
-        run: |
-          npm install -g supabase
-          supabase functions deploy health --project-ref ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
-          supabase functions deploy delete-user --project-ref ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+      - uses: google-github-actions/setup-gcloud@v2
+      # Each GitHub environment supplies its own Supabase/GCP values.
+      # Apply additive schema changes before code starts using the new RPCs.
+      - name: Apply database migrations
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      
-      - name: Run Supabase Migrations
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
-          npm install -g supabase
-          supabase db push --project-ref ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+          npx supabase link --project-ref "$PROJECT_REF"
+          npx supabase db push --linked
+      - name: Deploy functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
-    environment:
-      name: production
-      url: https://prepsuite.ai
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Run all tests
-        run: npm run test:all
-        env:
-          CI: true
-      
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Deploy to Cloud Run (Production)
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
-          gcloud builds submit . \
-            --config=cloudbuild.yaml \
-            --project=${{ secrets.GCP_PROJECT_ID }} \
-            --substitutions="_VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }},_VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}"
-      
-      - name: Deploy Supabase Edge Functions
+          npx supabase functions deploy health --project-ref "$PROJECT_REF"
+          npx supabase functions deploy delete-user --project-ref "$PROJECT_REF"
+          npx supabase functions deploy stripe-webhook --no-verify-jwt --project-ref "$PROJECT_REF"
+      - name: Build and deploy combined frontend and pipeline
+        env:
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
         run: |
-          npm install -g supabase
-          supabase functions deploy health --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
-          supabase functions deploy delete-user --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
-          supabase functions deploy nightly-digest --no-verify-jwt --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      
-      - name: Run Supabase Migrations
-        run: |
-          npm install -g supabase
-          supabase db push --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+          test -n "$PROJECT" && test -n "$SERVICE" && test -n "$SUPABASE_URL" && test -n "$SUPABASE_ANON_KEY"
+          gcloud builds submit . --project="$PROJECT" --config=cloudbuild.yaml --substitutions="_SERVICE_NAME=$SERVICE,_VITE_SUPABASE_URL=$SUPABASE_URL,_VITE_SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"

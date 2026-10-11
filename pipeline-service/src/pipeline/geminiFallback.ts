@@ -1,19 +1,18 @@
+import {collectGrounding} from '../lib/evidence.js';
+import { workSignal, workContext } from '../lib/workContext.js';
+import { models, modelChain, fastThinkingConfig } from '../lib/models.js';
 import { logger } from '../lib/logger.js';
 import { getAccessToken, getVertexUrl, invalidateAccessTokenCache } from '../lib/vertexAuth.js';
 import { parseLLMJson } from '../lib/jsonRepair.js';
 
-const GEMINI_MODEL_PRIMARY = 'gemini-3.1-flash-lite-preview';
-const GEMINI_MODEL_FALLBACK = 'gemini-2.5-flash';
-/** Username search model chain: flash-lite → 2.5-pro → 2.5-flash */
-const GEMINI_SEARCH_MODELS = [
-  'gemini-3.1-flash-lite-preview',
-  'gemini-2.5-pro',
-  'gemini-2.5-flash',
-] as const;
-const GEMINI_TIMEOUT_MS = 55000;
-const MAX_RETRIES = 2;
+const GEMINI_MODEL_PRIMARY = models.discovery;
+const GEMINI_MODEL_FALLBACK = models.fallback;
+/** Username search model chain: task-specific primary → configured fallback */
+const GEMINI_SEARCH_MODELS = modelChain(models.discovery);
+const GEMINI_TIMEOUT_MS = 10000;
+const MAX_RETRIES = 0;
 
-function shouldFallbackTo25(status: number, errorText: string): boolean {
+function shouldTryFallback(status: number, errorText: string): boolean {
   if (status === 404) return true;
   if (status === 501) return true;
   if (status === 429) return true; // Resource exhausted — try fallback model
@@ -33,7 +32,7 @@ interface GeminiUsernameResult {
 
 /**
  * Call Vertex AI Gemini with optional Google Search grounding.
- * Tries gemini-3.1-flash-lite-preview first, falls back to gemini-2.5-flash if unavailable.
+ * Uses the centralized discovery model and fallback policy.
  * @param forceModel - When set, use only this model (e.g. for username search where Search must work)
  */
 async function callGemini(
@@ -52,7 +51,6 @@ ${prompt}`;
     contents: [{ role: 'user', parts: [{ text: optimizedPrompt }] }],
     generationConfig: {
       maxOutputTokens: 2048,
-      temperature: 0.0,
     },
   };
 
@@ -60,12 +58,13 @@ ${prompt}`;
     requestBody.tools = [{ googleSearch: {} }];
   }
 
-  const modelsToTry = forceModel ? [forceModel] : [GEMINI_MODEL_PRIMARY, GEMINI_MODEL_FALLBACK];
+  const modelsToTry = forceModel ? [forceModel] : modelChain(GEMINI_MODEL_PRIMARY);
   for (const model of modelsToTry) {
+    workContext.getStore()?.throwIfAborted();
     const result = await callGeminiWithModel(requestBody, model);
     if (result !== null) return result;
     if (model === GEMINI_MODEL_PRIMARY) {
-      logger.warn({ model: GEMINI_MODEL_PRIMARY }, '[GeminiFallback] Primary model failed, falling back to 2.5-flash');
+      logger.warn({ model: GEMINI_MODEL_PRIMARY }, '[GeminiFallback] Primary model failed, trying fallback');
     }
   }
   return '';
@@ -85,6 +84,7 @@ async function callGeminiWithModel(
         await new Promise((r) => setTimeout(r, backoffMs));
       }
 
+      workContext.getStore()?.throwIfAborted();
       const accessToken = await getAccessToken();
 
       const res = await fetch(geminiUrl, {
@@ -93,8 +93,8 @@ async function callGeminiWithModel(
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+        body: JSON.stringify({ ...requestBody, generationConfig: { ...(requestBody.generationConfig as Record<string, unknown>), ...fastThinkingConfig(model) } }),
+        signal: workSignal(GEMINI_TIMEOUT_MS),
       });
 
       if (res.status === 503 && attempt < MAX_RETRIES) {
@@ -111,11 +111,13 @@ async function callGeminiWithModel(
       if (!res.ok) {
         const errorText = await res.text().catch(() => 'unable to read');
         logger.error({ status: res.status, errorText: errorText.slice(0, 200) }, '[GeminiFallback] API error');
-        if (shouldFallbackTo25(res.status, errorText)) return null;
+        if (shouldTryFallback(res.status, errorText)) return null;
         return '';
       }
 
       const data = await res.json();
+      collectGrounding(data);
+      logger.info({model,usage:data.usageMetadata}, '[Model] Discovery usage');
       const candidate = data.candidates?.[0];
       const parts = candidate?.content?.parts || [];
 
@@ -184,7 +186,7 @@ export async function searchUsernamesViaGemini(
   _fideId: string | null,
   _uscfId: string | null,
 ): Promise<GeminiUsernameResult> {
-  // Chess.com and Lichess discovery: Vertex/Google Search only. Use gemini-2.5-flash to guarantee Search grounding.
+  // Chess.com and Lichess discovery: Vertex/Google Search. Uses the centralized model policy.
   const prompts = [
     `Search the web for this chess player's Chess.com and Lichess profiles: "${playerName}".
 
@@ -211,7 +213,7 @@ Search: "${playerName}" chess.com, "${playerName}" lichess, site:chess.com/membe
 Look for profile bios and about sections containing "${playerName}". Extract usernames from URLs. Return JSON: {"chessComCandidates":[],"lichessCandidates":[]}.`,
   ];
 
-  for (let attempt = 0; attempt < prompts.length; attempt++) {
+  for (let attempt = 0; attempt < 1; attempt++) {
     let text = '';
     for (let m = 0; m < GEMINI_SEARCH_MODELS.length; m++) {
       const model = GEMINI_SEARCH_MODELS[m];

@@ -32,12 +32,12 @@ export async function getCredits(userId: string): Promise<number | null> {
 /**
  * Check if user has enough credits for a given game count.
  * Returns true if they have >= required, false otherwise.
- * Returns true if Supabase not configured (allow in dev).
+ * Fails closed if the balance cannot be read.
  */
 export async function hasEnoughCredits(userId: string, required: number): Promise<boolean> {
   if (required <= 0) return true;
   const credits = await getCredits(userId);
-  if (credits === null) return true; // No Supabase = allow (e.g. local dev)
+  if (credits === null) throw new Error('Credit balance is temporarily unavailable');
   return credits >= required;
 }
 
@@ -50,8 +50,8 @@ export async function deductCredits(userId: string, amount: number): Promise<boo
   if (amount <= 0) return true;
   const supabase = getClient();
   if (!supabase) {
-    logger.warn('[Credits] Supabase not configured, skipping deduct');
-    return true; // Allow in dev
+    logger.warn('[Credits] Supabase not configured; deduction unavailable');
+    throw new Error('Credit storage is unavailable');
   }
   const { data, error } = await supabase.rpc('deduct_credits', {
     p_user_id: userId,

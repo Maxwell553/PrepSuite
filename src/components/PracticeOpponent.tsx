@@ -1,5 +1,6 @@
+import { boardTheme } from '../lib/boardTheme';
 /**
- * Practice vs AI opponent that mimics the analyzed player's style.
+ * Opening practice vs opponent that uses the analyzed player's recorded opening lines.
  * Premium feature: uses /api/practice-move to get style-aware moves.
  */
 
@@ -11,6 +12,7 @@ import { ScoutingReport } from '../types';
 import { supabase } from '../lib/supabase';
 import { getMoveProbability } from '../lib/moveProbability';
 import { useParsedGames } from '../hooks/useParsedGames';
+import { recordedPracticeMove } from '../lib/practiceRepertoire';
 import type { ParsedGame } from '../lib/repertoireUtils';
 
 /** Memoized move history — only re-renders when history changes. */
@@ -129,16 +131,27 @@ export const PracticeOpponent: React.FC<PracticeOpponentProps> = ({
 
   const applyMove = React.useCallback(
     (updater: (prev: Chess) => Chess) => {
-      setGameState((prev) => {
-        const next = updater(prev);
-        if (next.fen() !== prev.fen() && onMovePlayed) onMovePlayed(next.history());
-        return next;
-      });
+      const previous = gameRef.current;
+      const next = updater(previous);
+      gameRef.current = next;
+      setGameState(next);
+      if (next.fen() !== previous.fen()) onMovePlayed?.(next.history());
     },
     [onMovePlayed],
   );
 
   const opponentMoveInProgress = useRef(false);
+  const requestRef = useRef<AbortController | null>(null);
+  React.useEffect(() => () => requestRef.current?.abort(), []);
+  const boardContainer = useRef<HTMLDivElement>(null);
+  const [boardWidth, setBoardWidth] = useState(320);
+  React.useEffect(() => {
+    const node = boardContainer.current;
+    if (!node) return;
+    const observer = new ResizeObserver(([entry]) => setBoardWidth(Math.max(160, Math.min(400, entry.contentRect.width))));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   const [playerColor, setPlayerColor] = useState<'white' | 'black'>(initialColor ?? 'white');
 
@@ -146,6 +159,7 @@ export const PracticeOpponent: React.FC<PracticeOpponentProps> = ({
     if (initialColor) setPlayerColor(initialColor);
   }, [initialColor]);
   const [loading, setLoading] = useState(false);
+  const [moveSource, setMoveSource] = useState('Repertoire rehearsal');
   const [error, setError] = useState<string | null>(null);
 
   const opponentColor = playerColor === 'white' ? 'black' : 'white';
@@ -172,17 +186,24 @@ export const PracticeOpponent: React.FC<PracticeOpponentProps> = ({
   const makeOpponentMove = useCallback(async () => {
     const currentGame = gameRef.current;
     if (loading || opponentMoveInProgress.current || currentGame.turn() === (playerColor === 'white' ? 'w' : 'b') || currentGame.isGameOver()) return;
+    if (!parsedGames && gamesSafe.length) return;
+    const controller = new AbortController();
+    requestRef.current = controller;
     opponentMoveInProgress.current = true;
     setLoading(true);
     setError(null);
     const fen = currentGame.fen();
     const moveHistory = currentGame.history();
     try {
+      let move = recordedPracticeMove(parsedGames || [], identifiers, opponentColor, moveHistory, fen);
+      let source = 'repertoire';
+      if (!move) {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error('Sign in required');
+      if (!session?.access_token) throw new Error('This line has left the recorded games. Sign in for engine continuation, or reset to rehearse another line.');
       const baseUrl = import.meta.env.VITE_PIPELINE_SERVICE_URL || '';
       const res = await fetch(`${baseUrl}/api/practice-move`, {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
@@ -204,34 +225,42 @@ export const PracticeOpponent: React.FC<PracticeOpponentProps> = ({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to get move');
-      const { move } = data;
+      move = data.move;
+      source = data.source;
+      }
+      if (controller.signal.aborted || gameRef.current.fen() !== fen) return;
+      if (!move || !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move)) throw new Error('The engine returned an invalid move. Please retry.');
+      setMoveSource(source === 'repertoire' ? 'Move from recorded repertoire' : 'Stockfish continuation — not a prediction of this player');
       const from = move.slice(0, 2);
       const to = move.slice(2, 4);
       applyMove((prev) => {
         const copy = new Chess();
         for (const san of prev.history()) copy.move(san);
-        const result = copy.move({ from, to });
+        const result = copy.move({ from, to, promotion: move[4] || 'q' });
         return result ? copy : prev;
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to get opponent move');
+      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : 'Failed to get opponent move');
     } finally {
-      opponentMoveInProgress.current = false;
-      setLoading(false);
+      if (requestRef.current === controller) {
+        opponentMoveInProgress.current = false;
+        setLoading(false);
+      }
     }
-  }, [loading, playerColor, opponentColor, report, applyMove]);
+  }, [loading, playerColor, opponentColor, report, applyMove, parsedGames, gamesSafe.length, identifiers]);
 
   React.useEffect(() => {
-    if (!isPlayerTurn && !loading && !game.isGameOver()) {
+    if (!isPlayerTurn && !loading && !error && !game.isGameOver()) {
       makeOpponentMove();
     }
-  }, [game.fen(), isPlayerTurn, loading, makeOpponentMove]);
+  }, [game.fen(), isPlayerTurn, loading, error, makeOpponentMove]);
 
   const onDrop = (sourceSquare: string, targetSquare: string) => {
     if (!isPlayerTurn || loading) return false;
     const gameCopy = new Chess();
     for (const san of game.history()) gameCopy.move(san);
-    const move = gameCopy.move({ from: sourceSquare, to: targetSquare });
+    let move;
+    try { move = gameCopy.move({ from: sourceSquare, to: targetSquare, promotion: 'q' }); } catch { return false; }
     if (move) {
       applyMove(() => gameCopy);
       return true;
@@ -240,6 +269,10 @@ export const PracticeOpponent: React.FC<PracticeOpponentProps> = ({
   };
 
   const reset = () => {
+    requestRef.current?.abort();
+    requestRef.current = null;
+    opponentMoveInProgress.current = false;
+    setLoading(false);
     applyMove(() => new Chess());
     setError(null);
   };
@@ -298,26 +331,19 @@ export const PracticeOpponent: React.FC<PracticeOpponentProps> = ({
         </div>
       )}
       <div className="flex flex-col sm:flex-row gap-4 items-start justify-center min-w-0 overflow-x-auto">
-        <div className="relative rounded-xl overflow-hidden shadow-2xl shadow-black/40 ring-1 ring-amber-500/20 shrink-0">
-          <Chessboard
+        <div ref={boardContainer} className="relative rounded-xl overflow-hidden shadow-2xl shadow-black/40 ring-1 ring-amber-500/20 w-full max-w-[400px] min-w-0">
+          <Chessboard {...boardTheme} animationDuration={0}
             position={game.fen()}
             onPieceDrop={onDrop}
             boardOrientation={playerColor}
             arePiecesDraggable={isPlayerTurn && !loading}
-            autoPlay={false}
-            boardWidth={isEmbeddedInModal ? 400 : 480}
-            customBoardStyle={{ borderRadius: '12px', boxShadow: 'inset 0 0 0 1px rgba(245,158,11,0.15)' }}
-            customDarkSquareStyle={{ backgroundColor: '#5a4a3a' }}
-            customLightSquareStyle={{ backgroundColor: '#c9b896' }}
+            boardWidth={boardWidth}
           />
-          {loading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-[2px] rounded-xl">
-              <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
-            </div>
-          )}
+
         </div>
         <div className={`bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 min-w-[200px] overflow-y-auto ${isEmbeddedInModal ? 'max-h-[400px]' : 'max-h-[480px]'}`}>
           <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Move history</div>
+          <div className="prep-engine-status" role="status" aria-live="polite">{loading ? <><Loader2 size={15} className="animate-spin" aria-hidden="true"/> Thinking…</> : isPlayerTurn ? "Your move" : "Opponent’s turn"}</div>
           <MoveHistoryList
             history={game.history()}
             mostPlayedLines={report.mostPlayedLines}
@@ -328,7 +354,8 @@ export const PracticeOpponent: React.FC<PracticeOpponentProps> = ({
           />
         </div>
       </div>
-      {error && <p className="mt-2 text-sm text-red-400 text-center">{error}</p>}
+      <p className="text-xs text-slate-400 text-center mt-3">{moveSource}. Engine difficulty is approximate; it is not a calibrated player simulation.</p>
+      {error && <div className="mt-2 text-sm text-center"><p role="alert" className="text-red-400">{error}</p><button className="mt-2 px-3 py-2 rounded bg-slate-700 text-white" onClick={() => setError(null)}>Retry opponent move</button></div>}
       {game.isGameOver() && (
         <p className="mt-2 text-sm text-slate-400 text-center">
           Game over — {game.isCheckmate() ? 'Checkmate!' : game.isDraw() ? 'Draw' : 'Stalemate'}

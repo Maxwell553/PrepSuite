@@ -13,6 +13,8 @@ import { logger } from './logger.js';
 const KEEPALIVE_INTERVAL_MS = 15_000;
 
 export class SSEStream {
+  private abortController = new AbortController();
+  get signal(): AbortSignal { return this.abortController.signal; }
   private controller: ReadableStreamDefaultController<Uint8Array> | null = null;
   private encoder = new TextEncoder();
   private stream: ReadableStream<Uint8Array>;
@@ -27,6 +29,7 @@ export class SSEStream {
       },
       cancel: () => {
         logger.warn('[SSE] Stream cancelled by client');
+        this.abortController.abort();
         this.stopKeepalive();
         this.closed = true;
         this.controller = null;

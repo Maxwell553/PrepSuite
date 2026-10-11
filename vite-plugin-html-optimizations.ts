@@ -1,8 +1,8 @@
 import type { Plugin } from 'vite';
 
 /**
- * Production: make main CSS non-blocking; move the entry module to end of body.
- * Module scripts are deferred by default; body placement reduces parser blocking.
+ * Legacy plugin, retained for external consumers. Keep stylesheets render-blocking
+ * to prevent an unstyled first paint. Vite already defers module scripts.
  */
 export function htmlOptimizationsPlugin(): Plugin {
   return {
@@ -10,11 +10,7 @@ export function htmlOptimizationsPlugin(): Plugin {
     transformIndexHtml: {
       order: 'post',
       handler(html) {
-        let out = html.replace(
-          /<link rel="stylesheet" crossorigin href="(\/assets\/[^"]+\.css)">/g,
-          '<link rel="preload" as="style" href="$1" crossorigin onload="this.onload=null;this.rel=\'stylesheet\'">' +
-            '<noscript><link rel="stylesheet" crossorigin href="$1"></noscript>'
-        );
+        let out = html;
 
         const scriptRe = /<script type="module" crossorigin src="([^"]+)"><\/script>/;
         const m = out.match(scriptRe);

@@ -1,3 +1,4 @@
+import MotionSurface from './MotionSurface';
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, MessageSquare, X, Loader2, ChevronRight } from 'lucide-react';
 import { ScoutingReport } from '../types';
@@ -164,7 +165,7 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
   }
 
   return (
-    <div ref={chatRef} className="bg-slate-900 border border-amber-500/20 rounded-2xl shadow-lg shadow-amber-900/5 flex flex-col h-[600px]">
+    <MotionSurface ref={chatRef} className="bg-slate-900 border border-amber-500/20 rounded-2xl shadow-lg shadow-amber-900/5 flex flex-col h-[600px]">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-amber-500/15">
         <div className="flex items-center gap-2">
@@ -172,6 +173,7 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
           <h3 className="text-lg font-semibold text-amber-400">Repertoire Analysis Chat</h3>
         </div>
         <button
+          aria-label="Close repertoire chat"
           onClick={() => setIsExpanded(false)}
           className="p-1 hover:bg-slate-800 rounded transition-colors"
         >
@@ -182,7 +184,7 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
       {/* Messages */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((message, index) => (
-          <div
+          <MotionSurface
             key={index}
             className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
@@ -198,7 +200,7 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
                 {message.timestamp.toLocaleTimeString()}
               </div>
             </div>
-          </div>
+          </MotionSurface>
         ))}
         {isLoading && (
           <div className="flex justify-start">
@@ -255,6 +257,7 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
             disabled={isLoading}
           />
           <button
+            aria-label="Send repertoire question"
             type="submit"
             disabled={!input.trim() || isLoading}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors flex items-center gap-2"
@@ -267,7 +270,7 @@ const RepertoireChat: React.FC<RepertoireChatProps> = ({ report, onClose, requir
           </button>
         </form>
       </div>
-    </div>
+    </MotionSurface>
   );
 };
 

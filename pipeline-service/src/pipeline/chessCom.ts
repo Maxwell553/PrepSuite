@@ -4,7 +4,7 @@ import { logger } from '../lib/logger.js';
 const BASE_URL = 'https://api.chess.com/pub/player';
 const USER_AGENT = 'PrepSuite-Pipeline/1.0';
 const BATCH_SIZE = 8;
-const MAX_RECENT_ARCHIVES = 60;
+
 
 export interface ChessComGamesFetchResult {
   games: unknown[];
@@ -44,8 +44,7 @@ export async function fetchChessComGames(
   }
 
   // Most recent archives first
-  const numArchives = Math.min(archives.length, MAX_RECENT_ARCHIVES);
-  const recentArchives = archives.slice(-numArchives).reverse();
+  const recentArchives = [...archives].reverse();
 
   logger.info(
     { username, archiveCount: recentArchives.length, totalArchives: archives.length },

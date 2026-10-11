@@ -1,5 +1,11 @@
+import PreparationPlan from './PreparationPlan';
+import PracticeDialog from './PracticeDialog';
+import GenerationOverlay from './GenerationOverlay';
+import { flushSync } from 'react-dom';
+import { useRatingHistory } from '../hooks/useRatingHistory';
+import MotionSurface from './MotionSurface';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   LineChart, Line, ResponsiveContainer, Legend,
@@ -7,18 +13,18 @@ import {
 } from 'recharts';
 import { Shield, Target, Clock, TrendingUp, Share2, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, ChevronRight, Activity, Crown, X, BarChart3, Coins, Download, Lock } from 'lucide-react';
 import { ScoutingReport, OpeningStat, TimeManagementStats } from '../types';
-import AnalysisBoard from './AnalysisBoard';
-import PracticeOpponent from './PracticeOpponent';
+const AnalysisBoard = React.lazy(() => import('./AnalysisBoard'));
+const PracticeOpponent = React.lazy(() => import('./PracticeOpponent'));
 import RecentGamesList from './RecentGamesList';
 import RepertoireChat from './RepertoireChat';
 import { aggregateOpeningsBySource } from '../lib/openingStats';
 import { formatTimeControlForDisplay, getTimeControlSecondsForSort } from '../lib/timeControlUtils';
 import { supabase } from '../lib/supabase';
-import { exportReportAsPdf } from '../lib/pdfExport';
 
-function GuestBlurOverlay({ label, onSignUp }: { label: string; onSignUp?: () => void }) {
+
+function GuestAccessCard({ label, onSignUp }: { label: string; onSignUp?: () => void }) {
   return (
-    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center backdrop-blur-md bg-slate-950/60 rounded-2xl">
+    <div className="prep-guest-access">
       <Lock className="w-6 h-6 text-slate-400 mb-3" />
       <p className="text-sm font-semibold text-slate-300 mb-1">{label}</p>
       <p className="text-xs text-slate-500 mb-4 max-w-xs text-center">
@@ -39,7 +45,7 @@ function GuestBlurOverlay({ label, onSignUp }: { label: string; onSignUp?: () =>
 
 function ReportCard({ children, className = '', ...rest }: React.HTMLAttributes<HTMLDivElement> & { children: React.ReactNode }) {
   return (
-    <div className={`bg-slate-900/70 backdrop-blur-sm border border-white/[0.06] rounded-2xl p-8 shadow-lg report-card ${className}`} {...rest}>
+    <div className={`bg-slate-900/70 backdrop-blur-sm border border-white/[0.06] rounded-2xl p-8 shadow-lg report-card prep-strategic-profile ${className}`} {...rest}>
       {children}
     </div>
   );
@@ -106,21 +112,21 @@ function TimeManagementSection({ tm }: { tm: TimeManagementStats }) {
 
       <div className="grid grid-cols-1 min-[420px]:grid-cols-2 xl:grid-cols-4 gap-4 min-w-0">
         <div className="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4 min-w-0">
-          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Online games</div>
+          <div className="text-xs uppercase tracking-wider text-slate-400 font-bold">Online games</div>
           <div className="text-2xl font-bold text-slate-100 mt-1 tabular-nums">{tm.onlineGames.toLocaleString()}</div>
         </div>
         <div className="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4 min-w-0">
-          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Lost on time</div>
+          <div className="text-xs uppercase tracking-wider text-slate-400 font-bold">Lost on time</div>
           <div className="text-2xl font-bold text-rose-400 mt-1 tabular-nums">{tm.lostOnTime.toLocaleString()}</div>
         </div>
         <div className="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4 min-w-0">
-          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Won on time</div>
+          <div className="text-xs uppercase tracking-wider text-slate-400 font-bold">Won on time</div>
           <div className="text-2xl font-bold text-emerald-400 mt-1 tabular-nums">{tm.wonOnTime.toLocaleString()}</div>
         </div>
         <div className="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4 min-w-0">
-          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Share of losses</div>
+          <div className="text-xs uppercase tracking-wider text-slate-400 font-bold">Share of losses</div>
           <div className="text-2xl font-bold text-amber-300 mt-1 tabular-nums">{lossPct}%</div>
-          <div className="text-[11px] text-slate-400 mt-0.5 text-pretty">Decisive losses ending on time</div>
+          <div className="text-sm text-slate-400 mt-0.5 text-pretty">Decisive losses ending on time</div>
         </div>
       </div>
 
@@ -159,7 +165,7 @@ function TimeManagementSection({ tm }: { tm: TimeManagementStats }) {
             <div className="h-52 w-full min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                  <Pie
+                  <Pie isAnimationActive={false}
                     data={winsPieData}
                     cx="50%"
                     cy="45%"
@@ -205,7 +211,7 @@ function TimeManagementSection({ tm }: { tm: TimeManagementStats }) {
             <div className="h-52 w-full min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                  <Pie
+                  <Pie isAnimationActive={false}
                     data={lossesPieData}
                     cx="50%"
                     cy="45%"
@@ -264,7 +270,7 @@ function OpeningList({ openings, defaultExpanded = false, id }: { openings: Open
       {expanded && (
         <div className="space-y-1 max-h-48 overflow-y-auto">
           {openings.map((op, idx) => {
-            const winRate = typeof op.winRate === 'number' && !isNaN(op.winRate) ? op.winRate : 0;
+            const winRate = (op.winRate || 0) + (op.drawRate || 0) / 2;
             const winPercent = (winRate * 100).toFixed(0);
             const totalGames = Math.round(op.totalGames || 0);
             const wins = Math.round(op.wins || 0);
@@ -273,8 +279,8 @@ function OpeningList({ openings, defaultExpanded = false, id }: { openings: Open
             return (
               <div key={idx} className="flex justify-between items-center text-xs py-1 px-2 bg-slate-950 rounded border border-slate-800">
                 <span className="text-slate-200 font-semibold">{op.name}</span>
-                <span className="text-slate-400 font-mono text-[11px]">
-                  {totalGames} Games | {winPercent}% W ({wins}W/{draws}D/{losses}L)
+                <span className="text-slate-400 font-mono text-sm">
+                  {totalGames} Games | {winPercent}% score ({wins}W/{draws}D/{losses}L)
                 </span>
               </div>
             );
@@ -345,280 +351,36 @@ function PracticeBarWithModals({
         <ChevronRight className="w-4 h-4" />
       </button>
 
-      {/* Modal 1: Choose color */}
-      {showColorModal && (
-        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/90 backdrop-blur-md">
-          <div className="relative bg-gradient-to-b from-slate-800/95 to-slate-900/95 border border-amber-500/30 rounded-2xl p-8 max-w-sm w-full mx-4 shadow-2xl shadow-amber-500/10 ring-1 ring-white/5">
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-amber-500/5 via-transparent to-transparent pointer-events-none" />
-            <div className="flex justify-between items-center mb-6 relative">
-              <h4 className="text-xl font-bold bg-gradient-to-r from-amber-400 to-amber-200 bg-clip-text text-transparent">Choose your color</h4>
-              <button
-                type="button"
-                onClick={() => setShowColorModal(false)}
-                className="p-2 rounded-xl hover:bg-slate-700/80 text-slate-400 hover:text-white transition-colors"
-                aria-label="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-3 mb-6 relative">
-              <button
-                type="button"
-                onClick={() => setPlayerColor('white')}
-                className={`w-full py-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-3 ${
-                  playerColor === 'white'
-                    ? 'bg-gradient-to-r from-slate-100 to-slate-200 text-slate-900 shadow-lg shadow-slate-400/20 ring-2 ring-amber-400/50'
-                    : 'bg-slate-800/80 text-slate-400 hover:bg-slate-700/80 hover:text-slate-200 border border-slate-700'
-                }`}
-              >
-                <Crown className={`w-5 h-5 shrink-0 ${playerColor === 'white' ? 'text-amber-600' : 'text-slate-400'}`} />
-                You play White
-              </button>
-              <button
-                type="button"
-                onClick={() => setPlayerColor('black')}
-                className={`w-full py-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-3 ${
-                  playerColor === 'black'
-                    ? 'bg-gradient-to-r from-slate-800 to-slate-900 text-slate-100 shadow-lg shadow-slate-900/50 ring-2 ring-amber-400/50 border border-slate-600'
-                    : 'bg-slate-800/80 text-slate-400 hover:bg-slate-700/80 hover:text-slate-200 border border-slate-700'
-                }`}
-              >
-                <Crown className={`w-5 h-5 shrink-0 ${playerColor === 'black' ? 'text-amber-400' : 'text-slate-400'}`} />
-                You play Black
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={handleStart}
-              className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-bold rounded-xl shadow-lg shadow-amber-500/25 transition-all duration-200 hover:shadow-amber-500/40"
-            >
-              Start game
-            </button>
-          </div>
+      {showColorModal && <PracticeDialog title="Choose your color" onClose={()=>setShowColorModal(false)}>
+        <p className="prep-practice-intro">Explore {playerName}’s recorded opening lines from either side of the board.</p>
+        <div className="prep-color-options" role="group" aria-label="Your pieces">
+          {(['white','black'] as const).map(color=><button key={color} type="button" aria-pressed={playerColor===color} onClick={()=>setPlayerColor(color)} className="prep-color-option">
+            <Crown size={26}/><span>You play {color==='white'?'White':'Black'}</span><small>{color==='white'?'Make the first move':'Your opponent moves first'}</small>
+          </button>)}
         </div>
-      )}
-
-      {/* Modal 2: Game */}
-      {showGameModal && (
-        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
-          <div className="relative bg-gradient-to-b from-slate-800/95 to-slate-900/95 border border-amber-500/30 rounded-2xl p-6 w-full max-w-3xl shadow-2xl shadow-amber-500/10 ring-1 ring-white/5 max-h-[90vh] overflow-auto">
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-amber-500/5 via-transparent to-transparent pointer-events-none" />
-            <div className="flex justify-between items-center mb-4 relative">
-              <h4 className="text-xl font-bold bg-gradient-to-r from-amber-400 to-amber-200 bg-clip-text text-transparent">Practice vs {playerName}</h4>
-              <button
-                type="button"
-                onClick={handleCloseGame}
-                className="p-2 rounded-xl hover:bg-slate-700/80 text-slate-400 hover:text-white transition-colors"
-                aria-label="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="relative">
-              <PracticeOpponent
-                report={report}
-                initialColor={playerColor}
-                onClose={handleCloseGame}
-                moveHistory={moveHistory}
-                onMovePlayed={setMoveHistory}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+        <button type="button" className="prep-practice-start" onClick={handleStart}>Start game <ChevronRight size={18}/></button>
+      </PracticeDialog>}
+      {showGameModal && <PracticeDialog title={`Practice vs ${playerName}`} onClose={handleCloseGame} wide>
+        <React.Suspense fallback={<p role="status">Loading practice…</p>}><PracticeOpponent report={report} initialColor={playerColor} onClose={handleCloseGame} moveHistory={moveHistory} onMovePlayed={setMoveHistory}/></React.Suspense>
+      </PracticeDialog>}
     </>
   );
 }
 
-/** Strategic Profile + Recent Games with right column height constrained by left */
-function StrategicProfileWithRecent({
-  report,
-  isGenerating,
-  player,
-  isGuestReport = false,
-  onGuestSignUp,
-}: {
-  report: ScoutingReport;
-  isGenerating: boolean;
-  player: ScoutingReport['player'];
-  isGuestReport?: boolean;
-  onGuestSignUp?: () => void;
-}) {
-  const leftRef = React.useRef<HTMLElement | null>(null);
-  const [maxHeight, setMaxHeight] = React.useState<number | null>(null);
-
-  /** Strong openings: 20+ games, ≥50% win rate — variations they perform well in */
-  const strongOpenings = React.useMemo(() => {
-    const filter = (op: OpeningStat) => (op.totalGames ?? 0) >= 20 && (op.winRate ?? 0) >= 0.5;
-    const white = (report.whiteOpenings || []).filter(filter).map((op) => ({ ...op, side: 'white' as const }));
-    const black = (report.blackDefenses || []).filter(filter).map((op) => ({ ...op, side: 'black' as const }));
-    return [...white, ...black].sort((a, b) => (b.winRate ?? 0) - (a.winRate ?? 0));
-  }, [report.whiteOpenings, report.blackDefenses]);
-
-  /** Weak openings: 20+ games, <50% win rate — variations to improve */
-  const weakOpenings = React.useMemo(() => {
-    const filter = (op: OpeningStat) => (op.totalGames ?? 0) >= 20 && (op.winRate ?? 0) < 0.5;
-    const white = (report.whiteOpenings || []).filter(filter).map((op) => ({ ...op, side: 'white' as const }));
-    const black = (report.blackDefenses || []).filter(filter).map((op) => ({ ...op, side: 'black' as const }));
-    return [...white, ...black].sort((a, b) => (a.winRate ?? 0) - (b.winRate ?? 0));
-  }, [report.whiteOpenings, report.blackDefenses]);
-
-  React.useEffect(() => {
-    const el = leftRef.current;
-    if (!el) return;
-    let rafId: number | undefined;
-    const ro = new ResizeObserver(() => {
-      rafId = requestAnimationFrame(() => setMaxHeight(el.offsetHeight));
-    });
-    ro.observe(el);
-    setMaxHeight(el.offsetHeight);
-    return () => {
-      ro.disconnect();
-      if (rafId != null) cancelAnimationFrame(rafId);
-    };
-  }, [strongOpenings, weakOpenings, isGenerating]);
-
-  return (
-    <div className="grid lg:grid-cols-[1fr_minmax(0,380px)] gap-8 items-start" data-pdf-section>
-      <section
-        ref={leftRef}
-        className="bg-slate-900/70 backdrop-blur-sm border border-white/[0.06] rounded-2xl p-8 shadow-lg report-card"
-      >
-        <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-          <Target className="w-5 h-5 text-indigo-400" />
-          Strategic Profile Analysis
-        </h3>
-        <div className="text-slate-300 space-y-6 leading-relaxed">
-          {/* Strong openings: 20+ games, ≥50% win rate — good variations */}
-          <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl">
-            <h4 className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-widest mb-4">
-              <CheckCircle className="w-4 h-4" /> Strong openings (20+ games, ≥50% WR)
-            </h4>
-            {isGenerating && strongOpenings.length === 0 ? (
-              <SkeletonBlock lines={3} />
-            ) : strongOpenings.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {strongOpenings.map((op) => {
-                  const winRate = typeof op.winRate === 'number' && !isNaN(op.winRate) ? op.winRate : 0;
-                  const winPercent = (winRate * 100).toFixed(0);
-                  const totalGames = Math.round(op.totalGames || 0);
-                  return (
-                    <div
-                      key={`${op.name}-${op.side}`}
-                      className="bg-slate-900/80 border border-emerald-500/20 rounded-xl p-3 hover:border-emerald-500/40 transition-colors"
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <span className="font-semibold text-slate-200 text-sm truncate" title={op.name}>
-                          {op.name}
-                        </span>
-                        <span
-                          className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                            op.side === 'white'
-                              ? 'bg-slate-600/60 text-slate-200'
-                              : 'bg-slate-700/60 text-slate-300'
-                          }`}
-                        >
-                          {op.side === 'white' ? 'W' : 'B'}
-                        </span>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-emerald-500/70 transition-all"
-                            style={{ width: `${winRate * 100}%` }}
-                          />
-                        </div>
-                        <p className="text-[11px] text-emerald-400/90">
-                          {winPercent}% WR · {totalGames} games
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400">No openings with 20+ games and ≥50% win rate.</p>
-            )}
-          </div>
-
-          {/* Weak openings: 20+ games, &lt;50% win rate — variations to improve */}
-          <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl">
-            <h4 className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-widest mb-4">
-              <AlertTriangle className="w-4 h-4" /> Weak openings (20+ games, &lt;50% WR)
-            </h4>
-            {isGenerating && weakOpenings.length === 0 ? (
-              <SkeletonBlock lines={4} />
-            ) : weakOpenings.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {weakOpenings.map((op) => {
-                  const winRate = typeof op.winRate === 'number' && !isNaN(op.winRate) ? op.winRate : 0;
-                  const winPercent = (winRate * 100).toFixed(0);
-                  const totalGames = Math.round(op.totalGames || 0);
-                  return (
-                    <div
-                      key={`${op.name}-${op.side}`}
-                      className="bg-slate-900/80 border border-red-500/20 rounded-xl p-3 hover:border-red-500/40 transition-colors"
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <span className="font-semibold text-slate-200 text-sm truncate" title={op.name}>
-                          {op.name}
-                        </span>
-                        <span
-                          className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                            op.side === 'white'
-                              ? 'bg-slate-600/60 text-slate-200'
-                              : 'bg-slate-700/60 text-slate-300'
-                          }`}
-                        >
-                          {op.side === 'white' ? 'W' : 'B'}
-                        </span>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-red-500/70 transition-all"
-                            style={{ width: `${winRate * 100}%` }}
-                          />
-                        </div>
-                        <p className="text-[11px] text-red-400/90">
-                          {winPercent}% WR · {totalGames} games
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400">No openings with 20+ games and below 50% win rate.</p>
-            )}
-          </div>
-
-          {report.games && report.games.length > 0 && !isGuestReport && (
-            <PracticeBarWithModals report={report} playerName={player.name} />
-          )}
-        </div>
-      </section>
-
-      {report.games && report.games.length > 0 && (
-        <div className="relative">
-          {isGuestReport && <GuestBlurOverlay label="Recent Games" onSignUp={onGuestSignUp} />}
-          <div className={isGuestReport ? 'max-h-[300px] overflow-hidden' : ''}>
-            <RecentGamesList
-              games={report.games}
-              playerName={player.name}
-              playerUsername={[
-                (player as { actualUsername?: string }).actualUsername,
-                (player as { fideName?: string }).fideName,
-                player.platforms?.chessCom,
-                player.platforms?.lichess,
-              ].filter(Boolean) as string[]}
-              maxHeight={maxHeight}
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  );
+/** A bounded summary: the full repertoire is available in the Openings section. */
+function OpeningSnapshot({report, isGenerating = false}: {report: ScoutingReport; isGenerating?: boolean}) {
+  const openings = [...(report.whiteOpenings || []).map(op => ({...op, side:'White'})), ...(report.blackDefenses || []).map(op => ({...op, side:'Black'}))].filter(op => op.totalGames >= 20);
+  const score = (op: OpeningStat) => (op.winRate || 0) + (op.drawRate || 0) / 2;
+  const higher = openings.filter(op => score(op) >= .5).sort((a,b) => score(b)-score(a)).slice(0,3);
+  const lower = openings.filter(op => score(op) < .5).sort((a,b) => score(a)-score(b)).slice(0,3);
+  return <section className="prep-report-summary" data-pdf-section>
+    <div className="prep-summary-heading"><h3>Opening snapshot</h3><p>Three results per group · at least 20 games each</p></div>
+    <div className="prep-summary-columns">{[{title:'Higher historical scores',items:higher},{title:'Lower historical scores',items:lower}].map(group => <div key={group.title} className={group.title.startsWith('Higher') ? 'prep-score-higher' : 'prep-score-lower'}>
+      <h4>{group.title}</h4>
+      {group.items.length ? <ul>{group.items.map(op => <li key={op.name+op.side}><div><strong>{op.name}</strong><span>{op.side} · {op.totalGames} games</span></div><b>{Math.round(score(op)*100)}%<small>score</small></b></li>)}</ul> : <p className="prep-summary-empty">{isGenerating ? 'Analyzing the games. Opening results will appear here.' : 'No qualifying openings in this group.'}</p>}
+    </div>)}</div>
+    <p className="prep-summary-footnote">Score includes draws. These are historical results, not engine-confirmed weaknesses. Explore the full repertoire in Openings.</p>
+  </section>;
 }
 
 function RepertoireChartSection({
@@ -662,7 +424,7 @@ function RepertoireChartSection({
   const chartHeight = Math.max(200, chartData.length * 32 + 40);
 
   return (
-    <ReportCard>
+    <ReportCard data-pdf-section>
       <h3 className="text-lg font-bold mb-1 flex items-center gap-2 text-white">
         <Icon className="w-5 h-5 text-indigo-400" />
         {title}
@@ -689,9 +451,9 @@ function RepertoireChartSection({
                   return item?.fullName || label;
                 }}
               />
-              <Bar dataKey="wins" name="Wins" fill="#10b981" stackId="a" />
-              <Bar dataKey="draws" name="Draws" fill="#475569" stackId="a" />
-              <Bar dataKey="losses" name="Losses" fill="#ef4444" stackId="a" radius={[0, 4, 4, 0]} />
+              <Bar isAnimationActive={false} dataKey="wins" name="Wins" fill="#10b981" stackId="a" />
+              <Bar isAnimationActive={false} dataKey="draws" name="Draws" fill="#475569" stackId="a" />
+              <Bar isAnimationActive={false} dataKey="losses" name="Losses" fill="#ef4444" stackId="a" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -701,107 +463,59 @@ function RepertoireChartSection({
   );
 }
 
-interface RatingHistoryPoint {
-  date: string;
-  classicalRating?: number;
-  rapidRating?: number;
-  blitzRating?: number;
-}
-
-function ActivityReportSection({ player }: { player: ScoutingReport['player'] }) {
-  const [fideHistory, setFideHistory] = useState<Array<{
-    date: string;
-    classicalRating?: number;
-    rapidRating?: number;
-    blitzRating?: number;
-  }>>([]);
-
-  useEffect(() => {
-    if (!player.fideId?.trim()) return;
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const baseUrl = import.meta.env.VITE_PIPELINE_SERVICE_URL || '';
-        // Use public route so unsigned users (e.g. featured report viewers) can see activity graphs
-        const url = `${baseUrl}/fide-rating-history/${player.fideId}`;
-        const res = await fetch(url, { signal: controller.signal });
-        if (res.ok) {
-          const { history } = await res.json();
-          if (Array.isArray(history) && history.length > 0) {
-            setFideHistory(history);
-          }
-        }
-      } catch {
-        // ignore — use current rating as fallback
-      }
-    })();
-    return () => controller.abort();
-  }, [player.fideId]);
-
+function ActivityReportSection({ player, ratings }: { player: ScoutingReport['player']; ratings: ReturnType<typeof useRatingHistory> }) {
+  const {history: chartData, loading, error, checkedAt, source, refresh} = ratings;
   const fideRating = player.currentRating != null && player.currentRating > 0 ? player.currentRating : null;
   const uscfRating = player.uscfRating != null && player.uscfRating > 0 ? player.uscfRating : null;
-
-  const chartData: RatingHistoryPoint[] = useMemo(() => {
-    if (fideHistory.length > 0) {
-      return fideHistory.map((p) => ({
-        date: p.date,
-        classicalRating: p.classicalRating,
-        rapidRating: p.rapidRating,
-        blitzRating: p.blitzRating,
-      }));
-    }
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const point: RatingHistoryPoint = { date: `${yyyy}-${mm}` };
-    if (fideRating) point.classicalRating = fideRating;
-    return Object.keys(point).length > 1 ? [point] : [];
-  }, [fideHistory, fideRating]);
-
   const hasChartData = chartData.length > 0 && chartData.some((d) =>
     d.classicalRating != null || d.rapidRating != null || d.blitzRating != null,
   );
 
   return (
-    <section data-pdf-section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
+    <section data-pdf-section data-pdf-loading={loading ? "true" : undefined} className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-lg">
       <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">
         <Activity className="w-5 h-5 text-indigo-400" />
         Player Activity
       </h3>
-      <div className="h-64 bg-slate-950/50 rounded-xl border border-slate-800 p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <p className="text-sm text-slate-400" role="status">{loading ? 'Checking available rating history…' : error ? (chartData.length ? 'Could not refresh. Showing the last retrieved history.' : 'Rating history is temporarily unavailable. Saved ratings below may be out of date.') : chartData.length ? `Latest available period: ${chartData[chartData.length - 1].date}. Source: ${source || 'FIDE'}.${source === 'FIDE via Lichess' ? ' Backup coverage may lag FIDE.' : ''} Checked ${checkedAt ? new Date(checkedAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : 'now'}.` : 'No FIDE ID linked. Ratings below are from this report.'}</p>
+        {player.fideId && <button type="button" onClick={refresh} disabled={loading} className="px-4 py-2 border border-slate-700 rounded-lg text-sm">{loading ? 'Refreshing…' : 'Refresh activity'}</button>}
+      </div>
+      <div className="h-80 bg-slate-950/50 rounded-xl border border-slate-800 p-6">
         {hasChartData ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <Legend iconType="circle" wrapperStyle={{fontSize: 13, paddingTop: 12}} />
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} tickFormatter={(v) => v.slice(0, 7)} />
-              <YAxis stroke="#94a3b8" fontSize={10} domain={['dataMin - 50', 'dataMax + 50']} />
+              <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickFormatter={(v) => v.slice(0, 7)} />
+              <YAxis stroke="#94a3b8" fontSize={12} domain={['dataMin - 50', 'dataMax + 50']} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}
                 labelFormatter={(v) => v}
                 formatter={(value: number, name: string) => [value, name]}
               />
               {chartData.some((d) => d.classicalRating != null) && (
-                <Line type="monotone" dataKey="classicalRating" stroke="#818cf8" strokeWidth={2} dot={{ r: 2 }} name="Classical" connectNulls />
+                <Line isAnimationActive={false} type="monotone" dataKey="classicalRating" stroke="#818cf8" strokeWidth={2} dot={{ r: 2 }} name="Classical" connectNulls />
               )}
               {chartData.some((d) => d.rapidRating != null) && (
-                <Line type="monotone" dataKey="rapidRating" stroke="#f59e0b" strokeWidth={2} dot={{ r: 2 }} name="Rapid" connectNulls />
+                <Line isAnimationActive={false} type="monotone" dataKey="rapidRating" stroke="#f59e0b" strokeWidth={2} dot={{ r: 2 }} name="Rapid" connectNulls />
               )}
               {chartData.some((d) => d.blitzRating != null) && (
-                <Line type="monotone" dataKey="blitzRating" stroke="#ec4899" strokeWidth={2} dot={{ r: 2 }} name="Blitz" connectNulls />
+                <Line isAnimationActive={false} type="monotone" dataKey="blitzRating" stroke="#ec4899" strokeWidth={2} dot={{ r: 2 }} name="Blitz" connectNulls />
               )}
             </LineChart>
           </ResponsiveContainer>
         ) : (
           <div className="flex flex-col justify-center h-full">
-            <p className="text-slate-400 text-sm mb-4">No games found for analysis. Current ratings:</p>
+            <p className="text-slate-400 text-sm mb-4">Saved report ratings · not live activity</p>
             <div className="grid grid-cols-2 gap-6">
               <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">FIDE Rating</div>
+                <div className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">FIDE Rating</div>
                 <div className="text-3xl font-bold text-indigo-400">{fideRating ?? '—'}</div>
-                <div className="text-xs text-slate-400 mt-1">{player.titles?.join(', ') || 'No title'}</div>
+                <div className="text-xs text-slate-400 mt-1">{player.titles?.join(', ') || 'Title unavailable'}</div>
               </div>
               <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">USCF Rating</div>
+                <div className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">USCF Rating</div>
                 <div className="text-3xl font-bold text-emerald-400">{uscfRating ?? '—'}</div>
                 <div className="text-xs text-slate-400 mt-1">{player.country || ''}</div>
               </div>
@@ -825,18 +539,33 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
   onGuestSignUp,
 }) => {
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [section, setSection] = useState('overview');
+  const [openingSource, setOpeningSource] = useState('all');
+  const [openingSide, setOpeningSide] = useState('white');
+  React.useEffect(() => {setSection('overview');setOpeningSource('all');setOpeningSide('white');}, [report.id]);
+  React.useEffect(() => {
+    const before = () => flushSync(() => setPrinting(true));
+    const after = () => setPrinting(false);
+    window.addEventListener('beforeprint', before);window.addEventListener('afterprint', after);
+    return () => {window.removeEventListener('beforeprint', before);window.removeEventListener('afterprint', after);};
+  }, []);
+  const exporting = pdfExporting || printing;
+  const visible = (name: string) => exporting || section === name;
+  const tabs = [{id:'overview',label:'Overview'},{id:'openings',label:'Openings'},{id:'preparation',label:'Preparation'},{id:'games',label:'Games & practice'},{id:'activity',label:'Activity'},{id:'chat',label:'Ask a question'}];
   const [pdfError, setPdfError] = useState<string | null>(null);
   // Fallback: compute from games if pipeline didn't send creditsDeducted (0 when no games)
-  const creditsDeducted = creditsDeductedProp ?? (report.games?.length ? Math.ceil(report.games.length / 5) : 0);
+  const creditsDeducted = creditsDeductedProp ?? 0;
   const { player, whiteOpenings, blackDefenses } = report;
+  // Keep published history across tabs and export instead of refetching on every mount.
+  const ratings = useRatingHistory(isGenerating ? undefined : player.fideId);
 
   const hasBothSources = useMemo(() => {
-    if (!report.games || report.games.length === 0) return false;
-    const sources = new Set((report.games as { source?: string }[]).map((g) => (g.source || '').toLowerCase()));
+    const sources = new Set(report.gameSources || (report.games || []).map(g => g.source.toLowerCase()));
     const hasOnline = sources.has('lichess') || sources.has('chess.com');
     const hasOtb = sources.has('otb');
     return hasOnline && hasOtb;
-  }, [report.games]);
+  }, [report.games, report.gameSources]);
 
   const openingsBySource = useMemo(() => {
     if (!hasBothSources) return null;
@@ -849,20 +578,8 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
       (player as { actualUsername?: string }).actualUsername,
       (player as { fideName?: string }).fideName,
     ].filter(Boolean) as string[];
-    const games = report.games as { source?: string; openingName?: string; eco?: string; white: string; black: string; result: string }[];
-    const otbGames = games.filter((g) => (g.source || '').toLowerCase() === 'otb');
-    const baseWords = new Set(baseTargets.flatMap((t) => t.toLowerCase().replace(/,/g, ' ').split(/\s+/).filter((w) => w.length >= 2)));
-    const otbNames = new Set<string>();
-    for (const g of otbGames) {
-      for (const n of [g.white, g.black]) {
-        if (!n) continue;
-        const words = n.toLowerCase().replace(/,/g, ' ').split(/\s+/).filter((w) => w.length >= 2);
-        if (words.some((w) => baseWords.has(w) || [...baseWords].some((bw) => bw.includes(w) || w.includes(bw)))) {
-          otbNames.add(n.trim());
-        }
-      }
-    }
-    const targetNames = [...new Set([...baseTargets, ...otbNames])];
+    const games = report.games;
+    const targetNames = baseTargets;
     return aggregateOpeningsBySource(games, targetNames);
   }, [report.games, report.openingsBySource, hasBothSources, player]);
 
@@ -881,63 +598,35 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const showMainContent = hasReportContent || !!isGenerating;
 
   const tacticalBullets = React.useMemo(() => {
-    const bullets: { icon: string; text: string }[] = [];
-    const wOpenings = whiteOpenings || [];
-    const bOpenings = blackDefenses || [];
-    const allOpenings = [...wOpenings, ...bOpenings];
-
-    // 1) Find their actual weakest opening (lowest WR with meaningful sample)
-    const weakCandidates = allOpenings
-      .filter((o) => (o.totalGames || 0) >= 10 && (o.winRate ?? 1) < 0.5);
-    const weakest = weakCandidates.sort((a, b) => (a.winRate ?? 1) - (b.winRate ?? 1))[0];
-    if (weakest) {
-      const wr = ((weakest.winRate ?? 0) * 100).toFixed(0);
-      const side = wOpenings.includes(weakest) ? 'as White' : 'as Black';
-      bullets.push({ icon: '🎯', text: `Weakest in the ${weakest.name} ${side} — only ${wr}% win rate across ${weakest.totalGames} games` });
-    }
-
-    // 2) Time management — pick the most specific insight
-    const tm = report.timeManagement;
-    if (tm) {
-      const totalDecisive = tm.lostOnTime + tm.wonOnTime;
-      if (totalDecisive > 10) {
-        const flagLossRate = totalDecisive > 0 ? tm.lostOnTime / totalDecisive : 0;
-        if (flagLossRate > 0.6) {
-          bullets.push({ icon: '⏱', text: `Loses ${(flagLossRate * 100).toFixed(0)}% of flag games — struggles with time management under pressure` });
-        } else if (flagLossRate < 0.35 && tm.wonOnTime > 10) {
-          bullets.push({ icon: '⏱', text: `Strong clock player — wins ${tm.wonOnTime} games on time vs only ${tm.lostOnTime} losses, likely plays well in time scrambles` });
-        } else if (tm.lostOnTime > 15) {
-          const lossPct = ((tm.lostOnTimeShareOfLosses ?? 0) * 100).toFixed(0);
-          bullets.push({ icon: '⏱', text: `${lossPct}% of decisive losses are on time (${tm.lostOnTime} games) — time trouble is a recurring pattern` });
-        } else if (tm.wonOnTime > 5) {
-          const bestSpeed = tm.bySpeed?.sort((a, b) => b.wonOnTime - a.wonOnTime)[0];
-          if (bestSpeed && bestSpeed.wonOnTime > 3) {
-            bullets.push({ icon: '⏱', text: `Wins ${bestSpeed.wonOnTime} games on time in ${bestSpeed.speed} — effective at converting time advantages in faster controls` });
-          }
-        }
-      }
-    }
-
+    const frequent = [...(whiteOpenings || []), ...(blackDefenses || [])].sort((a,b) => b.totalGames-a.totalGames)[0];
+    const bullets: {icon:typeof Target;text:string}[] = [];
+    if (frequent) bullets.push({icon:Target,text:`Most played: ${frequent.name} · ${frequent.totalGames} games.`});
+    if (report.timeManagement) bullets.push({icon:Clock,text:`${report.timeManagement.lostOnTime} of ${report.timeManagement.onlineGames.toLocaleString()} online games ended in a loss on time.`});
     return bullets;
-  }, [whiteOpenings, blackDefenses, report.timeManagement]);
+  }, [whiteOpenings,blackDefenses,report.timeManagement]);
 
   return (
-    <div id="report-pdf-root" className={`relative space-y-8 pb-12 print:space-y-6 min-w-0 w-full max-w-full ${isGenerating ? 'pointer-events-none' : ''}`}>
+    <div id="report-pdf-root" aria-busy={!!isGenerating} className={`relative space-y-8 pb-12 print:space-y-6 min-w-0 w-full max-w-full ${isGenerating ? 'pointer-events-none' : ''}`}>
+      {isGenerating && <GenerationOverlay status={generatingStatus || 'Generating report…'}/>}
+
+      {player.identityNote && <p data-pdf-section className="text-xs text-slate-400 mb-4">{player.identityNote}</p>}
+      {!!player.discoverySources?.length && <details data-pdf-section className="mb-4 text-xs text-slate-400"><summary className="cursor-pointer">Discovery sources — review the evidence</summary><ul className="mt-2 space-y-2">{player.discoverySources.filter(url => url.startsWith("https://")).map(url => <li key={url}><a href={url} target="_blank" rel="noopener noreferrer" className="underline break-all">{url}</a></li>)}</ul></details>}
       {/* Dossier Header */}
-      <div data-pdf-section className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-3xl overflow-hidden shadow-2xl">
+      <MotionSurface data-pdf-section className="prep-player-header bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden">
         <div className="h-auto min-h-[11rem] bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-950 dark:from-indigo-900/40 dark:via-slate-900 dark:to-slate-950 from-indigo-50 via-white to-gray-50 relative p-10 flex flex-col justify-end">
           {/* PDF export — top-right */}
           {!isGenerating && (report.games?.length ?? 0) > 0 && (
-              <div className="absolute top-4 right-4 print:hidden">
+              <div className="prep-profile-actions print:hidden">
                 <button
                   type="button"
                   disabled={pdfExporting}
                   onClick={async () => {
                     const el = document.getElementById('report-pdf-root');
                     if (!el) return;
-                    setPdfExporting(true);
+                    flushSync(() => setPdfExporting(true));
                     setPdfError(null);
                     try {
+                      const { exportReportAsPdf } = await import('../lib/pdfExport');
                       await exportReportAsPdf(el, player.name);
                     } catch (err) {
                       console.error('PDF export failed:', err);
@@ -967,9 +656,9 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
           <div>
             <div className="min-w-0">
-              <div className="flex items-center gap-3 text-indigo-400 dark:text-indigo-400 text-indigo-600 font-bold text-xs uppercase tracking-[0.2em] mb-2">
+              <div className="prep-profile-label flex items-center gap-3 text-indigo-400 dark:text-indigo-400 text-indigo-600 font-bold text-xs uppercase tracking-[0.2em] mb-2">
                 <Shield className="w-4 h-4" />
-                Verified Tournament Profile
+                Player profile · review linked accounts
               </div>
               <h2 className="text-5xl font-serif font-bold tracking-tight text-white dark:text-white text-gray-900 mb-2">{player.name}</h2>
               <div className="flex flex-wrap items-center gap-4 text-slate-400 dark:text-slate-400 text-gray-600 font-medium">
@@ -979,9 +668,9 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
                   </span>
                 ) : null}
                 {player.country ? <span>{player.country}</span> : null}
-                <div className="flex gap-4">
-                  <span className="text-indigo-400 dark:text-indigo-400 text-indigo-600 font-bold">FIDE: {player.currentRating != null && player.currentRating > 0 ? player.currentRating : 'Not found'}</span>
-                  <span className="text-emerald-400 dark:text-emerald-400 text-emerald-600 font-bold">USCF: {player.uscfRating != null && player.uscfRating > 0 ? player.uscfRating : 'Not found'}</span>
+                <div className="contents">
+                  <span className="text-indigo-400 dark:text-indigo-400 text-indigo-600 font-bold">FIDE: {player.currentRating != null && player.currentRating > 0 ? player.currentRating : isGenerating ? 'Searching…' : 'Not found'}</span>
+                  <span className="text-emerald-400 dark:text-emerald-400 text-emerald-600 font-bold">USCF: {player.uscfRating != null && player.uscfRating > 0 ? player.uscfRating : isGenerating ? 'Searching…' : 'Not found'}</span>
                 </div>
               </div>
             </div>
@@ -1003,7 +692,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
         )}
         <div className="py-8 px-10 grid grid-cols-2 md:grid-cols-4 gap-8 bg-slate-950/30 dark:bg-slate-950/30 bg-gray-50 border-t border-slate-800 dark:border-slate-800 border-gray-200">
           <div className="space-y-1">
-            <div className="text-[10px] text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold">Chess.com</div>
+            <div className="text-xs text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold">Chess.com</div>
             <div className="text-sm font-semibold text-emerald-400 dark:text-emerald-400 text-emerald-600">
               {player.platforms.chessCom ? (
                 <a
@@ -1019,7 +708,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
             </div>
           </div>
           <div className="space-y-1">
-            <div className="text-[10px] text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold">Lichess</div>
+            <div className="text-xs text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold">Lichess</div>
             <div className="text-sm font-semibold text-indigo-400 dark:text-indigo-400 text-indigo-600">
               {player.platforms.lichess ? (
                 <a
@@ -1035,7 +724,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
             </div>
           </div>
           <div className="space-y-1">
-            <div className="text-[10px] text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold">Game Sources</div>
+            <div className="text-xs text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold">Game Sources</div>
             <div className="text-sm text-slate-300 dark:text-slate-300 text-gray-700">
               {report.games && report.games.length > 0 ? (() => {
                 const bySource = (report.games as { source?: string }[]).reduce((acc, g) => {
@@ -1049,159 +738,66 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
                   bySource.otb && `${bySource.otb} OTB`,
                 ].filter(Boolean);
                 return parts.length ? parts.join(', ') : `${report.games.length} games`;
-              })() : '—'}
+              })() : report.gameSources?.map(source => source === 'otb' ? 'OTB' : source === 'chess.com' ? 'Chess.com' : source === 'lichess' ? 'Lichess' : source).join(', ') || '—'}
             </div>
           </div>
           <div className="space-y-1">
-            <div className="text-[10px] text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold">Total Games</div>
+            <div className="text-xs text-slate-400 dark:text-slate-400 text-gray-500 uppercase tracking-widest font-bold">Total Games</div>
             <div className="text-sm font-semibold text-indigo-400 dark:text-indigo-400 text-indigo-600">
-              {report.games?.length ?? (((whiteOpenings || []).reduce((s, o) => s + (o.totalGames || 0), 0) + (blackDefenses || []).reduce((s, o) => s + (o.totalGames || 0), 0)) || 0)}
+              {report.gameCount ?? report.games?.length ?? (((whiteOpenings || []).reduce((s, o) => s + (o.totalGames || 0), 0) + (blackDefenses || []).reduce((s, o) => s + (o.totalGames || 0), 0)) || 0)}
             </div>
           </div>
         </div>
+      </MotionSurface>
+
+      {!isGenerating && report.requestedGameCount && (report.games?.length || 0) < report.requestedGameCount ? <p className="prep-coverage-note">Retrieved {(report.games?.length || 0).toLocaleString()} of {report.requestedGameCount.toLocaleString()} requested games. Some selected sources had fewer usable games or could not be reached.</p> : null}
+
+      {pdfError && <p role="alert" className="text-rose-300 print:hidden">{pdfError}</p>}
+      <div className="prep-report-tabs print:hidden" role="tablist" aria-label="Report sections">{tabs.map((tab,index) => <button key={tab.id} id={`report-tab-${tab.id}`} role="tab" disabled={!!isGenerating} aria-selected={section===tab.id} aria-controls={`report-panel-${tab.id}`} tabIndex={section===tab.id?0:-1} onClick={()=>setSection(tab.id)} onKeyDown={event=>{
+        const target = event.key==='ArrowRight' ? (index+1)%tabs.length : event.key==='ArrowLeft' ? (index+tabs.length-1)%tabs.length : event.key==='Home' ? 0 : event.key==='End' ? tabs.length-1 : -1;
+        if(target>=0){event.preventDefault();setSection(tabs[target].id);document.getElementById(`report-tab-${tabs[target].id}`)?.focus();}
+      }}>{tab.label}</button>)}</div>
+
+      {visible('overview') && <div id="report-panel-overview" role="tabpanel" aria-labelledby="report-tab-overview" className="prep-report-panel">
+        {tacticalBullets.length > 0 && !isGenerating && <section className="prep-report-takeaways" data-pdf-section><h3>At a glance</h3><ul>{tacticalBullets.map((bullet,index)=><li key={index}><bullet.icon size={20} aria-hidden="true"/><p>{bullet.text}</p></li>)}</ul></section>}
+        {showMainContent && <OpeningSnapshot report={report} isGenerating={!!isGenerating}/>}
+        {!showMainContent && <p className="prep-report-empty">No games available yet. View published ratings in Activity.</p>}
+      </div>}
+
+      {visible('openings') && <div id="report-panel-openings" role="tabpanel" aria-labelledby="report-tab-openings" className="prep-report-panel relative">
+        {isGuestReport ? <GuestAccessCard label="Repertoire Analysis" onSignUp={onGuestSignUp}/> : <>
+        <div className="prep-report-filters print:hidden"><label>Source<select aria-label="Source" value={openingSource} onChange={event=>setOpeningSource(event.target.value)}><option value="all">All available games</option>{openingsBySource && <><option value="online">Online</option><option value="otb">Over the board</option></>}</select></label><label>Opponent plays<select aria-label="Opponent plays" value={openingSide} onChange={event=>setOpeningSide(event.target.value)}><option value="white">White</option><option value="black">Black</option></select></label></div>
+        {(exporting ? ['white','black'] : [openingSide]).map(side => {
+          const selectedSource = openingSource==='online' ? openingsBySource?.online : openingSource==='otb' ? openingsBySource?.otb : null;
+          const openings = exporting ? (side==='white' ? whiteOpenings : blackDefenses) || [] : selectedSource ? (side==='white' ? selectedSource.white : selectedSource.black) : (side==='white' ? whiteOpenings : blackDefenses) || [];
+          return <RepertoireChartSection key={side} title={`${side==='white'?'White':'Black'} repertoire`} icon={TrendingUp} openings={openings} gamesLabel={`${openings.reduce((sum,op)=>sum+(op.totalGames||0),0).toLocaleString()} games · ${exporting || openingSource==='all' ? 'all sources' : openingSource==='online' ? 'online' : 'over the board'}`} isSkeleton={!!isGenerating && !openings.length}/>;
+        })}
+        </>}
+      </div>}
+
+      <div id="report-panel-preparation" role="tabpanel" aria-labelledby="report-tab-preparation" hidden={!visible('preparation')} className="prep-report-panel">
+        {isGuestReport ? <GuestAccessCard label="Preparation plan & round sheet" onSignUp={onGuestSignUp}/> : report.games?.length ?
+          <PreparationPlan key={report.id} report={report}/> :
+          <p className="prep-report-empty">{report.gameCount ? 'Load games above to build your preparation plan and download a round sheet.' : 'No games are available for a preparation plan. Try a linked Chess.com or Lichess account.'}</p>}
       </div>
 
-      {/* Tactical Summary — quick-glance bullets */}
-      {tacticalBullets.length > 0 && !isGenerating && (
-        <ReportCard className="!p-6" data-pdf-section>
-          <div className="flex items-center gap-2 mb-4">
-            <Target className="w-5 h-5 text-amber-400" />
-            <h3 className="text-lg font-bold text-white">Tactical Summary</h3>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {tacticalBullets.map((b, i) => (
-              <div key={i} className="flex items-start gap-3 bg-slate-950/40 border border-slate-800/60 rounded-xl p-4">
-                <span className="text-lg shrink-0 mt-0.5">{b.icon}</span>
-                <p className="text-sm text-slate-300 leading-relaxed">{b.text}</p>
-              </div>
-            ))}
-          </div>
-        </ReportCard>
-      )}
+      {visible('games') && <div id="report-panel-games" role="tabpanel" aria-labelledby="report-tab-games" className="prep-report-panel relative">
+        {isGuestReport ? <GuestAccessCard label="Games & practice" onSignUp={onGuestSignUp}/> : report.games?.length ? <>
+          <PracticeBarWithModals report={report} playerName={player.name}/>
+          <RecentGamesList games={report.games} playerName={player.name} playerUsername={[(player as {actualUsername?:string}).actualUsername,(player as {fideName?:string}).fideName,player.platforms?.chessCom,player.platforms?.lichess].filter(Boolean) as string[]} maxHeight={440}/>
+          <details className="prep-explorer-disclosure"><summary>Explore the repertoire on a board</summary><React.Suspense fallback={<p role="status">Loading repertoire explorer…</p>}><AnalysisBoard games={report.games} playerName={player.name} playerUsername={[player.platforms?.chessCom,player.platforms?.lichess].filter(Boolean) as string[]} mode="repertoire"/></React.Suspense></details>
+        </> : <p className="prep-report-empty">{report.gameCount ? 'Games haven’t been loaded. Use “Load games” above to review and practice this report.' : 'No games are available for this report. Try a new search with a linked Chess.com or Lichess account.'}</p>}
+      </div>}
 
-      <div className="space-y-8 min-w-0">
-        {/* Main content: hide when no games and we're showing activity report only */}
-        {showMainContent && (
-        <>
-        {/* Strategic Profile (left) | Recent Games (right, height constrained by left) */}
-        <StrategicProfileWithRecent
-          report={report}
-          isGenerating={!!isGenerating}
-          player={player}
-          isGuestReport={isGuestReport}
-          onGuestSignUp={onGuestSignUp}
-        />
+      {visible('activity') && <div id="report-panel-activity" role="tabpanel" aria-labelledby="report-tab-activity" className="prep-report-panel">
+        {showActivityReport && <ActivityReportSection player={player} ratings={ratings}/>}
+        {report.timeManagement && report.timeManagement.onlineGames > 0 && <details className="prep-explorer-disclosure" open={exporting || undefined}><summary>Clock pressure & time controls</summary><TimeManagementSection tm={report.timeManagement}/></details>}
+        {!showActivityReport && !report.timeManagement?.onlineGames && <p className="prep-report-empty">No rating history or clock data is available for this report.</p>}
+      </div>}
 
-        {/* Repertoire Graphs - 4 when online+OTB, else 2 */}
-        <div className="relative" data-pdf-section>
-          {isGuestReport && <GuestBlurOverlay label="Repertoire Analysis" onSignUp={onGuestSignUp} />}
-          <div className={isGuestReport ? 'max-h-[400px] overflow-hidden' : ''}>
-        {hasBothSources && openingsBySource ? (
-          <div className="space-y-8">
-            <h3 className="text-xl font-bold text-white">Online (Chess.com, Lichess)</h3>
-            <div className="grid md:grid-cols-2 gap-8 items-start">
-              <RepertoireChartSection
-                title="White Repertoire (Online)"
-                icon={TrendingUp}
-                openings={openingsBySource.online.white}
-                gamesLabel={`${openingsBySource.online.white.reduce((s, o) => s + (o.totalGames || 0), 0).toLocaleString()} games as White`}
-              />
-              <RepertoireChartSection
-                title="Black Repertoire (Online)"
-                icon={Clock}
-                openings={openingsBySource.online.black}
-                gamesLabel={`${openingsBySource.online.black.reduce((s, o) => s + (o.totalGames || 0), 0).toLocaleString()} games as Black`}
-              />
-            </div>
-            <h3 className="text-xl font-bold text-white">OTB (Over-the-board)</h3>
-            <div className="grid md:grid-cols-2 gap-8 items-start">
-              <RepertoireChartSection
-                title="White Repertoire (OTB)"
-                icon={TrendingUp}
-                openings={openingsBySource.otb.white}
-                gamesLabel={`${openingsBySource.otb.white.reduce((s, o) => s + (o.totalGames || 0), 0).toLocaleString()} games as White`}
-              />
-              <RepertoireChartSection
-                title="Black Repertoire (OTB)"
-                icon={Clock}
-                openings={openingsBySource.otb.black}
-                gamesLabel={`${openingsBySource.otb.black.reduce((s, o) => s + (o.totalGames || 0), 0).toLocaleString()} games as Black`}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="grid md:grid-cols-2 gap-8 items-start">
-            <RepertoireChartSection
-              title="White Repertoire (Primary Openings)"
-              icon={TrendingUp}
-              openings={whiteOpenings || []}
-              gamesLabel={`${(whiteOpenings || []).reduce((sum, op) => sum + (op.totalGames || 0), 0).toLocaleString()} games as White`}
-              isSkeleton={!!isGenerating && (whiteOpenings?.length ?? 0) === 0}
-            />
-            <RepertoireChartSection
-              title="Black Repertoire (Defensive Systems)"
-              icon={Clock}
-              openings={blackDefenses || []}
-              gamesLabel={`${(blackDefenses || []).reduce((sum, op) => sum + (op.totalGames || 0), 0).toLocaleString()} games as Black`}
-              isSkeleton={!!isGenerating && (blackDefenses?.length ?? 0) === 0}
-            />
-          </div>
-        )}
-          </div>
-        </div>
+      {visible('chat') && <section id="report-panel-chat" role="tabpanel" aria-labelledby="report-tab-chat" className="prep-report-panel"><div id="chat-section"><RepertoireChat report={report} requiresSignIn={requiresSignInForChat}/></div></section>}
 
-        {report.timeManagement && report.timeManagement.onlineGames > 0 && (
-          <TimeManagementSection tm={report.timeManagement} />
-        )}
 
-        </>
-        )}
-
-      {/* Chat Section - Above Activity Report */}
-      <section className="mt-8" id="chat-section" style={{ scrollMarginTop: '0px' }}>
-        <RepertoireChat report={report} requiresSignIn={requiresSignInForChat} />
-      </section>
-
-      {/* Progress chart: below chat, above Game Analysis Board */}
-      {showActivityReport && (
-        <ActivityReportSection player={player} />
-      )}
-
-      {/* Repertoire Analysis Board */}
-      {report.games && report.games.length > 0 && (
-        <section className="mt-8 relative" data-pdf-section>
-          {isGuestReport && <GuestBlurOverlay label="Repertoire Analysis" onSignUp={onGuestSignUp} />}
-          <div className={isGuestReport ? 'pointer-events-none' : ''}>
-            <AnalysisBoard 
-              games={report.games} 
-              playerName={player.name}
-              playerUsername={[
-                (player as { actualUsername?: string }).actualUsername,
-                player.platforms?.chessCom,
-                player.platforms?.lichess,
-              ].filter(Boolean) as string[]}
-              mode="repertoire"
-            />
-          </div>
-        </section>
-      )}
-
-      {/* Generating status - centered overlay with backdrop */}
-      {isGenerating && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/12 backdrop-blur-[2px]"
-          aria-live="polite"
-          aria-busy="true"
-        >
-          <div className="flex items-start sm:items-center gap-3 px-6 py-3 max-w-[min(92vw,36rem)] bg-slate-800/30 border border-indigo-500/20 rounded-2xl shadow-2xl shadow-indigo-500/5 min-w-0">
-            <div className="w-5 h-5 shrink-0 mt-0.5 sm:mt-0 border-2 border-indigo-400/50 border-t-indigo-400 rounded-full animate-spin" />
-            <span className="text-base font-semibold text-slate-100 break-words [overflow-wrap:anywhere] min-w-0 leading-snug">
-              {generatingStatus || 'Generating report...'}
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
     </div>
   );
 };

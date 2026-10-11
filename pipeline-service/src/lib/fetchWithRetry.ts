@@ -1,3 +1,6 @@
+import { AsyncCache } from './cache.js';
+const responseCache = new AsyncCache<{body:string;status:number;headers:[string,string][]}>(24*1024*1024,300000);
+import { workContext, workSignal } from './workContext.js';
 import { logger } from './logger.js';
 
 export interface FetchWithRetryOptions {
@@ -12,17 +15,18 @@ export interface FetchWithRetryOptions {
 /**
  * Shared fetch with retry: 2 retries, exponential backoff, 429/5xx handling, timeout.
  */
-export async function fetchWithRetry(
+async function fetchUncached(
   url: string,
   options: FetchWithRetryOptions = {},
 ): Promise<Response> {
   const { retries = 2, delayMs = 1000, timeoutMs = 15000, headers = {} } = options;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
+    workContext.getStore()?.throwIfAborted();
     try {
       const res = await fetch(url, {
         headers,
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: workSignal(timeoutMs),
         ...(options.method && { method: options.method }),
         ...(options.body !== undefined && { body: options.body }),
       });
@@ -44,6 +48,7 @@ export async function fetchWithRetry(
 
       return res;
     } catch (err) {
+      workContext.getStore()?.throwIfAborted();
       if (attempt === retries) throw err;
       logger.warn({ url, attempt, err }, 'Fetch failed, retrying');
       await sleep(delayMs * (attempt + 1));
@@ -55,4 +60,15 @@ export async function fetchWithRetry(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function fetchWithRetry(url: string, options: FetchWithRetryOptions = {}): Promise<Response> {
+  // Cache only public successful archive responses. Identity and authorization never share this cache.
+  if (process.env.NODE_ENV === 'test' || options.method || !/^https:\/\/api\.chess\.com\/pub\/player\/[^/]+\/games\//.test(url)) return fetchUncached(url,options);
+  const value=await responseCache.get(url,async()=>{
+    const response=await fetchUncached(url,options);
+    if(!response.ok)throw new Error(`Game archive unavailable (${response.status})`);
+    return {body:await response.text(),status:response.status,headers:[...response.headers.entries()]};
+  });
+  return new Response(value.body,{status:value.status,headers:value.headers});
 }

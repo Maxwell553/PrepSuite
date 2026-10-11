@@ -6,6 +6,9 @@ vi.mock('../../src/pipeline/identity.js', () => ({
   resolveIdentity: vi.fn(),
 }));
 
+vi.mock('../../src/pipeline/otbGames.js',()=>({fetchOtbGames:vi.fn().mockResolvedValue([])}));
+vi.mock('../../src/pipeline/pgnValidator.js',()=>({validateAndRefetchPgn:vi.fn().mockImplementation(async(games)=>({valid:games,invalidCount:0,refetchedCount:0}))}));
+
 vi.mock('../../src/pipeline/gameFetcher.js', () => ({
   fetchGames: vi.fn(),
 }));
@@ -22,6 +25,7 @@ vi.mock('../../src/pipeline/openingClassifier.js', () => ({
 
 vi.mock('../../src/pipeline/statsAggregator.js', () => ({
   generateStats: vi.fn().mockReturnValue([]),
+  normalizeTargetGames: (games: unknown[]) => games,
 }));
 
 vi.mock('../../src/pipeline/moveSequenceExtractor.js', () => ({
@@ -173,7 +177,7 @@ describe('POST /api/analyze', () => {
     expect(text).toContain('Test Player');
   });
 
-  it('includes parsing and engine phases in SSE stream', async () => {
+  it('includes parsing and report phases without advertising unperformed engine work in SSE stream', async () => {
     mockedResolve.mockResolvedValue({
       verifiedName: 'Test Player',
       fideId: '',
@@ -208,10 +212,18 @@ describe('POST /api/analyze', () => {
     expect(text).toContain('"phase":"identity"');
     expect(text).toContain('"phase":"games"');
     expect(text).toContain('"phase":"parsing"');
-    expect(text).toContain('"phase":"engine"');
+    expect(text).not.toContain('"phase":"engine"');
     expect(text).toContain('"phase":"report"');
     // Complete event should have report field
     expect(text).toContain('event: complete');
     expect(text).toContain('"report"');
   });
+});
+
+it('keeps fallback OTB games when the requested OTB limit was zero',async()=>{
+ const {fetchOtbGames}=await import('../../src/pipeline/otbGames.js');
+ mockedResolve.mockResolvedValue({verifiedName:'Test Player',fideId:'123',uscfId:'',fideProfile:null,uscfProfile:null,chessComUsername:'',lichessUsername:'',confidence:0});
+ vi.mocked(fetchOtbGames).mockResolvedValue([{id:'otb-1',source:'otb',white:'Test Player',black:'Other',result:'1-0',eco:'B20',pgn:'1. e4 c5',playedAt:'2026-01-01',timeControl:'unknown'}]);
+ const res=await createApp().request('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Test Player',gameLimit:10,onlineLimit:10,otbLimit:0})});
+ const text=await res.text();expect(fetchOtbGames).toHaveBeenCalledWith('123',10);expect(text).toContain('"id":"otb-1"');
 });

@@ -1,3 +1,5 @@
+import { workSignal } from '../lib/workContext.js';
+import { models, modelChain } from '../lib/models.js';
 /**
  * Gemini API caller for structured JSON report generation.
  * Uses Vertex AI with JSON schema mode, retries, and JSON repair.
@@ -10,16 +12,11 @@ import { parseLLMJson } from '../lib/jsonRepair.js';
 import type { ScoutingReport } from '../lib/types.js';
 import type { BuildReportPromptOpts } from './promptBuilder.js';
 
-/** Analysis model chain: Pro → Flash-Lite → 2.5 Pro → 2.5 Flash */
-const GEMINI_ANALYSIS_MODELS = [
-  'gemini-3.1-pro-preview',
-  'gemini-3.1-flash-lite-preview',
-  'gemini-2.5-pro',
-  'gemini-2.5-flash',
-] as const;
+/** Analysis model chain: configured primary → fallback */
+const GEMINI_ANALYSIS_MODELS = modelChain(models.analysis);
 // 4 min timeout: Vertex AI can be slow in production (cold starts, large prompts).
 // Cloud Run request timeout is 300s; keep under that.
-const GEMINI_TIMEOUT_MS = 240_000;
+const GEMINI_TIMEOUT_MS = 45_000;
 const MAX_RETRIES = 2;
 
 /** Errors that indicate the model may not be available (try fallback) */
@@ -33,7 +30,7 @@ function shouldFallbackTo25(status: number, errorText: string): boolean {
 
 /**
  * Call Vertex AI Gemini with JSON schema mode to generate a scouting report.
- * Model chain: 3.1-pro → flash-lite → 2.5-pro → 2.5-flash.
+ * Model chain: 3.8-flash → 3.1-configured primary → fallback.
  */
 export async function generateReport(
   prompt: string,
@@ -111,7 +108,7 @@ async function generatePartialWithModel(
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       maxOutputTokens: 8192,
-      temperature: 0.7,
+      temperature: 0.2,
       responseMimeType: 'application/json',
       responseSchema: schema,
     },
@@ -125,7 +122,7 @@ async function generatePartialWithModel(
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(requestBody),
-    signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+    signal: workSignal(GEMINI_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -134,6 +131,7 @@ async function generatePartialWithModel(
   }
 
   const data = await res.json();
+      logger.info({ model, usage: data.usageMetadata }, '[Model] Report usage');
   const candidate = data.candidates?.[0];
   if (!candidate) throw new Error('Gemini returned no candidates');
 
@@ -163,8 +161,8 @@ async function generateReportWithModel(
   const requestBody = {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
-      maxOutputTokens: 65536,
-      temperature: 0.7,
+      maxOutputTokens: 4096,
+      temperature: 0.2,
       responseMimeType: 'application/json',
       responseSchema: schema,
     },
@@ -189,7 +187,7 @@ async function generateReportWithModel(
           'Authorization': `Bearer ${accessToken}`,
         },
         body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+        signal: workSignal(GEMINI_TIMEOUT_MS),
       });
     } catch (err: unknown) {
       const errObj = err as { name?: string; message?: string };
@@ -238,6 +236,7 @@ async function generateReportWithModel(
     }
 
     const data = await res.json();
+      logger.info({ model, usage: data.usageMetadata }, '[Model] Report usage');
     const candidate = data.candidates?.[0];
 
     if (!candidate) {

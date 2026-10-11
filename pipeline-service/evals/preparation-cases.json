@@ -1,0 +1,6 @@
+[
+ {"id":"draws-are-half","facts":{"wins":2,"draws":6,"losses":2,"playerRating":2000,"opponentRating":2000},"expected":{"score":0.5,"evidence":"insufficient"}},
+ {"id":"sparse-zero-win","facts":{"wins":0,"draws":1,"losses":1,"playerRating":1800,"opponentRating":2200},"expected":{"score":0.25,"evidence":"insufficient"}},
+ {"id":"draw-heavy","facts":{"wins":10,"draws":70,"losses":20,"playerRating":2400,"opponentRating":2450},"expected":{"score":0.45,"evidence":"historical"}},
+ {"id":"no-games","facts":{"wins":0,"draws":0,"losses":0},"expected":{"score":null,"evidence":"insufficient"}}
+]

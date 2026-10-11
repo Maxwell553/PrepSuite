@@ -1,3 +1,5 @@
+import Brand from './Brand';
+import MotionSurface from './MotionSurface';
 import React from 'react';
 import { ArrowLeft, FileText } from 'lucide-react';
 
@@ -7,9 +9,9 @@ interface TermsOfServiceProps {
 
 const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
   return (
-    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-slate-950 dark:bg-slate-950 bg-white text-slate-100 dark:text-slate-100 text-gray-900">
+    <div className="prep-document flex h-dvh max-h-dvh flex-col overflow-hidden bg-slate-950 dark:bg-slate-950 bg-white text-slate-100 dark:text-slate-100 text-gray-900">
       <header className="shrink-0 z-10 bg-slate-950 dark:bg-slate-950 bg-white border-b border-slate-800 dark:border-slate-800 border-gray-200 p-4">
-        <div className="max-w-4xl mx-auto flex items-center gap-4">
+        <MotionSurface className="max-w-4xl mx-auto flex items-center gap-4">
           <button
             onClick={onBack}
             className="flex items-center gap-2 text-slate-300 dark:text-slate-300 text-gray-600 hover:text-white dark:hover:text-white hover:text-gray-900 transition-colors"
@@ -21,12 +23,13 @@ const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
             <FileText className="w-5 h-5 text-indigo-500 dark:text-indigo-500 text-indigo-600" />
             <p className="text-xl font-semibold text-white dark:text-white text-gray-900">Terms of Service</p>
           </div>
-        </div>
+        </MotionSurface>
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-      <div className="max-w-4xl mx-auto py-8 px-6">
+      <MotionSurface className="max-w-4xl mx-auto py-8 px-6">
         <div className="prose prose-invert dark:prose-invert max-w-none">
+          <div className="prep-document-brand-row"><div className="prep-document-brand"><Brand/></div></div>
           {/* Title */}
           <h1 className="text-3xl font-bold mb-2 text-white dark:text-white text-gray-900">TERMS OF SERVICE</h1>
           <p className="text-slate-300 dark:text-slate-300 text-gray-600 mb-8">Last updated January 18, 2026</p>
@@ -230,7 +233,7 @@ const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
             </p>
           </div>
         </div>
-      </div>
+      </MotionSurface>
       </main>
     </div>
   );

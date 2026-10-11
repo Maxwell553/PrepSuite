@@ -286,32 +286,20 @@ export const playerRepository = {
      * Fetches the complete report history for a specific user.
      * Reports include folderId and folderName when saved to a folder.
      */
-    async getUserHistory(userId: string) {
-        console.log(`[Repository] Fetching history for user ${userId}`);
-        const { data, error } = await supabase
-            .from('scouting_reports')
-            .select(`
-                *,
-                players (*),
-                report_folders (id, name)
-            `)
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
-
-        if (error) {
-            console.error('[Repository] Error fetching user history:', error);
-            return [];
-        }
-
-        console.log(`[Repository] Successfully fetched ${data?.length || 0} history records`);
-        return data.map(row => {
-            const folder = row.report_folders as { id: string; name: string } | null;
-            return {
-                ...(row.report_data as ScoutingReport),
-                id: row.id, // Use the DB row ID
-                folderId: row.folder_id ?? undefined,
-                folderName: folder?.name ?? undefined,
-            };
-        });
+    async getReport(id: string): Promise<ScoutingReport> {
+        const {data,error}=await supabase.from('scouting_reports').select('id, report_data, folder_id, report_folders(id,name)').eq('id',id).single();
+        if(error)throw error;
+        return {...data.report_data,id:data.id,folderId:data.folder_id} as ScoutingReport;
+    },
+    async getUserHistory(userId: string, page = 0) {
+        const { data, error } = await supabase.from('scouting_reports')
+            .select('id, created_at, folder_id, player:report_data->player, last_updated:report_data->lastUpdated, report_folders(id,name)')
+            .eq('user_id',userId).order('created_at',{ascending:false}).range(page*30,page*30+29);
+        if(error)throw error;
+        return (data||[]).map(row => ({
+            id:row.id,player:row.player,lastUpdated:row.last_updated || row.created_at,
+            folderId:row.folder_id,folderName:(row.report_folders as unknown as {name?:string})?.name,
+            whiteOpenings:[],blackDefenses:[],strengths:[],weaknesses:[],mostPlayedLines:{white:[],black:[]},
+        } as unknown as ScoutingReport));
     }
 };

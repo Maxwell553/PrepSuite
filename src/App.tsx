@@ -1,3 +1,7 @@
+import { updatePageMetadata } from './lib/publicPages';
+import GenerationOverlay from './components/GenerationOverlay';
+import MotionSurface from './components/MotionSurface';
+import type { ReportUpdate } from './lib/reportUtils';
 import React, { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react';
 import { Search, History, Shield, Database, LayoutDashboard, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, User, Loader2, Trash2, Square, CheckSquare, FolderOpen } from 'lucide-react';
 const SearchScreen = lazy(() => import('./components/SearchScreen'));
@@ -6,6 +10,7 @@ const Sidebar = lazy(() => import('./components/Sidebar'));
 import OfflineBanner from './components/OfflineBanner';
 import { ScoutingReport } from './types';
 import LandingPage from './components/LandingPage';
+import './components/workspace.css';
 import { supabase, authActions } from './lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { playerRepository } from './services/playerRepository';
@@ -22,6 +27,7 @@ import { setSentryUser, clearSentryUser } from './lib/sentry';
 import { trackSignUpConversion, trackSignUpConversionIfNewUser } from './lib/googleAds';
 import { mergeReport, createEmptyReport } from './lib/reportUtils';
 import { useCredits } from './hooks/useCredits';
+import JobRecovery from './components/JobRecovery';
 import { runGuestPipeline } from './services/pipelineClient';
 function FeaturedReportLayout({
   report,
@@ -32,22 +38,38 @@ function FeaturedReportLayout({
   user: SupabaseUser | null;
   onBack: () => void;
 }) {
+  const [expandedReport, setExpandedReport] = useState(report);
+  const [loadingGames, setLoadingGames] = useState(false);
+  const [gamesError, setGamesError] = useState('');
+  const sample = report as import('./services/featuredReports').FeaturedReport;
+  async function loadGames() {
+    if (!sample.sampleSlug || loadingGames) return;
+    setLoadingGames(true); setGamesError('');
+    try {
+      const {getFeaturedGames} = await import('./services/featuredReports');
+      const games = await getFeaturedGames(sample.sampleSlug, sample.gamePages || 0);
+      setExpandedReport({...report, games});
+    } catch { setGamesError('Could not load games. Please try again.'); }
+    finally {setLoadingGames(false);}
+  }
   const scrollRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     scrollRef.current?.scrollTo(0, 0);
   }, [report]);
 
   return (
-    <div ref={scrollRef} className="h-screen overflow-y-auto bg-slate-950 dark:bg-slate-950 bg-gray-50">
+    <div ref={scrollRef} className="prep-workspace h-screen overflow-y-auto bg-slate-950 dark:bg-slate-950 bg-gray-50">
+      {loadingGames && <GenerationOverlay status="Loading sample games for exploration and practice…"/>}
       <header className="sticky top-0 z-10 backdrop-blur-md bg-slate-950/80 border-b border-slate-800 p-4 flex flex-wrap gap-3 justify-between items-center">
-        <button type="button" onClick={onBack} className="text-slate-400 hover:text-white flex items-center gap-2">
+        <button type="button" onClick={onBack} disabled={loadingGames} className="text-slate-400 hover:text-white flex items-center gap-2">
           <ChevronLeft className="w-4 h-4" /> Back to home
         </button>
         <span className="text-slate-400 text-sm hidden sm:inline">Featured Report — No sign-in required</span>
       </header>
       <main className="max-w-6xl mx-auto p-6">
         <Suspense fallback={<div className="flex items-center justify-center min-h-[400px]"><Loader2 className="w-10 h-10 animate-spin text-indigo-400" /></div>}>
-          <ReportDashboard report={report} requiresSignInForChat={!user} hideCreditsBadge />
+          {sample.gameCount && !expandedReport.games?.length ? <div className="prep-sample-loader mb-6 border border-slate-700 rounded-xl text-slate-200"><p>{sample.gameCount.toLocaleString()} games available for review and practice.</p><button onClick={loadGames} disabled={loadingGames} className="mt-3 px-4 py-2 rounded-lg bg-violet-600">{loadingGames ? 'Loading games…' : 'Load games'}</button>{gamesError && <p role="alert">{gamesError}</p>}</div> : null}
+          <ReportDashboard report={expandedReport} requiresSignInForChat={!user} hideCreditsBadge />
         </Suspense>
       </main>
     </div>
@@ -73,16 +95,16 @@ function GuestReportLayout({
   }, [report]);
 
   return (
-    <div ref={scrollRef} className="h-screen overflow-y-auto bg-slate-950">
+    <div ref={scrollRef} className="prep-workspace h-screen overflow-y-auto bg-slate-950">
       <header className="sticky top-0 z-10 backdrop-blur-md bg-slate-950/80 border-b border-slate-800 p-4 flex flex-wrap gap-3 justify-between items-center">
-        <button type="button" onClick={onBack} className="text-slate-400 hover:text-white flex items-center gap-2">
+        <button type="button" onClick={onBack} disabled={isGenerating} className="text-slate-400 hover:text-white flex items-center gap-2">
           <ChevronLeft className="w-4 h-4" /> Back to home
         </button>
         <div className="flex items-center gap-3">
           <span className="text-slate-500 text-xs hidden sm:inline">Guest Report — 500 game limit</span>
           <button
             type="button"
-            onClick={onSignUp}
+            onClick={onSignUp} disabled={isGenerating}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg transition-colors"
           >
             Sign up for full access
@@ -109,7 +131,9 @@ function GuestReportLayout({
 const pathByTab = { search: '/analysis', dashboard: '/dashboard', history: '/history' } as const;
 
 const App: React.FC = () => {
-  const [activeTabState, setActiveTabState] = useState<'search' | 'dashboard' | 'history'>('search');
+  // Route transitions already trigger app state changes; cover pushState and back/forward.
+  useEffect(() => { updatePageMetadata(window.location.pathname); });
+  const [activeTabState, setActiveTabState] = useState<'search' | 'dashboard' | 'history'>(() => window.location.pathname === '/history' ? 'history' : window.location.pathname === '/dashboard' ? 'dashboard' : 'search');
   const setActiveTab = React.useCallback((tab: 'search' | 'dashboard' | 'history') => {
     setActiveTabState(tab);
     const path = pathByTab[tab];
@@ -119,9 +143,13 @@ const App: React.FC = () => {
   }, []);
   const activeTab = activeTabState;
   const [selectedReport, setSelectedReport] = useState<ScoutingReport | null>(null);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [moreHistory, setMoreHistory] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [history, setHistory] = useState<ScoutingReport[]>([]);
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  const [loadingFeatured, setLoadingFeatured] = useState(window.location.pathname.startsWith('/featured/'));
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; reportIds: string[] }>({ isOpen: false, reportIds: [] });
   const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
@@ -129,7 +157,7 @@ const App: React.FC = () => {
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [historyView, setHistoryView] = useState<'folders' | 'individual'>('individual');
   const [showUserSettings, setShowUserSettings] = useState(false);
-  const [showLandingPage, setShowLandingPage] = useState(true);
+  const [showLandingPage, setShowLandingPage] = useState(() => window.location.pathname === '/');
   const [viewingFeaturedReport, setViewingFeaturedReport] = useState<ScoutingReport | null>(null);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(() => window.location.pathname === '/privacy-policy');
   const [showTermsOfService, setShowTermsOfService] = useState(() => window.location.pathname === '/terms-of-service');
@@ -219,7 +247,7 @@ const App: React.FC = () => {
 
   // Sync app state with URL pathname (supports /privacy-policy, /terms-of-service, /about, /analysis, /history, /dashboard, /settings, /featured/:slug)
   const isInLandingFlow = !user || showLandingPage || showPrivacyPolicy || showTermsOfService || showAboutPrepSuite || !!viewingFeaturedReport;
-  const appRoutes = ['/analysis', '/history', '/dashboard', '/settings'] as const;
+  const appRoutes: readonly string[] = ['/analysis', '/history', '/dashboard', '/settings'];
   const tabByPath: Record<string, 'search' | 'dashboard' | 'history'> = {
     '/analysis': 'search',
     '/history': 'history',
@@ -236,10 +264,11 @@ const App: React.FC = () => {
     if (path.startsWith('/featured/')) {
       const slug = path.replace(/^\/featured\/?/, '').replace(/\/$/, '') || undefined;
       if (slug) {
+        setLoadingFeatured(true);
         import('./services/featuredReports').then(({ getFeaturedReport }) => {
           getFeaturedReport(slug).then((report) => {
-            if (report) setViewingFeaturedReport(report);
-            else setViewingFeaturedReport(null);
+            if (window.location.pathname === path) setViewingFeaturedReport(report);
+            setLoadingFeatured(false);
           });
         });
       } else {
@@ -296,6 +325,11 @@ const App: React.FC = () => {
   // Listen for back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
+      const lockedRoute = document.getElementById('root')?.dataset.lockedRoute;
+      if (lockedRoute) {
+        window.history.pushState({}, '', lockedRoute);
+        return;
+      }
       const path = window.location.pathname;
       if (!user && appRoutes.includes(path)) {
         window.history.replaceState({}, '', '/');
@@ -338,7 +372,7 @@ const App: React.FC = () => {
       setLoadingHistory(true);
       try {
         const data = await playerRepository.getUserHistory(user.id);
-        setHistory(data);
+        setHistory(data); setHistoryPage(0); setMoreHistory(data.length === 30);
       } catch (error) {
         console.error('Failed to fetch history:', error);
       } finally {
@@ -350,8 +384,9 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const handleReportGenerated = (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean; fromBatch?: boolean; batchItemStart?: boolean; folderId?: string }) => {
+  const handleReportGenerated = (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean; fromBatch?: boolean; batchItemStart?: boolean; folderId?: string; creditsDeducted?: number }) => {
     setSelectedReport(report);
+    if (typeof options?.creditsDeducted === 'number') setCreditsDeductedForReport(options.creditsDeducted);
     setActiveTab('dashboard');
     if (options?.isInitial) {
       setCreditsDeductedForReport(null); // Clear until new report completes
@@ -375,7 +410,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleReportPartialUpdate = (partial: Partial<ScoutingReport>) => {
+  const handleReportPartialUpdate = (partial: ReportUpdate) => {
     if (isGeneratingRef.current) {
       setSelectedReport((prev) => (prev ? mergeReport(prev, partial) : prev));
     }
@@ -427,7 +462,7 @@ const App: React.FC = () => {
 
       // Update local history
       const updatedHistory = await playerRepository.getUserHistory(user.id);
-      setHistory(updatedHistory);
+      setHistory(updatedHistory); setHistoryPage(0); setMoreHistory(updatedHistory.length === 30);
 
       showToast('Dossier saved successfully!', 'success');
     } catch (error) {
@@ -475,7 +510,7 @@ const App: React.FC = () => {
 
       // Update local history
       const updatedHistory = await playerRepository.getUserHistory(user.id);
-      setHistory(updatedHistory);
+      setHistory(updatedHistory); setHistoryPage(0); setMoreHistory(updatedHistory.length === 30);
 
       // Clear selection and deselect if deleted
       setSelectedReportIds(new Set());
@@ -545,8 +580,20 @@ const App: React.FC = () => {
     });
   };
 
-  const selectFromHistory = (report: ScoutingReport) => {
-    setSelectedReport(report);
+  async function loadMoreHistory() {
+    if (!user || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const data = await playerRepository.getUserHistory(user.id, historyPage + 1);
+      setHistory(prev => [...prev, ...data.filter(item => !prev.some(old => old.id === item.id))]);
+      setHistoryPage(prev => prev + 1); setMoreHistory(data.length === 30);
+    } catch { showToast('Could not load older reports. Please try again.', 'error'); }
+    finally { setLoadingMore(false); }
+  }
+
+  const selectFromHistory = async (report: ScoutingReport) => {
+    try { setSelectedReport(await playerRepository.getReport(report.id)); }
+    catch { showToast('Could not load this report. Please try again.', 'error'); return; }
     setCreditsDeductedForReport(null); // Cached reports don't show credits used
     setActiveTab('dashboard');
   };
@@ -637,7 +684,7 @@ const App: React.FC = () => {
     } catch (err: unknown) {
       logError(err, { operation: 'authentication', source: 'App' });
       const errorMessage = getUserFriendlyError(err, { operation: 'authentication' });
-      alert(errorMessage);
+      throw new Error(errorMessage);
     }
   };
 
@@ -646,7 +693,7 @@ const App: React.FC = () => {
     setShowUserSettings(false);
   };
 
-  if (loadingAuth) {
+  if (loadingAuth || loadingFeatured) {
     return (
       <ThemeProvider>
         {isOffline && <OfflineBanner />}
@@ -748,6 +795,7 @@ const App: React.FC = () => {
   const handleViewFeaturedReport = async (slug: string) => {
     const { getFeaturedReport } = await import('./services/featuredReports');
     const report = await getFeaturedReport(slug);
+    if (!report) throw new Error('Could not load the sample report. Please try again.');
     if (report) {
       window.history.pushState({}, '', `/featured/${slug}`);
       setViewingFeaturedReport(report);
@@ -840,6 +888,7 @@ const App: React.FC = () => {
           guestAnalyzingStatus={guestAnalyzingStatus}
         />
         </div>
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         {user ? (
           <Suspense fallback={null}>
             <SupportChat isLoggedIn />
@@ -852,7 +901,7 @@ const App: React.FC = () => {
   return (
     <ThemeProvider>
       {isOffline && <OfflineBanner />}
-      <div className="flex h-screen bg-slate-950 dark:bg-slate-950 bg-gray-50 text-slate-100 dark:text-slate-100 text-gray-900 overflow-hidden">
+      <div className="prep-workspace flex h-screen bg-slate-950 dark:bg-slate-950 bg-gray-50 text-slate-100 dark:text-slate-100 text-gray-900 overflow-hidden">
         {!showUserSettings && (
           <Suspense
             fallback={
@@ -867,6 +916,7 @@ const App: React.FC = () => {
               activeTab={activeTab}
               setActiveTab={setActiveTab}
               onLogoClick={() => {
+                if (isAnalyzing) return;
                 setShowLandingPage(true);
                 window.history.pushState({}, '', '/');
               }}
@@ -876,6 +926,7 @@ const App: React.FC = () => {
         )}
 
         <main className="flex-1 min-w-0 overflow-y-auto relative bg-slate-950 dark:bg-slate-950 bg-gray-50 overscroll-none before:absolute before:inset-0 before:pointer-events-none before:bg-[radial-gradient(ellipse_80%_50%_at_50%_0%,rgba(99,102,241,0.08)_0%,transparent_50%)]" style={{ overscrollBehavior: 'none' }}>
+          {user && <JobRecovery userId={user.id} onComplete={report => handleReportGenerated(report)} />}
           {showUserSettings ? (
             <div className="h-full overflow-y-auto">
               <Suspense
@@ -904,14 +955,14 @@ const App: React.FC = () => {
           ) : (
             <>
               <header className="sticky top-0 z-10 backdrop-blur-md bg-slate-950/80 dark:bg-slate-950/80 bg-gray-50/80 border-b border-slate-800 dark:border-slate-800 border-gray-200 p-4 flex justify-between items-center">
-                <span className="text-[0.9rem] font-normal text-slate-400 dark:text-slate-400 text-gray-600 uppercase tracking-widest">V1.1 Stable</span>
+                <span className="text-[0.9rem] font-normal text-slate-400 dark:text-slate-400 text-gray-600 uppercase tracking-widest">Your preparation workspace</span>
                 <div className="flex items-center gap-4">
-                  <div className="hidden sm:block bg-slate-900 dark:bg-slate-900 bg-gray-100 border border-emerald-500/50 dark:border-emerald-500/50 border-emerald-400 px-3 py-1 rounded-full text-xs font-medium text-emerald-400 dark:text-emerald-400 text-emerald-600">
-                    Live Database Sync
-                  </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-slate-400 dark:text-slate-400 text-gray-600 hidden md:block">{user.email}</span>
-                    <div
+                    <button
+                      type="button"
+                      aria-label="Open account settings"
+                      disabled={isAnalyzing}
                       onClick={() => {
                         setShowUserSettings(true);
                         window.history.pushState({}, '', '/settings');
@@ -919,12 +970,12 @@ const App: React.FC = () => {
                       className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white cursor-pointer hover:bg-indigo-500 transition-colors ml-[12px]"
                     >
                       <User className="w-5 h-5" />
-                    </div>
+                    </button>
                   </div>
                 </div>
               </header>
 
-              <div className={`p-6 mx-auto min-w-0 ${activeTab === 'dashboard' && selectedReport ? 'max-w-[90rem]' : 'max-w-7xl'}`}>
+              <MotionSurface key={activeTab} className={`prep-route-content p-6 mx-auto min-w-0 ${activeTab === 'dashboard' && selectedReport ? 'max-w-[90rem]' : 'max-w-7xl'}`}>
                 {activeTab === 'search' && (
                   <Suspense
                     fallback={
@@ -936,6 +987,13 @@ const App: React.FC = () => {
                     <SearchScreen
                       onReportGenerated={handleReportGenerated}
                       onReportPartialUpdate={handleReportPartialUpdate}
+                      onAnalysisError={(message) => {
+                        isGeneratingRef.current = false;
+                        setIsAnalyzing(false);
+                        setLoadingStage(null);
+                        setScanningStatus('');
+                        showToast(message, 'error');
+                      }}
                       user={user}
                       credits={credits}
                       hasEnoughCredits={() => true}
@@ -1032,6 +1090,7 @@ const App: React.FC = () => {
                         </div>
                       )}
                     </div>
+                    {moreHistory && <button onClick={loadMoreHistory} disabled={loadingMore} className="my-4 px-4 py-2 bg-slate-800 text-white rounded-lg">{loadingMore ? 'Loading…' : 'Load older reports'}</button>}
                     {loadingHistory ? (
                       <div className="flex flex-col items-center justify-center py-24 px-6 text-center gap-3">
                         <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
@@ -1058,7 +1117,7 @@ const App: React.FC = () => {
                     ) : historyView === 'individual' ? (
                       <div className="space-y-4">
                         {allReportsFlat.map((h) => (
-                          <div
+                          <MotionSurface hoverLift
                             key={h.id}
                             onClick={() => selectFromHistory(h)}
                             className={`group bg-slate-900 dark:bg-slate-900 bg-white border p-4 rounded-xl cursor-pointer transition-all flex justify-between items-center gap-4 ${
@@ -1087,7 +1146,7 @@ const App: React.FC = () => {
                               </button>
                               <ChevronRight className="w-5 h-5 text-slate-600 dark:text-slate-600 text-gray-400" />
                             </div>
-                          </div>
+                          </MotionSurface>
                         ))}
                       </div>
                     ) : folderGroups.length === 0 ? (
@@ -1113,7 +1172,7 @@ const App: React.FC = () => {
                             {expandedFolderIds.has(folderId) && (
                               <div className="divide-y divide-slate-800 dark:divide-slate-800">
                                 {reports.map((h) => (
-                                  <div
+                                  <MotionSurface hoverLift
                                     key={h.id}
                                     onClick={() => selectFromHistory(h)}
                                     className={`group flex justify-between items-center gap-4 p-4 pl-12 cursor-pointer transition-all hover:bg-slate-800/40 dark:hover:bg-slate-800/40 ${
@@ -1140,7 +1199,7 @@ const App: React.FC = () => {
                                       </button>
                                       <ChevronRight className="w-5 h-5 text-slate-600 dark:text-slate-600 text-gray-400" />
                                     </div>
-                                  </div>
+                                  </MotionSurface>
                                 ))}
                               </div>
                             )}
@@ -1150,7 +1209,7 @@ const App: React.FC = () => {
                     )}
                   </div>
                 )}
-              </div>
+              </MotionSurface>
             </>
           )}
         </main>

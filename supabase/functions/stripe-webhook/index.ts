@@ -1,176 +1,90 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-async function verifyStripeSignature(
-  payload: string,
-  signature: string,
-  secret: string
-): Promise<boolean> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const [timestamp, v1Part] = signature.replace("t=", "").split(",v1=");
-  if (!v1Part) return false;
-  const signedPayload = `${timestamp}.${payload}`;
-  const sig = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    encoder.encode(signedPayload)
-  );
-  const hex = Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  return hex === v1Part;
-}
-
+import Stripe from "https://esm.sh/stripe@18?target=denonext";
+const cryptoProvider = Stripe.createSubtleCryptoProvider();
 serve(async (req) => {
-  if (req.method !== "POST") {
+  if (req.method !== "POST")
     return new Response("Method not allowed", { status: 405 });
-  }
-
+  const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET"),
+    key = Deno.env.get("STRIPE_SECRET_KEY");
+  if (!secret || !key)
+    return new Response("Webhook configuration unavailable", { status: 500 });
+  const signature = req.headers.get("stripe-signature");
+  if (!signature) return new Response("Missing signature", { status: 400 });
+  const stripe = new Stripe(key, {
+    httpClient: Stripe.createFetchHttpClient(),
+  });
+  let event: Stripe.Event;
   try {
-    const stripeSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
-    if (!stripeSecret) {
-      console.error("[stripe-webhook] STRIPE_WEBHOOK_SECRET not set");
-      return new Response("Webhook secret not configured", { status: 500 });
-    }
-
-    const signature = req.headers.get("stripe-signature");
-    if (!signature) {
-      return new Response("Missing stripe-signature", { status: 400 });
-    }
-
-    const payload = await req.text();
-    const isValid = await verifyStripeSignature(payload, signature, stripeSecret);
-    if (!isValid) {
-      console.error("[stripe-webhook] Invalid signature");
-      return new Response("Invalid signature", { status: 400 });
-    }
-
-    const event = JSON.parse(payload);
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response("Server configuration error", { status: 500 });
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    switch (event.type) {
-      case "customer.subscription.created":
-      case "customer.subscription.updated": {
-        const sub = event.data.object;
-        const userId = sub.metadata?.supabase_user_id ?? sub.client_reference_id;
-        if (!userId) {
-          console.warn("[stripe-webhook] No user id in subscription", sub.id);
-          break;
-        }
-        const status = sub.status === "active" || sub.status === "trialing" ? "active" : sub.status;
-        const periodEnd = sub.current_period_end
-          ? new Date(sub.current_period_end * 1000).toISOString()
-          : null;
-        await supabase
-          .from("profiles")
-          .upsert(
-            {
-              id: userId,
-              stripe_subscription_id: sub.id,
-              subscription_status: status,
-              current_period_end: periodEnd,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "id" }
-          );
-        console.log("[stripe-webhook] Updated profile", userId, status);
-        break;
-      }
-      case "customer.subscription.deleted": {
-        const sub = event.data.object;
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("stripe_subscription_id", sub.id)
-          .single();
-        if (profile) {
-          await supabase
-            .from("profiles")
-            .update({
-              stripe_subscription_id: null,
-              subscription_status: "free",
-              current_period_end: null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", profile.id);
-          console.log("[stripe-webhook] Downgraded profile", profile.id);
-        }
-        break;
-      }
-      case "checkout.session.completed": {
-        const session = event.data.object;
-        if (session.mode !== "payment") break;
-        const userId = session.metadata?.supabase_user_id ?? session.client_reference_id;
-        const creditsStr = session.metadata?.credits;
-        if (!userId || !creditsStr) {
-          console.warn("[stripe-webhook] checkout.session.completed missing metadata", session.id);
-          break;
-        }
-        const credits = parseInt(creditsStr, 10);
-        if (isNaN(credits) || credits <= 0) {
-          console.warn("[stripe-webhook] Invalid credits in metadata", creditsStr);
-          break;
-        }
-        const { error } = await supabase.rpc("add_credits", {
+    event = await stripe.webhooks.constructEventAsync(
+      await req.text(),
+      signature,
+      secret,
+      300,
+      cryptoProvider,
+    );
+  } catch {
+    return new Response("Invalid signature", { status: 400 });
+  }
+  try {
+    const url = Deno.env.get("SUPABASE_URL"),
+      serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !serviceKey)
+      throw new Error("Storage configuration unavailable");
+    const db = createClient(url, serviceKey);
+    if (
+      event.type === "checkout.session.completed" ||
+      event.type === "checkout.session.async_payment_succeeded"
+    ) {
+      const session = event.data.object;
+      if (session.mode === "payment" && session.payment_status === "paid") {
+        const userId =
+          session.metadata?.supabase_user_id || session.client_reference_id;
+        const credits = Number(session.metadata?.credits);
+        if (!userId || !Number.isInteger(credits) || credits <= 0)
+          throw new Error("Invalid purchase metadata");
+        const { error } = await db.rpc("fulfill_credit_purchase", {
+          p_event_id: event.id,
+          p_session_id: session.id,
           p_user_id: userId,
           p_amount: credits,
         });
-        if (error) {
-          console.error("[stripe-webhook] add_credits failed", error);
-          break;
-        }
-        console.log("[stripe-webhook] Added credits", userId, credits);
-        break;
+        if (error) throw error;
       }
-      case "invoice.paid": {
-        const invoice = event.data.object;
-        const subId = invoice.subscription;
-        if (subId && typeof subId === "string") {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("stripe_subscription_id", subId)
-            .single();
-          if (profile) {
-            const periodEnd = invoice.period_end
-              ? new Date(invoice.period_end * 1000).toISOString()
-              : null;
-            await supabase
-              .from("profiles")
-              .update({
-                subscription_status: "active",
-                current_period_end: periodEnd,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", profile.id);
-          }
-        }
-        break;
+    } else if (event.type.startsWith("customer.subscription.")) {
+      // Fetch current state because Stripe does not guarantee event delivery order.
+      const id = (event.data.object as { id: string }).id;
+      const sub = await stripe.subscriptions.retrieve(id);
+      const userId = sub.metadata?.supabase_user_id;
+      if (userId) {
+        const status =
+          sub.status === "active" || sub.status === "trialing"
+            ? "active"
+            : sub.status === "past_due"
+              ? "past_due"
+              : "canceled";
+        const periodEnd = sub.items.data.reduce(
+          (max: number, item: { current_period_end?: number }) =>
+            Math.max(max, item.current_period_end || 0),
+          0,
+        );
+        const { error } = await db.rpc("sync_subscription_event", {
+          p_event_id: event.id,
+          p_created: event.created,
+          p_user_id: userId,
+          p_subscription_id: sub.id,
+          p_status: status,
+          p_period_end: periodEnd
+            ? new Date(periodEnd * 1000).toISOString()
+            : null,
+        });
+        if (error) throw error;
       }
-      default:
-        console.log("[stripe-webhook] Unhandled event", event.type);
     }
-
-    return new Response(JSON.stringify({ received: true }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("[stripe-webhook]", err);
-    return new Response("Webhook error", { status: 500 });
+    // Subscription updates are authoritative; invoice.paid must not resurrect a canceled subscription.
+    return Response.json({ received: true });
+  } catch (error) {
+    console.error("[stripe-webhook]", error);
+    return new Response("Webhook processing failed", { status: 500 });
   }
 });

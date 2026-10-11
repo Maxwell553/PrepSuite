@@ -24,7 +24,14 @@ fi
 : "${VITE_SUPABASE_URL:?VITE_SUPABASE_URL is required}"
 : "${VITE_SUPABASE_ANON_KEY:?VITE_SUPABASE_ANON_KEY is required}"
 
-gcloud builds submit . \
+if [[ "${JOBS_ENABLED:-false}" == "true" && "${MIN_INSTANCES:-0}" -lt 1 ]]; then
+  echo "Background jobs require MIN_INSTANCES >= 1 and applied database migrations." >&2
+  exit 1
+fi
+npm run check
+npm run build
+
+gcloud builds submit "${SCRIPT_DIR}" \
   --config=cloudbuild.yaml \
-  --project=prepsuite-ai \
-  --substitutions="_VITE_SUPABASE_URL=${VITE_SUPABASE_URL},_VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}"
+  --project="${GCP_PROJECT_ID:?GCP_PROJECT_ID is required}" \
+  --substitutions="_SERVICE_NAME=${CLOUD_RUN_SERVICE:-prepsuite},_JOBS_ENABLED=${JOBS_ENABLED:-false},_MIN_INSTANCES=${MIN_INSTANCES:-0},_VITE_SUPABASE_URL=${VITE_SUPABASE_URL},_VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}"

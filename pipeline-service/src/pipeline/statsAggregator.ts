@@ -180,28 +180,9 @@ function normalizeName(s: string): string[] {
 }
 
 function namesMatch(name: string, targets: string[]): boolean {
-  const nameParts = normalizeName(name);
-  if (nameParts.length === 0) return false;
-  return targets.some((t) => {
-    const targetParts = normalizeName(t);
-    if (targetParts.length === 0) return false;
-    const partsMatch = (a: string, b: string) => {
-      if (a.length < 3 || b.length < 3) return a === b;
-      return a.includes(b) || b.includes(a);
-    };
-    const matchingCount = nameParts.filter((np) =>
-      targetParts.some((tp) => partsMatch(np, tp)),
-    ).length;
-    const firstPartMatch = nameParts[0] && targetParts.some((tp) => partsMatch(nameParts[0], tp));
-    const secondPartInitial = nameParts.length === 2 && nameParts[1].length <= 2 && targetParts.some(
-      (tp) => tp.length >= 3 && tp.startsWith(nameParts[1]),
-    );
-    return (
-      matchingCount >= Math.min(2, nameParts.length) ||
-      (nameParts.length === 1 && targetParts.some((tp) => partsMatch(nameParts[0], tp))) ||
-      (firstPartMatch && (matchingCount >= 1 || secondPartInitial))
-    );
-  });
+  const key = (value: string) => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/,/g, ' ').trim().split(/\s+/).sort().join(' ');
+  const normalized = key(name);
+  return !!normalized && targets.some(target => key(target) === normalized);
 }
 
 function aggregateOpeningsForTargets(
@@ -214,11 +195,8 @@ function aggregateOpeningsForTargets(
     return namesMatch(g.black, targetNames);
   });
   if (relevantGames.length === 0) return [];
-  // Use first matching name for generateStats (it does exact match internally; we've pre-filtered)
-  const primaryName = relevantGames[0]
-    ? (side === 'white' ? relevantGames[0].white : relevantGames[0].black)
-    : targetNames[0] || '';
-  return generateStats(relevantGames, primaryName, side);
+  const canonical = '__scouted_player__';
+  return generateStats(relevantGames.map(game => ({ ...game, [side]: canonical })), canonical, side);
 }
 
 export interface OpeningsBySource {
@@ -246,4 +224,11 @@ export function aggregateOpeningsBySource(
       black: aggregateOpeningsForTargets(otbGames, targetNames, 'black'),
     },
   };
+}
+
+export function normalizeTargetGames(games: GameData[], aliases: string[], canonical: string): GameData[] {
+  return games.map(game => ({...game,
+    white: namesMatch(game.white, aliases) ? canonical : game.white,
+    black: namesMatch(game.black, aliases) ? canonical : game.black,
+  }));
 }

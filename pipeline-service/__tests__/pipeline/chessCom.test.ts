@@ -107,3 +107,10 @@ describe('fetchChessComGames', () => {
     expect(onProgress).toHaveBeenCalled();
   });
 });
+
+it('continues beyond 60 monthly archives when needed',async()=>{
+ const archives=Array.from({length:64},(_,i)=>`https://api.chess.com/pub/player/test/games/${i}`);
+ mockedFetch.mockImplementation(async url=>({ok:true,json:async()=>String(url).endsWith('/archives')?{archives}:{games:[{end_time:Number(String(url).split('/').pop()),pgn:'game'}]}} as Response));
+ const result=await fetchChessComGames('test',64);
+ expect(result.totalFetched).toBe(64);
+});

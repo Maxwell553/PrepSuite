@@ -54,7 +54,8 @@ export function createEmptyReport(playerName: string): ScoutingReport {
  * Deep merge a partial report into the base report.
  * Used when identity, parsing, or complete data streams in.
  */
-export function mergeReport(base: ScoutingReport, partial: Partial<ScoutingReport>): ScoutingReport {
+export type ReportUpdate = Omit<Partial<ScoutingReport>, 'player'> & { player?: Partial<PlayerMetadata> };
+export function mergeReport(base: ScoutingReport, partial: ReportUpdate): ScoutingReport {
   const merged = { ...base };
 
   if (partial.player) {

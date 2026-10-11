@@ -1,8 +1,10 @@
+import ChessParticles from './ChessParticles';
+import PremiumRange from './PremiumRange';
+import type { ReportUpdate } from '../lib/reportUtils';
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Loader2, Play, Cpu, User, Shield, AlertTriangle, GitBranch, ChevronDown, Users, FolderPlus, BarChart3, Globe, Database } from 'lucide-react';
+import { AlertCircle, Loader2, Play, User, Shield, AlertTriangle, GitBranch, ChevronDown, Users, FolderPlus, BarChart3, Globe, Database } from 'lucide-react';
 import { OTB_GAMES_DISPLAY, FIDE_PLAYERS_DISPLAY } from '../services/platformStats';
 import { ScoutingReport } from '../types';
-import { playerRepository } from '../services/playerRepository';
 import { folderRepository } from '../services/folderRepository';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { getUserFriendlyError, logError } from '../lib/errorUtils';
@@ -14,8 +16,9 @@ import { logger } from '../lib/logger';
 import { createEmptyReport } from '../lib/reportUtils';
 
 interface SearchScreenProps {
-  onReportGenerated: (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean; fromBatch?: boolean; batchItemStart?: boolean; folderId?: string }) => void;
-  onReportPartialUpdate?: (partial: Partial<ScoutingReport>) => void;
+  onReportGenerated: (report: ScoutingReport, options?: { fromCache?: boolean; isInitial?: boolean; fromBatch?: boolean; batchItemStart?: boolean; folderId?: string; creditsDeducted?: number }) => void;
+  onReportPartialUpdate?: (partial: ReportUpdate) => void;
+  onAnalysisError?: (message: string) => void;
   user: SupabaseUser;
   credits?: number;
   hasEnoughCredits?: (required: number) => boolean;
@@ -32,6 +35,7 @@ interface SearchScreenProps {
 const SearchScreen: React.FC<SearchScreenProps> = ({
   onReportGenerated,
   onReportPartialUpdate,
+  onAnalysisError,
   user,
   credits = 0,
   hasEnoughCredits = () => true,
@@ -162,7 +166,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
           if (result.report) onReportGenerated(result.report, { fromBatch: true, folderId: batchFolderId });
         } catch (err) {
           logError(err, { operation: 'batch analysis', source: 'SearchScreen' });
-          setError(getUserFriendlyError(err, { operation: `analysis of ${p.name}` }));
+          const message = getUserFriendlyError(err, { operation: `analysis of ${p.name}` });
+          setError(message);
+          onAnalysisError?.(message);
           break;
         }
       }
@@ -236,19 +242,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
       const reportData = pipelineResult.report;
       logger.info('Search', 'pipeline_complete', { metadata: { reportId: reportData.id } });
 
-      try {
-        await playerRepository.createVerifiedPlayer({
-          full_name: reportData.player.name,
-          fide_id: reportData.player.fideId || '',
-          uscf_id: reportData.player.uscfId || '',
-          chess_com_username: reportData.player.platforms?.chessCom || '',
-          lichess_username: reportData.player.platforms?.lichess || '',
-          metadata: { country: reportData.player.country },
-        });
-      } catch (dbErr) {
-        console.warn("Failed to persist report to DB (Demo Mode?):", dbErr);
-      }
-
       onReportGenerated(reportData, { creditsDeducted: undefined /* MONETIZATION_DISABLED */ });
       setScanningStatus('Report generated successfully!');
       setLoading(false);
@@ -262,6 +255,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
         message: errorMessage,
         error: err instanceof Error ? { message: err.message, stack: err.stack } : undefined,
       });
+
+      onAnalysisError?.(errorMessage);
 
       // Provide more specific guidance for rate limit errors
       if (err instanceof Error && (err.message.includes('429') || err.message.includes('Resource exhausted') || err.message.includes('resource_exhausted'))) {
@@ -278,24 +273,17 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto py-8 px-4 sm:px-6 relative">
-      {/* Background depth blobs */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden -z-10" aria-hidden>
-        <div className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full bg-indigo-600/[0.06] blur-[100px]" />
-        <div className="absolute -bottom-40 -right-40 w-[400px] h-[400px] rounded-full bg-cyan-600/[0.04] blur-[100px]" />
-      </div>
-
-      <div className="text-center mb-12">
+    <div className="prep-search-screen w-full max-w-6xl mx-auto py-8 px-4 sm:px-6 relative">
+      <div className="prep-search-heading text-center mb-12">
+        <div className="prep-search-piece"><ChessParticles mode="workspace"/></div>
         <h2 className="text-4xl font-sans font-bold tracking-tight mb-4 text-white dark:text-white text-gray-900">Opponent Analysis</h2>
-        <p className="text-slate-400 dark:text-slate-400 text-gray-600 text-lg italic">Verified search across online platforms and OTB tournament databases.</p>
+        <p className="text-slate-400 dark:text-slate-400 text-gray-600 text-lg italic">Bring online games and over-the-board history into one clear report.</p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-8 justify-center items-stretch w-full">
         <div className="flex-[2] min-w-0">
           <form onSubmit={handleSubmit} className="bg-slate-900/70 dark:bg-slate-900/70 bg-white/80 backdrop-blur-xl border border-white/[0.08] dark:border-white/[0.08] border-gray-200 rounded-2xl p-8 space-y-6 shadow-2xl shadow-indigo-950/20 relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4 opacity-5">
-              <Cpu className="w-24 h-24" />
-            </div>
+
 
             {/* MONETIZATION_DISABLED: Credits display commented out for deployment
             <div className="flex items-center justify-between mb-2 ...">
@@ -312,6 +300,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
               <button
                 type="button"
                 role="switch"
+                aria-label="Batch reports"
                 aria-checked={batchMode}
                 onClick={() => setBatchMode(!batchMode)}
                 className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer rounded-full border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:ring-offset-2 focus:ring-offset-slate-900 ${batchMode ? 'bg-amber-500 border-amber-400/50 shadow-lg shadow-amber-500/25' : 'bg-slate-700 border-slate-600'}`}
@@ -332,6 +321,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         onChange={e => setFormData({ ...formData, name: e.target.value })}
                         disabled={loading}
                         className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-700 dark:border-slate-700 border-gray-300 rounded-xl px-4 py-3 pl-11 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-500 focus:border-indigo-600 transition-colors font-medium text-white dark:text-white text-gray-900 shadow-inner placeholder:text-slate-600 dark:placeholder:text-slate-600 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Player name"
                         placeholder="Enter Player Name"
                       />
                       <User className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-400 text-gray-400" />
@@ -343,6 +333,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAdvanced(!showAdvanced)}
+                  aria-expanded={showAdvanced}
                   className="flex items-center gap-2 text-xs font-bold text-slate-400 dark:text-slate-400 text-gray-600 hover:text-indigo-400 dark:hover:text-indigo-400 transition-colors uppercase tracking-widest"
                 >
                   <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showAdvanced ? 'rotate-180' : ''}`} />
@@ -357,6 +348,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         value={formData.chessComUsername}
                         onChange={e => setFormData({ ...formData, chessComUsername: e.target.value })}
                         disabled={loading}
+                        aria-label="Chess.com username"
                         placeholder="e.g. hikaru"
                         className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500/50 dark:focus:border-emerald-500/50 focus:border-emerald-600 text-slate-300 dark:text-slate-300 text-gray-900 text-sm transition-colors placeholder:text-slate-700 dark:placeholder:text-slate-700 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
                       />
@@ -368,6 +360,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         value={formData.lichessUsername}
                         onChange={e => setFormData({ ...formData, lichessUsername: e.target.value })}
                         disabled={loading}
+                        aria-label="Lichess username"
                         placeholder="e.g. DrNykterstein"
                         className="w-full bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:border-indigo-500/50 dark:focus:border-indigo-500/50 focus:border-indigo-600 text-slate-300 dark:text-slate-300 text-gray-900 text-sm transition-colors placeholder:text-slate-700 dark:placeholder:text-slate-700 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
                       />
@@ -466,8 +459,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         <span className="text-slate-400 dark:text-slate-400 text-gray-600">Total games</span>
                         <span className="font-bold text-indigo-400 dark:text-indigo-400 text-indigo-600 tabular-nums transition-transform duration-150 origin-right">{gameLimit.toLocaleString()}</span>
                       </div>
-                      <input
-                        type="range"
+                      <PremiumRange
+                        aria-label="Total games to analyze"
                         min={500}
                         max={maxGames}
                         step={250}
@@ -480,10 +473,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                           setOtbLimit(newTotal - Math.round(ratio * newTotal));
                         }}
                         disabled={loading}
-                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb slider-indigo disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                          background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${((gameLimit - 500) / (maxGames - 500)) * 100}%, rgb(30, 41, 59) ${((gameLimit - 500) / (maxGames - 500)) * 100}%, rgb(30, 41, 59) 100%)`
-                        }}
                       />
                     </div>
 
@@ -493,8 +482,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         <span className="text-slate-400 dark:text-slate-400 text-gray-600">Online (Chess.com, Lichess)</span>
                         <span className="font-bold text-emerald-400 dark:text-emerald-400 text-emerald-600 tabular-nums transition-transform duration-150 origin-right">{onlineLimit.toLocaleString()}</span>
                       </div>
-                      <input
-                        type="range"
+                      <PremiumRange
+                        aria-label="Online games to analyze"
                         min={0}
                         max={gameLimit}
                         step={50}
@@ -505,10 +494,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                           setOtbLimit(gameLimit - newOnline);
                         }}
                         disabled={loading}
-                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb slider-emerald disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                          background: `linear-gradient(to right, rgb(16, 185, 129) 0%, rgb(16, 185, 129) ${gameLimit > 0 ? (onlineLimit / gameLimit) * 100 : 0}%, rgb(30, 41, 59) ${gameLimit > 0 ? (onlineLimit / gameLimit) * 100 : 0}%, rgb(30, 41, 59) 100%)`
-                        }}
                       />
                     </div>
 
@@ -518,8 +503,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                         <span className="text-slate-400 dark:text-slate-400 text-gray-600">OTB (over-the-board)</span>
                         <span className="font-bold text-amber-400 dark:text-amber-400 text-amber-600 tabular-nums transition-transform duration-150 origin-right">{otbLimit.toLocaleString()}</span>
                       </div>
-                      <input
-                        type="range"
+                      <PremiumRange
+                        aria-label="Over-the-board games to analyze"
                         min={0}
                         max={gameLimit}
                         step={50}
@@ -530,10 +515,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                           setOnlineLimit(gameLimit - newOtb);
                         }}
                         disabled={loading}
-                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb slider-amber disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                          background: `linear-gradient(to right, rgb(245, 158, 11) 0%, rgb(245, 158, 11) ${gameLimit > 0 ? (otbLimit / gameLimit) * 100 : 0}%, rgb(30, 41, 59) ${gameLimit > 0 ? (otbLimit / gameLimit) * 100 : 0}%, rgb(30, 41, 59) 100%)`
-                        }}
                       />
                     </div>
                   </div>
@@ -549,19 +530,15 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
                       <span className="text-slate-400">Games per player</span>
                       <span className="font-bold text-amber-400">{batchGameLimit.toLocaleString()}</span>
                     </div>
-                    <input
-                      type="range"
+                    <PremiumRange
+                        aria-label="Games per batch player"
                       min={500}
                       max={BATCH_MAX_GAMES}
                       step={250}
                       value={Math.min(batchGameLimit, BATCH_MAX_GAMES)}
                       onChange={(e) => setBatchGameLimit(Number(e.target.value))}
                       disabled={loading}
-                      className="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{
-                        background: `linear-gradient(to right, rgb(245, 158, 11) 0%, rgb(245, 158, 11) ${((Math.min(batchGameLimit, BATCH_MAX_GAMES) - 500) / (BATCH_MAX_GAMES - 500)) * 100}%, rgb(30, 41, 59) ${((Math.min(batchGameLimit, BATCH_MAX_GAMES) - 500) / (BATCH_MAX_GAMES - 500)) * 100}%, rgb(30, 41, 59) 100%)`
-                      }}
-                    />
+                      />
                   </div>
                 </div>
               )}

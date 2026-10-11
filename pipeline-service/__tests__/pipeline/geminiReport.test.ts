@@ -10,6 +10,8 @@ vi.mock('../../src/lib/logger.js', () => ({
   },
 }));
 
+vi.mock('../../src/lib/vertexAuth.js', () => ({ getAccessToken: vi.fn().mockResolvedValue('test-token'), getVertexUrl: (model: string) => `https://example.test/${model}`, invalidateAccessTokenCache: vi.fn() }));
+
 import { generateReport } from '../../src/pipeline/geminiReport.js';
 import type { ScoutingReport } from '../../src/lib/types.js';
 
@@ -60,7 +62,7 @@ describe('generateReport', () => {
   it('generates report successfully', async () => {
     global.fetch = vi.fn().mockResolvedValueOnce(makeGeminiResponse(mockReport));
 
-    const result = await generateReport('test prompt', schema, 'fake-key');
+    const result = await generateReport('test prompt', schema);
     expect(result.id).toBe('test-1');
     expect(result.player.name).toBe('Test');
     expect(result.strengths).toEqual(['s1']);
@@ -76,7 +78,7 @@ describe('generateReport', () => {
       .mockResolvedValueOnce(makeGeminiResponse(mockReport));
     global.fetch = mockFetch;
 
-    const promise = generateReport('test prompt', schema, 'fake-key');
+    const promise = generateReport('test prompt', schema);
     await vi.advanceTimersByTimeAsync(15000);
     const result = await promise;
 
@@ -102,7 +104,7 @@ describe('generateReport', () => {
 
     global.fetch = vi.fn().mockResolvedValueOnce(truncatedResponse);
 
-    const result = await generateReport('test prompt', schema, 'fake-key');
+    const result = await generateReport('test prompt', schema);
     expect(result.id).toBe('test-1');
     expect(result.player.name).toBe('Test');
   });
@@ -119,7 +121,7 @@ describe('generateReport', () => {
       .mockImplementation(() => Promise.resolve(new Response('overloaded', { status: 503 })));
     global.fetch = mockFetch;
 
-    const promise = generateReport('test prompt', schema, 'fake-key');
+    const promise = generateReport('test prompt', schema);
     // Attach catch handler immediately to prevent unhandled rejection warning
     let caughtError: Error | undefined;
     promise.catch((e: Error) => { caughtError = e; });
@@ -142,7 +144,7 @@ describe('generateReport', () => {
       .mockResolvedValueOnce(makeGeminiResponse(mockReport));
     global.fetch = mockFetch;
 
-    const promise = generateReport('test prompt', schema, 'fake-key');
+    const promise = generateReport('test prompt', schema);
     // Advance past the 10s rate-limit delay + backoff
     await vi.advanceTimersByTimeAsync(20000);
     const result = await promise;
@@ -174,7 +176,7 @@ describe('generateReport', () => {
     );
     global.fetch = mockFetch;
 
-    const promise = generateReport('test prompt', schema, 'fake-key');
+    const promise = generateReport('test prompt', schema);
     // Attach catch handler immediately to prevent unhandled rejection warning
     promise.catch(() => {});
 

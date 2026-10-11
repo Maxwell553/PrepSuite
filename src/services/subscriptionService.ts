@@ -75,3 +75,5 @@ export async function createPortalSession(returnUrl?: string): Promise<{ url: st
   if (!data?.url) throw new Error('No portal URL returned');
   return { url: data.url };
 }
+
+export const isPremiumStatus = (status: SubscriptionStatus) => status === 'active' || status === 'trialing';

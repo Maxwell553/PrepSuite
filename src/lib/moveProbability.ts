@@ -1,3 +1,4 @@
+import {samePlayer as namesMatch} from './identity';
 /**
  * Compute move probability from opponent's repertoire for practice move history display.
  * Uses all games when available; falls back to mostPlayedLines (top 10 sequences).
@@ -6,11 +7,7 @@
 import type { MoveSequence } from '../types';
 import type { ParsedGame } from './repertoireUtils';
 
-function namesMatch(a: string, b: string): boolean {
-  const x = a.toLowerCase().trim();
-  const y = b.toLowerCase().trim();
-  return x === y || x.includes(y) || y.includes(x);
-}
+
 
 function normalizeSan(s: string): string {
   return s

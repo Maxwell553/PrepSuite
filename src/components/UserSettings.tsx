@@ -1,3 +1,4 @@
+import MotionSurface from './MotionSurface';
 import React, { useState } from 'react';
 import { ArrowLeft, User, Mail, Trash2, AlertTriangle, LogOut, ExternalLink, Loader2 } from 'lucide-react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
@@ -119,7 +120,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onLogout, onA
         <span className="text-sm font-medium">Back</span>
       </button>
 
-      <div className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-3xl p-8 shadow-2xl">
+      <MotionSurface className="bg-slate-900 dark:bg-slate-900 bg-white border border-slate-800 dark:border-slate-800 border-gray-200 rounded-3xl p-8 shadow-2xl">
         <div className="flex items-center gap-4 mb-8">
           <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center">
             <User className="w-8 h-8 text-white" />
@@ -131,7 +132,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onLogout, onA
         </div>
 
         <div className="space-y-6">
-          <div className="bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-6">
+          <MotionSurface className="bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <Mail className="w-5 h-5 text-indigo-400 dark:text-indigo-400 text-indigo-600" />
               <h2 className="text-lg font-semibold text-white dark:text-white text-gray-900">Account Information</h2>
@@ -146,7 +147,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onLogout, onA
                 <p className="text-slate-400 dark:text-slate-400 text-gray-600 font-mono text-sm">{user.id}</p>
               </div>
             </div>
-          </div>
+          </MotionSurface>
 
           {/* MONETIZATION_DISABLED: Credits section commented out for deployment
           <div className="bg-slate-950 ...">
@@ -154,7 +155,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onLogout, onA
           </div>
           */}
 
-          <div className="bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-6">
+          <MotionSurface className="bg-slate-950 dark:bg-slate-950 bg-gray-50 border border-slate-800 dark:border-slate-800 border-gray-200 rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <LogOut className="w-5 h-5 text-indigo-400 dark:text-indigo-400 text-indigo-600" />
               <h2 className="text-lg font-semibold text-white dark:text-white text-gray-900">Session</h2>
@@ -166,9 +167,9 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onLogout, onA
               <LogOut className="w-4 h-4" />
               Log out
             </button>
-          </div>
+          </MotionSurface>
 
-          <div className="bg-red-600/10 dark:bg-red-600/10 bg-red-50 border border-red-500/20 dark:border-red-500/20 border-red-200 rounded-2xl p-6">
+          <MotionSurface className="bg-red-600/10 dark:bg-red-600/10 bg-red-50 border border-red-500/20 dark:border-red-500/20 border-red-200 rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <AlertTriangle className="w-5 h-5 text-red-400 dark:text-red-400 text-red-600" />
               <h2 className="text-lg font-semibold text-white dark:text-white text-gray-900">Danger Zone</h2>
@@ -184,9 +185,9 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onBack, onLogout, onA
               <Trash2 className="w-4 h-4" />
               {isDeleting ? 'Deleting...' : 'Delete Account'}
             </button>
-          </div>
+          </MotionSurface>
         </div>
-      </div>
+      </MotionSurface>
 
       {showDeleteConfirm && (
         <ConfirmationModal

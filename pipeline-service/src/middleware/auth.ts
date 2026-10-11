@@ -39,8 +39,11 @@ export const authMiddleware = createMiddleware(async (c, next) => {
       const secret = new TextEncoder().encode(jwtSecret);
       const { payload } = await jose.jwtVerify(token, secret, {
         algorithms: ['HS256'],
+        issuer: `${process.env.SUPABASE_URL}/auth/v1`,
+        audience: 'authenticated',
       });
 
+      if (!payload.sub || payload.role !== 'authenticated') return c.json({ error: 'User token required' }, 401);
       c.set('user', {
         sub: payload.sub as string,
         email: payload.email as string | undefined,
@@ -56,8 +59,9 @@ export const authMiddleware = createMiddleware(async (c, next) => {
   const jwks = getJWKS();
   if (jwks) {
     try {
-      const { payload } = await jose.jwtVerify(token, jwks);
+      const { payload } = await jose.jwtVerify(token, jwks, { issuer: `${process.env.SUPABASE_URL}/auth/v1`, audience: 'authenticated' });
 
+      if (!payload.sub || payload.role !== 'authenticated') return c.json({ error: 'User token required' }, 401);
       c.set('user', {
         sub: payload.sub as string,
         email: payload.email as string | undefined,

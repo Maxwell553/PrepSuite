@@ -1,3 +1,4 @@
+import { consumeLimit } from '../lib/sharedLimits.js';
 /**
  * In-memory rate limiting for pipeline endpoints.
  * Limits concurrent analyses and requests per time window per user.
@@ -63,6 +64,7 @@ export const analyzeRateLimitMiddleware = createMiddleware(async (c, next) => {
   const concurrentMax = ANALYZE_CONCURRENT_MAX;
   const windowMax = ANALYZE_WINDOW_MAX;
 
+  try { if (!await consumeLimit(`analysis:${userId}`,20,600)) return c.json({error:'Analysis limit reached. Try again later.'},429); } catch { return c.json({error:'Analysis temporarily unavailable'},503); }
   const limit = getOrCreateLimit(analyzeLimits, userId, ANALYZE_WINDOW_MS);
 
   if (limit.concurrent >= concurrentMax) {
@@ -96,6 +98,7 @@ export const chatRateLimitMiddleware = createMiddleware(async (c, next) => {
   const user = c.get('user');
   const userId = user.sub;
 
+  try { if (!await consumeLimit(`chat:${userId}`,10,60)) return c.json({error:'Chat limit reached. Try again shortly.'},429); } catch { return c.json({error:'Chat temporarily unavailable'},503); }
   const limit = getOrCreateLimit(chatLimits, userId, CHAT_WINDOW_MS);
 
   if (limit.windowCount >= CHAT_WINDOW_MAX) {

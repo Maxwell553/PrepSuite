@@ -1,4 +1,4 @@
-FROM node:22-slim AS builder
+FROM node:24-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY src/ ./src/
 COPY standard_rating_list.txt ./
 RUN npm run build
 
-FROM node:22-slim
+FROM node:24-slim
 RUN apt-get update && apt-get install -y stockfish && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json* ./

@@ -67,7 +67,7 @@ describe('fetchLichessGames', () => {
     const secondUrl = String(mockedFetch.mock.calls[1][0]);
     expect(firstUrl).not.toContain('until=');
     expect(secondUrl).toContain('until=');
-    expect(firstUrl).toContain('moves=false');
+    expect(firstUrl).toContain('moves=true');
   });
 
   it('calls onProgress callback', async () => {
@@ -91,4 +91,16 @@ describe('fetchLichessGames', () => {
     const result = await fetchLichessGames('testuser', 500);
     expect(result.totalFetched).toBe(0);
   });
+});
+
+it('fills 2500 unique games across dated pages',async()=>{
+ const games=Array.from({length:2600},(_,i)=>({id:`g${i}`,createdAt:100000-i}));
+ mockedFetch.mockImplementation(async url=>{
+  const params=new URL(String(url)).searchParams;
+  const until=Number(params.get('until')||Infinity),max=Number(params.get('max'));
+  return {ok:true,text:async()=>games.filter(g=>g.createdAt<=until).slice(0,max).map(g=>JSON.stringify(g)).join('\n')} as Response;
+ });
+ const result=await fetchLichessGames('test',2500);
+ expect(result.totalFetched).toBe(2500);
+ expect(new Set(result.ndjson.split('\n').map(line=>JSON.parse(line).id)).size).toBe(2500);
 });

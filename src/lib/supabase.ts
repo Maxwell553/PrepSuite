@@ -14,14 +14,23 @@ export const supabase = createClient(
     config.supabaseAnonKey,
     {
         auth: {
-            detectSessionInUrl: true,
+            detectSessionInUrl: isSupabaseConfigured(),
+            persistSession: isSupabaseConfigured(),
+            autoRefreshToken: isSupabaseConfigured(),
             flowType: 'pkce',
         },
     }
 );
 
+export function requireAuthConfiguration() {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Sign-in is not configured on this installation. Please contact the site owner.');
+    }
+}
+
 export const authActions = {
     async signInWithEmail(email: string) {
+        requireAuthConfiguration();
         const { error } = await supabase.auth.signInWithOtp({
             email,
             options: {
@@ -31,6 +40,7 @@ export const authActions = {
         if (error) throw error;
     },
     async signInWithPassword(email: string, pass: string) {
+        requireAuthConfiguration();
         const res = await supabase.auth.signInWithPassword({
             email,
             password: pass,
@@ -39,6 +49,7 @@ export const authActions = {
         return res;
     },
     async signUp(email: string, pass: string) {
+        requireAuthConfiguration();
         const res = await supabase.auth.signUp({
             email,
             password: pass,
@@ -50,6 +61,7 @@ export const authActions = {
         return res;
     },
     async signInWithGoogle() {
+        requireAuthConfiguration();
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {

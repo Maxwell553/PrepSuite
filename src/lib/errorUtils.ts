@@ -16,6 +16,8 @@ export function getUserFriendlyError(error: unknown, context?: ErrorContext): st
     const message = error.message.toLowerCase();
     const operation = context?.operation || 'operation';
 
+    if (message.includes('not configured on this installation')) return error.message;
+
     // Abort/timeout (e.g. AbortSignal.timeout, user abort)
     if (error.name === 'AbortError' || message.includes('aborted')) {
       return `Request timed out. The ${operation} is taking longer than expected. Please try again with fewer games.`;

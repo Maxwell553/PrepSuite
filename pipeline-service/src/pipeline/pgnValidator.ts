@@ -145,7 +145,8 @@ export async function validateAndRefetchPgn(
     await Promise.all(
       batch.map(async (g) => {
         let pgn: string | null = null;
-        if (g.source === 'chess.com' && chessComUsername) {
+        // Already downloaded invalid notation cannot be repaired by re-reading the same archive.
+        if (g.source === 'chess.com' && chessComUsername && !g.pgn?.trim()) {
           pgn = await refetchChessComPgn(chessComUsername, g.id, g.playedAt);
         }
         if (pgn && isValidPgn(pgn)) {

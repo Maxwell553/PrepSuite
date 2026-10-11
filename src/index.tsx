@@ -1,13 +1,16 @@
 
 import React from 'react';
+import { MotionConfig } from 'motion/react';
+import './components/motion-system.css';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import { initSentry } from './lib/sentry';
 import './index.css';
+import './components/neutral-theme.css';
 
 // Initialize Sentry before rendering the app
-initSentry();
+void initSentry().catch(() => { /* Monitoring must not block application startup. */ });
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -18,7 +21,7 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-    <App />
+    <MotionConfig reducedMotion="user" transition={{type:"spring",stiffness:300,damping:28}}><App /></MotionConfig>
     </ErrorBoundary>
   </React.StrictMode>
 );

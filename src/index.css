@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
-/* Inter as primary sans font - used by font-sans and body */
+/* Google Fonts hosted typography, shared by the landing page and workspace. */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-sans: "TASA Orbiter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
 /* Use .dark class instead of prefers-color-scheme - app is always dark regardless of system setting */
@@ -60,7 +61,7 @@ body {
 }
 
 .font-serif {
-    font-family: 'Playfair Display', serif;
+    font-family: var(--font-sans);
 }
 
 /* Smooth scroll animations */
@@ -310,7 +311,7 @@ body {
 
 /* Print styles for PDF export */
 @media print {
-    nav, header, aside, .print\\:hidden, [role="navigation"], button.print\\:hidden {
+    nav, header, aside, .print\:hidden, [role="navigation"], button.print\:hidden {
         display: none !important;
     }
     body, #root {
@@ -338,7 +339,7 @@ body {
 /* PDF export capture mode — hide interactive elements during html-to-image */
 .pdf-export-active #chat-section,
 .pdf-export-active [data-practice-opponent],
-.pdf-export-active .print\\:hidden {
+.pdf-export-active .print\:hidden {
     display: none !important;
 }
 /* Hide action buttons but keep content buttons (game rows etc.) via data-pdf-include */
@@ -348,3 +349,35 @@ body {
 .pdf-export-active .recharts-tooltip-wrapper {
     display: none !important;
 }
+:root { font-family: 'TASA Orbiter', sans-serif; }
+body { font-family: 'TASA Orbiter', sans-serif; }
+h1,h2,h3 { font-family: 'TASA Orbiter', sans-serif; }
+:focus-visible { outline: 2px solid #b7a5ff; outline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+
+/* Motion.dev-inspired typography, shared by every route and portal. */
+:root{--font-display:'TASA Orbiter',sans-serif;--font-body:'TASA Orbiter',sans-serif;--font-code:'Geist Mono',ui-monospace,monospace;}
+body,button,input,textarea,select{font-family:var(--font-body);}
+h1,h2,h3,h4,h5,h6,.font-serif{font-family:var(--font-display);}
+code,pre,kbd,samp,.font-mono{font-family:var(--font-code);}
+.prep-brand-lockup{display:inline-flex;align-items:center;gap:9px;white-space:nowrap;line-height:1;}
+.prep-brand-lockup>img{display:block;flex:none;width:36px;height:36px;}
+.prep-brand-name{font-family:'TASA Orbiter',sans-serif;font-size:27px;font-weight:750;letter-spacing:-1.2px;color:#f7f4ff;}
+.prep-brand-domain{font-weight:500;color:#c3b3df;}
+@media(max-width:480px){.prep-brand-lockup{gap:7px;}.prep-brand-lockup>img{width:30px;height:30px;}.prep-brand-name{font-size:23px;}}
+
+/* Fixed export typography avoids remote font stylesheet access and stays legible offline. */
+.pdf-export-active, .pdf-export-active *, .prep-round-sheet, .prep-round-sheet * {
+  font-family: Arial, Helvetica, sans-serif !important;
+  animation: none !important; transition: none !important;
+}
+.pdf-export-active [data-pdf-section] {opacity:1!important; transform:none!important;}
+.pdf-export-active [data-pdf-section] .prep-motion-surface {opacity:1!important; transform:none!important;}
+.pdf-export-active .prep-preparation-filters {display:none!important;}
+.prep-round-sheet {position:fixed;left:-12000px;top:0;width:760px;box-sizing:border-box;padding:32px;background:white;color:#182038;z-index:-1;}
+.prep-round-sheet h1 {font-size:30px;line-height:1.15;margin:12px 0;overflow-wrap:anywhere;color:#182038;}
+#root #report-pdf-root .prep-round-sheet h2 {font-size:20px;line-height:1.25;margin:0 0 12px;color:#182038;}
+.prep-round-sheet p {font-size:14px;line-height:1.55;margin:8px 0;overflow-wrap:anywhere;}
+.prep-round-sheet article {border:1px solid #cbd0dd;border-left:4px solid #7560b4;border-radius:8px;padding:18px;margin:16px 0;}
+.prep-round-sheet .sheet-label {color:#655099;font-size:12px;letter-spacing:1px;text-transform:uppercase;font-weight:bold;}
+.prep-round-sheet footer {border-top:1px solid #cbd0dd;margin-top:24px;padding-top:12px;}

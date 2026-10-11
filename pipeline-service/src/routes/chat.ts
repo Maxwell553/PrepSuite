@@ -1,3 +1,6 @@
+import { checkModelResponse, ModelResponseError } from '../lib/modelResponse.js';
+import { workSignal } from '../lib/workContext.js';
+import { models, modelChain, fastThinkingConfig } from '../lib/models.js';
 /**
  * POST /api/chat — Follow-up chat about a scouting report.
  * Supports conversation history, memory, and tools (get_game, get_pgn, run_stockfish).
@@ -12,13 +15,8 @@ import { validateChatRequest } from '../lib/validation.js';
 import type { ChatContext } from '../lib/types.js';
 import { getGame, getPgn, runStockfish, getOpeningBreakdown, lookupOpening } from '../lib/chatTools.js';
 
-/** Same model chain as report analysis: pro → flash-lite → 2.5-pro → 2.5-flash */
-const GEMINI_CHAT_MODELS = [
-  'gemini-3.1-pro-preview',
-  'gemini-3.1-flash-lite-preview',
-  'gemini-2.5-pro',
-  'gemini-2.5-flash',
-] as const;
+/** Same model chain as report analysis: configured primary → fallback */
+const GEMINI_CHAT_MODELS = modelChain(models.analysis);
 const GEMINI_TIMEOUT_MS = 90_000;
 const MAX_TOOL_ROUNDS = 10;
 /** Limit get_opening_breakdown to prevent model from drilling every variation instead of synthesizing */
@@ -26,7 +24,7 @@ const MAX_OPENING_BREAKDOWN_PER_REQUEST = 2;
 
 /** Fall back to next model on 400/404/501/429 (model/request/rate-limit issues) or when error suggests model problem */
 function shouldTryNextModel(status: number, errorText: string): boolean {
-  if (status === 404 || status === 501 || status === 429) return true;
+  if (status === 404 || status === 410 || status >= 500 || status === 429) return true;
   if (status === 400) return true; // includes thought_signature errors on Gemini 3
   if (/model|not found|unavailable|not supported|resource exhausted|thought_signature/i.test(errorText)) return true;
   return false;
@@ -331,7 +329,6 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
     tools: [CHAT_TOOLS],
     generationConfig: {
       maxOutputTokens: 16384,
-      temperature: 0.7,
     },
   };
 
@@ -369,8 +366,8 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${accessToken}`,
               },
-              body: JSON.stringify(requestBody),
-              signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+              body: JSON.stringify({ ...requestBody, generationConfig: { ...(requestBody.generationConfig as Record<string, unknown>), ...fastThinkingConfig(model) } }),
+              signal: workSignal(GEMINI_TIMEOUT_MS),
             });
 
             if (res.status === 401 && authRetries < MAX_AUTH_RETRIES) {
@@ -402,29 +399,7 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
 
           // Tool-calling loop
           while (round < MAX_TOOL_ROUNDS) {
-            const candidate = data.candidates?.[0];
-            const parts = candidate?.content?.parts || [];
-            let text = '';
-            /** All function calls from model — Gemini 3 can return multiple in one turn */
-            const functionCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
-            /** Parts from model that contain functionCall — must be passed through with thought_signature for Gemini 3 */
-            const modelPartsWithFc: Array<Record<string, unknown>> = [];
-
-            logger.debug(
-              { requestId, round, partCount: parts.length, finishReason: candidate?.finishReason },
-              '[Chat] Gemini response received',
-            );
-
-            for (const part of parts) {
-              if (part.text) text += part.text;
-              const fc = part.functionCall ?? part.function_call;
-              if (fc) {
-                const parsed = fc as { name: string; args: Record<string, unknown> };
-                functionCalls.push(parsed);
-                // Preserve full part (including thought_signature/thoughtSignature) for Gemini 3
-                modelPartsWithFc.push({ ...part } as Record<string, unknown>);
-              }
-            }
+            let { text, functionCalls, modelPartsWithFc } = checkModelResponse(data, { requestId, model, channel: 'repertoire', round });
 
             if (functionCalls.length > 0) {
               // Execute all function calls and build one functionResponse per call (required for Gemini 3 parallel calls)
@@ -468,14 +443,15 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${await getAccessToken()}`,
                 },
-                body: JSON.stringify(requestBody),
-                signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+                body: JSON.stringify({ ...requestBody, generationConfig: { ...(requestBody.generationConfig as Record<string, unknown>), ...fastThinkingConfig(model) } }),
+                signal: workSignal(GEMINI_TIMEOUT_MS),
               });
 
               if (!res.ok) {
                 const errorText = await res.text().catch(() => '');
                 lastError = `Vertex AI ${model}: ${res.status} - ${errorText.slice(0, 150)}`;
                 logger.error({ requestId, model, status: res.status, errorText }, '[Chat] Tool-round API error');
+                if (shouldTryNextModel(res.status, errorText) && i < GEMINI_CHAT_MODELS.length - 1) throw new Error(`Model unavailable: ${res.status}`);
                 sse.sendError({ error: `AI service error: ${res.status}` });
                 return;
               }
@@ -484,19 +460,6 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
               continue;
             }
 
-            if (!text) {
-              logger.warn(
-                { requestId, round, parts: JSON.stringify(parts).slice(0, 500), candidate: JSON.stringify(candidate).slice(0, 300) },
-                '[Chat] AI returned empty text',
-              );
-              sse.sendError({ error: 'AI returned empty response' });
-              return;
-            }
-
-            logger.info(
-              { requestId, textLength: text.length, textPreview: text.slice(0, 150) },
-              '[Chat] Final response ready',
-            );
             text = text.replace(/\*\*/g, '');
             sse.sendEvent('chat_text', { text });
             return;
@@ -506,6 +469,15 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
           sse.sendError({ error: 'AI exceeded maximum tool rounds' });
           return;
         } catch (err: unknown) {
+          if (err instanceof ModelResponseError) {
+            if (!err.blocked && i < GEMINI_CHAT_MODELS.length - 1) {
+              contents.splice(0, contents.length, ...buildContents(apiMessages));
+              requestBody.contents = contents;
+              continue;
+            }
+            sse.sendError({ error: err.blocked ? 'The response was blocked. Please rephrase your question.' : 'The response did not pass validation. Please try again.' });
+            return;
+          }
           const errObj = err as { name?: string; message?: string };
           lastError = errObj.message ?? String(err);
           if (errObj.name === 'AbortError' || errObj.name === 'TimeoutError') {
@@ -515,6 +487,8 @@ chatRoute.post('/chat', chatRateLimitMiddleware, async (c) => {
           }
           if (i < GEMINI_CHAT_MODELS.length - 1 && /404|501|model|not found|thought_signature/i.test(errObj.message ?? '')) {
             logger.warn({ requestId, model, err: errObj.message, nextModel: GEMINI_CHAT_MODELS[i + 1] }, '[Chat] Model failed, trying next');
+            contents.splice(0, contents.length, ...buildContents(apiMessages));
+            requestBody.contents = contents;
             continue;
           }
           logger.error({ requestId, model, err }, '[Chat] Error');

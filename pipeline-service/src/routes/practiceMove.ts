@@ -1,12 +1,12 @@
+import {chatRateLimitMiddleware} from '../middleware/rateLimit.js';
 /**
- * POST /api/practice-move — Get AI move that mimics opponent's playing style.
+ * POST /api/practice-move — Rehearse known repertoire, then continue with Stockfish.
  * Premium feature: uses report data to suggest moves fitting the opponent's repertoire.
  */
 
 import { Hono } from 'hono';
 import { Chess } from 'chess.js';
 import { logger } from '../lib/logger.js';
-import { getAccessToken, getVertexUrl } from '../lib/vertexAuth.js';
 import { evaluateFen } from '../lib/stockfishEval.js';
 import type { OpeningStat } from '../lib/types.js';
 
@@ -27,8 +27,6 @@ interface PracticeReport {
   mostPlayedLines?: { white?: MoveSequence[]; black?: MoveSequence[] };
 }
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
-const GEMINI_TIMEOUT_MS = 15_000;
 
 /** Normalize SAN for comparison: castling 0-0↔O-O, strip annotations, lowercase */
 function normalizeSan(s: string): string {
@@ -55,7 +53,7 @@ function tryRepertoireMove(
   lines: MoveSequence[],
   history: string[],
   side: 'white' | 'black',
-): { from: string; to: string; san: string } | null {
+): { from: string; to: string; san: string; promotion?: string } | null {
   const legalMoves = chess.moves({ verbose: true });
   if (legalMoves.length === 0) return null;
 
@@ -133,7 +131,7 @@ function tryRepertoireMove(
     }
     if (move) {
       logger.info({ nextSan }, '[PracticeMove] Using repertoire move');
-      return { from: move.from, to: move.to, san: move.san };
+      return { from: move.from, to: move.to, san: move.san, promotion: move.promotion };
     }
   }
 
@@ -148,7 +146,7 @@ function tryRepertoireMove(
 
 export const practiceMoveRoute = new Hono();
 
-practiceMoveRoute.post('/practice-move', async (c) => {
+practiceMoveRoute.post('/practice-move', chatRateLimitMiddleware, async (c) => {
   let body: unknown;
   try {
     body = await c.req.json();
@@ -205,7 +203,7 @@ practiceMoveRoute.post('/practice-move', async (c) => {
   const linesForSide = side === 'white' ? (report.mostPlayedLines?.white || []) : (report.mostPlayedLines?.black || []);
   const repertoireMove = linesForSide.length > 0 ? tryRepertoireMove(chess, linesForSide, history, side) : null;
   if (repertoireMove) {
-    return c.json({ move: repertoireMove.from + repertoireMove.to, san: repertoireMove.san });
+    return c.json({ move: repertoireMove.from + repertoireMove.to + (repertoireMove.promotion || ''), san: repertoireMove.san, source: 'repertoire' });
   }
 
   logger.info(
@@ -234,7 +232,7 @@ practiceMoveRoute.post('/practice-move', async (c) => {
       );
       if (move) {
         logger.info({ rating, stockfishDepth, bestMove: sfResult.bestMove }, '[PracticeMove] Using Stockfish (repertoire exhausted)');
-        return c.json({ move: from + to, san: move.san });
+        return c.json({ move: from + to + (move.promotion || ''), san: move.san, source: 'engine' });
       }
       logger.warn({ bestMove: sfResult.bestMove }, '[PracticeMove] Stockfish bestMove not in legal moves');
     } else {
@@ -244,104 +242,5 @@ practiceMoveRoute.post('/practice-move', async (c) => {
     logger.warn({ err, message: err instanceof Error ? err.message : String(err) }, '[PracticeMove] Stockfish failed');
   }
 
-  const summary = report.strategicSummary || '';
-  const whiteOps = (report.whiteOpenings || []).slice(0, 5).map((o: { name?: string }) => o.name).join(', ');
-  const blackOps = (report.blackDefenses || []).slice(0, 5).map((o: { name?: string }) => o.name).join(', ');
-  const weaknesses = (report.weaknesses || []).join('; ');
-  const recommendation = report.tacticalRecommendation || '';
-  // Format most-played lines for the prompt (reuse linesForSide from above)
-  const linesText = linesForSide
-    .slice(0, 8)
-    .map((seq: MoveSequence) => seq.notation || (seq.moves || []).join(' '))
-    .filter(Boolean)
-    .join('\n  - ');
-
-  logger.info('[PracticeMove] Falling back to Gemini');
-
-  const prompt = `You are simulating a chess opponent named "${report.player?.name || 'Opponent'}" (approx ${rating} Elo). Choose the ONE move they would most likely play based on their repertoire, most-played lines, and style.
-
-OPPONENT PROFILE:
-- Strategic summary: ${summary}
-- White openings: ${whiteOps}
-- Black defenses: ${blackOps}
-- Weaknesses: ${weaknesses}
-- Tactical recommendation: ${recommendation}
-
-MOST-PLAYED LINES (as ${side}):
-${linesText ? `  - ${linesText}` : '  (none)'}
-
-PRIORITY: Prefer moves that continue or transpose into these lines. Match their opening choices and typical responses. Play at a level consistent with their rating.
-
-CURRENT POSITION (FEN): ${fen}
-It is ${side}'s turn to move.
-
-Respond with ONLY the move in UCI format (e.g. e2e4, g8f6, e7e5). No explanation. One move only.`;
-
-  try {
-    const token = await getAccessToken();
-    const url = getVertexUrl(GEMINI_MODEL);
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          maxOutputTokens: 10,
-          temperature: 0.3,
-        },
-      }),
-      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      logger.warn({ status: res.status, errText }, '[PracticeMove] Gemini failed');
-      throw new Error(`Gemini error: ${res.status}`);
-    }
-
-    const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[] };
-    const candidate = data.candidates?.[0];
-    const parts = candidate?.content?.parts || [];
-    let text = '';
-    for (const part of parts) {
-      if (part.text) text += part.text;
-    }
-    text = text.trim();
-    // Extract UCI move (e.g. e7e5 or e7e8q) - allow promotion suffix
-    const moveMatch = text.match(/[a-h][1-8][a-h][1-8][qrbn]?/);
-    const moveText = moveMatch ? moveMatch[0] : text.replace(/[^a-h0-8qrbn]/gi, '').slice(0, 5);
-    logger.info(
-      { rawText: text?.slice(0, 80), moveText, len: moveText.length, finishReason: candidate?.finishReason },
-      '[PracticeMove] Gemini response',
-    );
-    if (moveText.length < 4) {
-      logger.warn(
-        { rawText: text, partsCount: parts.length, candidate: JSON.stringify(candidate).slice(0, 200) },
-        '[PracticeMove] Gemini response too short or no move found, using first legal move',
-      );
-      const fallback = moves[0];
-      return c.json({ move: fallback.from + fallback.to, san: fallback.san });
-    }
-
-    const from = moveText.slice(0, 2);
-    const to = moveText.slice(2, 4);
-    const promo = moveText.length >= 5 ? moveText[4].toLowerCase() : undefined;
-    const move = chess.moves({ verbose: true }).find(
-      (m) => m.from === from && m.to === to && (!promo || m.promotion === promo)
-    );
-    if (move) {
-      logger.info({ move: from + to, san: move.san }, '[PracticeMove] Using Gemini move');
-      return c.json({ move: from + to, san: move.san });
-    }
-    logger.warn({ moveText, from, to }, '[PracticeMove] Gemini move not legal');
-  } catch (err) {
-    logger.warn({ err, message: err instanceof Error ? err.message : String(err) }, '[PracticeMove] Gemini failed');
-  }
-
-  const fallback = moves[0];
-  logger.info({ fallbackMove: fallback.from + fallback.to, san: fallback.san }, '[PracticeMove] Using first legal move (all methods exhausted)');
-  return c.json({ move: fallback.from + fallback.to, san: fallback.san });
+  return c.json({error: 'The practice engine is temporarily unavailable. Please retry.'},503);
 });

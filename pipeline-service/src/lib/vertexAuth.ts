@@ -8,8 +8,8 @@
  *
  * Environment variables:
  *   VERTEX_PROJECT_ID  – GCP project ID (required)
- *   VERTEX_LOCATION    – GCP region (default: us-central1). Use "global" for Gemini 3
- *                        preview models, or leave unset—gemini-3-*-preview auto-uses global.
+ *   VERTEX_LOCATION    – GCP region (default: us-central1). Gemini 3 models, including
+ *                        gemini-3.8-flash, auto-use the global endpoint.
  */
 
 import { GoogleAuth } from 'google-auth-library';
@@ -60,8 +60,8 @@ export async function getAccessToken(): Promise<string> {
 /**
  * Build the Vertex AI generateContent URL for a given model.
  *
- * Gemini 3 preview models (gemini-3-pro-preview, gemini-3-flash-preview, etc.)
- * are only available on the global endpoint. Other models work on regional endpoints.
+ * Gemini 3 models (gemini-3.8-flash, gemini-3.1-pro-preview, and other gemini-3*)
+ * are only available on the global endpoint. Older models use the regional endpoint.
  */
 export function getVertexUrl(model: string): string {
     const projectId = process.env.VERTEX_PROJECT_ID;
@@ -71,8 +71,8 @@ export function getVertexUrl(model: string): string {
         throw new Error('VERTEX_PROJECT_ID environment variable is required');
     }
 
-    // Gemini 3.x preview models (e.g. gemini-3.1-flash-lite-preview) require the global endpoint
-    const useGlobal = configuredLocation === 'global' || /^gemini-3(\.\d+)?-.*-preview$/.test(model);
+    // Gemini 3 models are published on global (and us/eu), not us-central1.
+    const useGlobal = configuredLocation === 'global' || /^gemini-3(\.\d+)?-/.test(model);
     const location = useGlobal ? 'global' : configuredLocation;
     const host =
         location === 'global'

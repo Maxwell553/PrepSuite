@@ -11,7 +11,7 @@ import type {
   GameData,
 } from '../lib/types.js';
 import { parsePGNMoves } from './moveSequenceExtractor.js';
-import { aggregateOpeningsBySource } from './statsAggregator.js';
+import { aggregateOpeningsBySource, normalizeTargetGames } from './statsAggregator.js';
 import { computeTimeManagementStats } from './timeManagementAggregator.js';
 import { enrichChessComGamesFromPgn } from './gameParser.js';
 
@@ -171,14 +171,14 @@ export function postProcessReport(
   reportData.mostPlayedLines = moveSequences || { white: [], black: [] };
 
   // Set defaults for empty string fields
-  reportData.strategicSummary = reportData.strategicSummary || 'Analysis pending...';
-  reportData.blackStrategicSummary = reportData.blackStrategicSummary || 'Detailed analysis of black repertoire pending...';
-  reportData.tacticalProfile = reportData.tacticalProfile || 'Analysis pending...';
-  reportData.endgameReliability = reportData.endgameReliability || 'Analysis pending...';
-  reportData.timeControlInsights = reportData.timeControlInsights || 'Analysis pending...';
-  reportData.specificVulnerability = reportData.specificVulnerability || 'Analysis pending...';
-  reportData.tacticalRecommendation = reportData.tacticalRecommendation || 'Analysis pending...';
-  reportData.preparationSummary = reportData.preparationSummary || 'Detailed analysis of white repertoire pending...';
+  reportData.strategicSummary = reportData.strategicSummary || 'Not evaluated in this report.';
+  reportData.blackStrategicSummary = reportData.blackStrategicSummary || 'Explore the opening results and supporting games below.';
+  reportData.tacticalProfile = reportData.tacticalProfile || 'Not evaluated in this report.';
+  reportData.endgameReliability = reportData.endgameReliability || 'Not evaluated in this report.';
+  reportData.timeControlInsights = reportData.timeControlInsights || 'Not evaluated in this report.';
+  reportData.specificVulnerability = reportData.specificVulnerability || 'Not evaluated in this report.';
+  reportData.tacticalRecommendation = reportData.tacticalRecommendation || 'Not evaluated in this report.';
+  reportData.preparationSummary = reportData.preparationSummary || 'Explore the opening results and supporting games below.';
   reportData.repertoireReliability = reportData.repertoireReliability || 0;
 
   // Set timestamp
@@ -210,7 +210,7 @@ export function postProcessReport(
   {
     enrichChessComGamesFromPgn(allGames);
     const onlineUsername = resolveTargetUsernameForOnline(allGames, identity, actualUsername);
-    const tm = computeTimeManagementStats(allGames, onlineUsername || actualUsername || '');
+    const tm = computeTimeManagementStats(normalizeTargetGames(allGames, targetNames, '__target__'), '__target__');
     if (tm) {
       reportData.timeManagement = tm;
     }

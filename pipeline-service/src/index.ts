@@ -1,11 +1,10 @@
-import { config } from 'dotenv';
+import './lib/environment.js';
+import { jobsRoute, startJobWorker } from './routes/jobs.js';
 import dns from 'node:dns';
 
 // Prefer IPv4 for outbound fetches (avoids "fetch failed" in dev when IPv6 is flaky)
 dns.setDefaultResultOrder('ipv4first');
 
-config(); // load .env
-config({ path: '.env.local' }); // override with .env.local if present
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
@@ -23,6 +22,7 @@ import { logger } from './lib/logger.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
+if(process.env.BILLING_ENABLED==='true'&&process.env.JOBS_ENABLED!=='true')throw new Error('Billing requires the durable worker for reservation recovery');
 const app = new Hono();
 
 // Global middleware
@@ -31,7 +31,7 @@ app.use('*', corsMiddleware);
 
 // Public routes
 app.route('/health', healthRoute);
-app.route('/', fideRatingHistoryRoute); // /fide-rating-history/:fideId — public (FIDE data from ChessTools)
+app.route('/', fideRatingHistoryRoute); // /fide-rating-history/:fideId — public (published FIDE rating history)
 
 // Guest analyze (no auth, rate-limited, 500-game cap)
 app.route('/api', analyzeGuestRoute);
@@ -39,6 +39,7 @@ app.route('/api', analyzeGuestRoute);
 // Protected routes
 app.use('/api/*', authMiddleware);
 app.route('/api', analyzeRoute);
+app.route('/api', jobsRoute);
 app.route('/api', chatRoute);
 app.route('/api', supportChatRoute);
 app.route('/api', practiceMoveRoute);
@@ -138,6 +139,8 @@ if (fs.existsSync(frontendDir)) {
   logger.warn({ frontendDir }, 'Frontend dist/ not found — run "npm run build" in project root');
 }
 
+startJobWorker();
+
 const port = parseInt(process.env.PORT || '8080', 10);
 
 // Pre-warm Vertex AI access token so the first analyze request doesn't incur ~10s token fetch.
@@ -153,7 +156,7 @@ void (async () => {
   }
 })();
 
-serve({ fetch: app.fetch, port }, () => {
+serve({ fetch: app.fetch, port, hostname: process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1') }, () => {
   logger.info({ port }, 'Pipeline service started');
 });
 

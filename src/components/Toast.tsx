@@ -1,3 +1,4 @@
+import MotionSurface from './MotionSurface';
 import React, { useEffect } from 'react';
 import { CheckCircle, XCircle, X } from 'lucide-react';
 
@@ -20,7 +21,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose, duration = 3000 }
     }, [duration, onClose]);
 
     return (
-        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
+        <MotionSurface role={type === 'error' ? 'alert' : 'status'} className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
             <div className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border backdrop-blur-md ${type === 'success'
                     ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-100'
                     : 'bg-red-500/10 border-red-500/20 text-red-100'
@@ -35,6 +36,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose, duration = 3000 }
 
                 <button
                     onClick={onClose}
+                    aria-label="Dismiss notification"
                     className={`p-1 rounded-lg transition-colors ${type === 'success'
                             ? 'hover:bg-emerald-500/20 text-emerald-400'
                             : 'hover:bg-red-500/20 text-red-400'
@@ -43,7 +45,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose, duration = 3000 }
                     <X className="w-4 h-4" />
                 </button>
             </div>
-        </div>
+        </MotionSurface>
     );
 };
 

@@ -91,10 +91,10 @@ describe('buildReportPrompt', () => {
     });
 
     expect(prompt).toContain('Test Player');
-    expect(prompt).toContain('AGGREGATED OPENING STATS');
+    expect(prompt).toContain('WHITE OPENINGS');
     expect(prompt).toContain('MOST PLAYED LINES');
-    expect(prompt).toContain('GAME METADATA SUMMARY');
-    expect(prompt).not.toContain('STOCKFISH ENGINE ANALYSIS');
+    expect(prompt).toContain('GAME METADATA');
+    expect(prompt).not.toContain('ENGINE ANALYSIS (Stockfish)');
   });
 
   it('builds prompt with missing FIDE profile', () => {
@@ -115,7 +115,8 @@ describe('buildReportPrompt', () => {
       targetUsername: 'testplayer',
     });
 
-    expect(prompt).toContain('Not found');
+    expect(prompt).not.toContain('undefined');
+    expect(prompt).toContain('Test Player');
   });
 
   it('builds prompt with engine analysis', () => {
@@ -148,7 +149,7 @@ describe('buildReportPrompt', () => {
       targetUsername: 'testplayer',
     });
 
-    expect(prompt).toContain('STOCKFISH ENGINE ANALYSIS');
+    expect(prompt).toContain('ENGINE ANALYSIS (Stockfish)');
   });
 
   it('builds prompt with empty engine analysis', () => {
@@ -166,7 +167,7 @@ describe('buildReportPrompt', () => {
       targetUsername: 'testplayer',
     });
 
-    expect(prompt).not.toContain('STOCKFISH ENGINE ANALYSIS');
+    expect(prompt).not.toContain('ENGINE ANALYSIS (Stockfish)');
   });
 });
 

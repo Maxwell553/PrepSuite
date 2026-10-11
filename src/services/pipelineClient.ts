@@ -4,7 +4,7 @@
  * Adds Sentry breadcrumbs for pipeline phase transitions.
  */
 
-import * as Sentry from '@sentry/react';
+import {addBreadcrumb} from '../lib/sentry';
 import type { ScoutingReport, PlayerMetadata, OpeningStat, MoveSequence } from '../types';
 
 export interface PipelineParams {
@@ -68,18 +68,7 @@ export interface ParsingEventData {
   whiteOpenings?: OpeningStat[];
   blackDefenses?: OpeningStat[];
   mostPlayedLines?: { white: MoveSequence[]; black: MoveSequence[] };
-  games?: Array<{
-    id?: string;
-    white: string;
-    black: string;
-    result: string;
-    eco: string;
-    pgn?: string;
-    playedAt: string;
-    source?: string;
-    timeControl?: string;
-    openingName?: string;
-  }>;
+  games?: import('../types').GameData[];
 }
 
 export interface PipelineCallbacks {
@@ -101,7 +90,7 @@ export interface PipelineCallbacks {
  * Run the pipeline via the Cloud Run service.
  * Returns a promise that resolves with a complete ScoutingReport.
  */
-export async function runPipeline(
+async function runStreamingPipeline(
   params: PipelineParams,
   accessToken: string,
   callbacks: PipelineCallbacks = {},
@@ -171,7 +160,7 @@ export async function runPipeline(
             gamesAnalyzed: data.gamesAnalyzed as number | undefined,
             message: data.message as string | undefined,
           };
-          Sentry.addBreadcrumb({
+          addBreadcrumb({
             category: 'pipeline',
             message: `Pipeline ${phase}: ${status}`,
             data: { phase, status, durationMs, ...extra },
@@ -571,3 +560,31 @@ export async function supportChatWithPipeline(
   return readChatResponse(response);
 }
 
+
+export async function runPipeline(params: PipelineParams, accessToken:string, callbacks:PipelineCallbacks={}):Promise<PipelineResult>{
+  const base=import.meta.env.VITE_PIPELINE_SERVICE_URL||'';
+  const response=await fetch(`${base}/api/jobs`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${accessToken}`},body:JSON.stringify(params)});
+  if(response.status===501 || response.status===404)return runStreamingPipeline(params,accessToken,callbacks);
+  const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not start analysis');
+  return waitForJob(data.id,accessToken,callbacks);
+}
+function clearActiveJob(id:string) {
+  try {if(localStorage.getItem('prepsuite:active-job')===id)localStorage.removeItem('prepsuite:active-job');}catch { /* Storage may be disabled. */ }
+}
+export async function waitForJob(id:string,accessToken:string,callbacks:PipelineCallbacks={}, signal?:AbortSignal):Promise<PipelineResult>{
+ const base=import.meta.env.VITE_PIPELINE_SERVICE_URL||'';
+ // Stores only an opaque ID. The server checks report ownership on every request.
+ try {localStorage.setItem('prepsuite:active-job',id);} catch { /* Private browsing can disable storage. */ }
+ const started=Date.now();
+ while(Date.now()-started<15*60*1000){
+  signal?.throwIfAborted();
+  const res=await fetch(`${base}/api/jobs/${encodeURIComponent(id)}`,{headers:{Authorization:`Bearer ${accessToken}`},signal});
+  const job=await res.json();
+  if(!res.ok){if(res.status===404)clearActiveJob(id);throw new Error(job.error||'Could not read analysis');}
+  if(job.status==='complete'){clearActiveJob(id);return job.result;}
+  if(job.status==='failed'||job.status==='cancelled'){clearActiveJob(id);throw new Error(job.error||'Analysis cancelled');}
+  if(job.progress){const p=job.progress;callbacks.onPhase?.(p.phase,p.status||'progress',p.durationMs,{message:p.message});if(p.total)callbacks.onProgress?.(p.phase,p.current,p.total);}
+  await new Promise(resolve=>setTimeout(resolve,2000));
+ }
+ throw new Error('Analysis is still running. Reopen it from the resume banner.');
+}

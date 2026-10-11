@@ -19,9 +19,9 @@
 
 ## About PrepSuite
 
-PrepSuite is a full-stack chess opponent analysis platform used by **100+ competitive players** and growing. It aggregates player data across Chess.com, Lichess, FIDE, and USCF, then runs a multi-phase AI pipeline to produce detailed scouting reports — complete with opening repertoire breakdowns, time management patterns, strategic vulnerability analysis, and actionable game-day advice.
+PrepSuite combines public Chess.com, Lichess and over-the-board games into opponent preparation reports. Opening statistics and clock observations are calculated from game data; AI assists public identity discovery and on-demand chat. Historical results are not engine-confirmed weaknesses.
 
-Unlike existing tools that only cover one platform or one data source, PrepSuite is the first to **cross-reference online and over-the-board identities using AI** — resolving a FIDE-rated tournament player to their Chess.com and Lichess accounts automatically.
+Suggested online accounts must be reviewed against the intended player. Where available, reports retain discovery citations and distinguish supplied handles from discovered accounts.
 
 <p align="center">
   <img src="src/assets/landing/verified_profile_dashboard.png" alt="PrepSuite Report Dashboard" width="720">
@@ -31,7 +31,7 @@ Unlike existing tools that only cover one platform or one data source, PrepSuite
 
 - **Tournament prep in minutes, not hours.** Search any opponent by name and get a full scouting dossier — opening tendencies, clock habits, win/loss patterns — without manually digging through multiple websites.
 - **AI-powered identity resolution.** Enter a FIDE name and PrepSuite finds their Chess.com and Lichess accounts automatically using Google Gemini.
-- **Over-the-board + online data, unified.** The only tool that merges OTB tournament games (via FIDE/USCF) with online blitz, rapid, and bullet games into a single analysis.
+- **Over-the-board + online data, unified.** Combine available OTB tournament games with public online game histories, with separate source and color views.
 - **Exportable PDF reports.** Download a print-ready scouting report with charts, stats, and tactical summaries to bring to the tournament hall.
 
 ---
@@ -78,13 +78,11 @@ PrepSuite's analysis engine is a **multi-phase pipeline service** built on Node.
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Phase 4 — AI Report Generation                                    │
-│  • Aggregate all statistics into a structured prompt               │
-│  • Call Google Gemini (with multi-model fallback chain) to         │
-│    generate strategic insights, vulnerability analysis,            │
-│    and game-day recommendations                                    │
-│  • Generate time management advice from clock data                 │
-│  • Post-process and validate the AI output                         │
+│  Phase 4 — Evidence-based report                                   │
+│  • Assemble validated opening and game statistics                  │
+│  • Keep online and OTB results separate                            │
+│  • Present sampled historical scores with draw context             │
+│  • AI chat and engine evaluation are available on demand            │
 └────────────────────────────┬────────────────────────────────────────┘
                              │
                              ▼
@@ -125,14 +123,14 @@ PrepSuite's analysis engine is a **multi-phase pipeline service** built on Node.
 
 | Layer | Technologies |
 |---|---|
-| **Frontend** | React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4 |
-| **Backend (Pipeline)** | Node.js, Hono, Google Cloud Run |
+| **Frontend** | React 19, TypeScript, Vite 8, Tailwind CSS 4, Motion |
+| **Backend (Pipeline)** | Node.js 24, Hono, Google Cloud Run |
 | **AI** | Google Gemini (multi-model fallback chain) |
 | **Database & Auth** | Supabase (PostgreSQL + Row-Level Security + Auth) |
 | **Serverless** | Supabase Edge Functions (Deno) |
 | **Chess Logic** | chess.js (PGN parsing, move validation) |
 | **Visualization** | Recharts, react-chessboard |
-| **Testing** | Vitest (unit, 70%+ coverage), Playwright (E2E) |
+| **Testing** | Vitest, PGlite database regression tests, Playwright browser tests |
 | **Error Tracking** | Sentry |
 | **Deployment** | Vercel (frontend), Cloud Run (pipeline), Supabase (DB/auth/functions) |
 
@@ -215,10 +213,10 @@ prepsuite/
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 24+
 - npm
 - Supabase account
-- Google Gemini API key
+- Google Cloud project with Vertex AI enabled and Application Default Credentials
 
 ### Quick Start
 
@@ -237,7 +235,8 @@ cp .env.example .env.local
 # Set up and start the pipeline service
 cd pipeline-service
 cp .env.example .env
-# Edit .env with SUPABASE_JWT_SECRET, SUPABASE_URL, GEMINI_API_KEY
+# Edit .env with Supabase credentials and VERTEX_PROJECT_ID
+# Authenticate locally: gcloud auth application-default login
 npm install && npm run dev    # Runs on port 8080
 
 # In another terminal — start the frontend
@@ -313,3 +312,78 @@ This project is proprietary software. All rights reserved.
   <strong>Built for the chess community</strong><br>
   <a href="https://prepsuite.ai">prepsuite.ai</a>
 </p>
+
+
+## October 2026 implementation and rollout
+
+The landing page has one React implementation. The old HTML hero and asynchronous stylesheet swap were removed to prevent a different screen or unstyled content appearing on reload. TASA Orbiter and Geist Mono load from Google Fonts; Motion reveals respect reduced-motion preferences. The new layout includes direct username search, public samples, an explanation of the workflow, an FAQ, and forms that wait for authentication results.
+
+Reports now include a color-specific preparation panel, source/speed/date filters, supporting games, score including draws, sample-size labels, rating expectation when ratings are complete, and a one-page round sheet. Practice identifies recorded repertoire moves and Stockfish continuations; it no longer silently substitutes an arbitrary move. Engine output is not a calibrated simulation of an individual player.
+
+Performance changes include 30-row history pages with full reports loaded on selection, deferred PDF/board/practice code, shared parsed-game histories, and a byte-bounded public archive cache that coalesces concurrent fetches. Featured reports load summaries before game pages. Rebuild those artifacts using `npm run samples:build`. The Magnus snapshot's initial JSON is approximately 120 KiB instead of 6.5 MiB; full games download only when requested.
+
+### Models and validation
+
+Task-specific model IDs live in `pipeline-service/src/lib/models.ts` and have environment overrides. Discovery and analysis use `gemini-3.8-flash`; support and fallback use `gemini-3.5-flash-lite`. Retired 2.5 fallbacks are removed. This is a configuration policy, not evidence of availability or quality in a particular Vertex project. Before promoting an override, run the live, billable evaluation with configured ADC:
+
+```bash
+npm --prefix pipeline-service run eval:models -- gemini-3.8-flash gemini-3.5-flash-lite
+```
+
+The small evaluation set checks draw scoring and insufficient-data responses, and emits model, latency and token-usage records. Expand it with reviewed identity and chess-analysis cases before treating it as a comprehensive model quality benchmark. The ordinary report pipeline does not spend an LLM call generating hidden clock advice.
+
+Local checks:
+
+```bash
+npm ci
+npm --prefix pipeline-service ci
+npm run check
+npm run build
+npx playwright install chromium
+npm run test:e2e -- --project=chromium
+# Use installed Chrome if preferred:
+PLAYWRIGHT_CHROMIUM_CHANNEL=chrome npm run test:e2e -- --project=chromium
+```
+
+Database regression tests execute the new SQL in PGlite, including function privileges, duplicate purchase fulfillment, event ordering, shared limits, lease recovery and user isolation. These are local tests; they do not inspect or modify the production database. The Stripe function is also checked with Deno.
+
+### Required rollout order
+
+1. Back up the target database and apply the four `20261010000*` migrations to staging, then production. Credit RPCs become service-role-only; production request limits require the new RPC. The Stripe webhook update and its database functions must ship together. Confirm the existing Stripe endpoint subscribes to subscription created/updated/deleted and checkout completed/async-payment-succeeded events.
+2. Configure GitHub `staging` and `production` environments independently: `GCP_SA_KEY`, `GCP_PROJECT_ID`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY`; set the `CLOUD_RUN_SERVICE` environment variable. Cloud Build reads the existing `supabase-url`, `supabase-service-role-key`, and `supabase-jwt-secret` secrets in that GCP project. Separate projects should use separate secret values. Attach a service account with Vertex access. The deployment workflow runs frontend/backend checks before applying migrations and deploying the combined service.
+3. Verify sign-in, a real player search, history save/load, and test-mode Stripe event replay in staging. Live credentials and external-service end-to-end behavior are not validated by mocked/local tests.
+4. Enable durable analysis only after migration: set `JOBS_ENABLED=true`, use always-allocated CPU (`--no-cpu-throttling`), and set at least one minimum instance. Cloud Build accepts `_JOBS_ENABLED=true,_MIN_INSTANCES=1`. This has an idle compute cost. Authenticated searches then use the persistent job queue; existing SSE remains the fallback when jobs are explicitly disabled. Jobs retain results for seven days; browser report history persists separately. Guest previews continue to stream.
+5. Verify `TRUST_PROXY_HOPS` for the actual ingress chain. Local Node defaults to zero (ignore forwarded headers); the direct Cloud Run configuration uses one trusted hop. Recheck when adding an external load balancer or CDN. Production shared limits fail closed if storage is unavailable. Validate the configured proxy chain before promoting to production.
+
+Credits remain disabled for analysis by default, as in the existing product. An opt-in `BILLING_ENABLED=true` path reserves the maximum cost, settles actual usage, refunds failures, and recovers abandoned reservations through the durable worker. SQL tests cover these transactions. Do not enable charging without confirming pricing and testing the whole purchase/reservation flow in staging. No paid purchases, database migrations, cloud deployments, monitoring alerts, or live model evaluations are performed by `npm run check`. Operators still need to configure production alerts from request/phase/model-usage logs and verify the live rollout. No testimonials or adoption numbers were invented.
+
+Design references: [Motion reduced-motion support](https://motion.dev/docs/react-use-reduced-motion), [Fontsource DM Sans](https://fontsource.org/fonts/dm-sans), [Fontsource Space Grotesk](https://fontsource.org/fonts/space-grotesk). Operational references: [Stripe webhook delivery behavior](https://docs.stripe.com/webhooks), [Vite 8 migration](https://vite.dev/guide/migration).
+
+### Motion redesign and signed-in walkthrough (October 10)
+
+The landing hero now includes a Motion-powered chess scene with legal Italian Game and Queen's Gambit sequences, spring-driven piece movement and pointer tilt, animated orbital graphics, and manual playback controls. Animation pauses outside the viewport and respects reduced motion. The authenticated workspace uses the same Google-hosted TASA Orbiter / Geist Mono typography and logo-matched purple palette with animated navigation. A clean transparent SVG shield and live wordmark replace the raster logo; the favicon uses the same shield; the illustrative board uses opaque, custom SVG pieces with contrasting outlines rather than Unicode chess glyphs.
+
+The local sign-in failure was caused by an empty `.env.local`, which let placeholder Supabase configuration reach the network. Real public client configuration was restored locally; missing configuration now produces an actionable error before credentials are sent. Do not commit `.env.local`. `PIPELINE_PROXY_TARGET` can point local development at a trusted existing backend; signed-in writes then affect that backend's real database.
+
+The interactive walkthrough also fixed invisible pipeline errors after report navigation, duplicate player persistence, practice retry loops and stale responses after reset, mobile practice sizing, and dialog/chat accessibility. Recorded practice lines now work without an authenticated engine call; leaving the recorded repertoire requires the backend engine.
+
+Validation evidence:
+
+- TypeScript checks, production frontend/backend builds, 64 frontend unit tests and 282 backend/database tests passed.
+- Browser coverage includes authentication success/failure/reload/logout, account-deletion cancellation, search validation and game limits, streaming and queued analysis, report save, visible pipeline failures, offline recovery, all eight sample routes, preparation filters, PDFs, games and playback, recorded-line practice, mobile sizing, reduced motion, legal navigation, and chat success/failure recovery. Supabase writes in automated browser tests are intercepted.
+- Using the existing signed-in Chrome session, a live 499-game Magnus Carlsen report (249 Chess.com, 250 OTB) completed in 23.3 seconds, saved, and reopened from history. History pagination, folder view, selection, deletion cancellation, repertoire chat and support chat worked. The new report remains in the account.
+- Public guest analysis, featured games, game playback, repertoire exploration, recorded-line practice and PDF downloads were also exercised through the local UI with the existing deployed backend.
+
+Limits: the redesign and backend changes have not been deployed. The deployed service currently lacks `/api/jobs`, so its successful live analysis used the streaming fallback. New durable jobs, billing migrations, model overrides and security changes still require the rollout above. Paid checkout, final account/report deletion, new-account verification emails, Google OAuth completion, external identity-provider failures, and out-of-book engine continuations were not exercised end to end against production. Passing local checks is not a guarantee that every external service or production configuration works.
+
+Typography refinement: TASA Orbiter handles headings, body text, forms and controls; Geist Mono handles notation, technical values and small editorial labels. These match the families inspected on Motion.dev and load through Google Fonts. The rules cover every route and modal, replacing legacy serif and script overrides. Motion adds staggered hero and card reveals, spring hover feedback and subtle background parallax; reduced-motion preferences disable movement. References: [Motion](https://motion.dev), [Google Fonts API](https://developers.google.com/fonts/docs/css2), [Motion scroll animations](https://motion.dev/docs/react-scroll-animations), [Motion transitions](https://motion.dev/docs/react-transitions).
+
+The Motion visual system now extends beyond the landing page: `MotionSurface` supplies shared spring entrances and optional hover lift for report sections, preparation cards, history cards, settings, dialogs, notifications, chat messages and legal pages. The support panel and FAQ use presence-based open/close transitions. A root `MotionConfig` respects reduced-motion preferences. `motion-system.css` unifies violet surfaces, borders, inputs, focus rings and responsive spacing; outcome/error colors retain their meaning. PDF export forces motion surfaces to their settled, fully opaque state. The full 32-test browser suite passed, followed by targeted report/chat/FAQ checks after finishing changes. No deployment was performed.
+
+### Report exports and public metadata
+
+The Preparation tab is connected to loaded report games. Its color, source, speed, and date filters persist across tab switches; its supporting-game links and one-page round sheet use the same selected sample. Empty selections disable sheet export. The full PDF includes the selected plan and captures complete sections after charts and rating history settle, using local system fonts. Profile actions occupy their own row on mobile, and unavailable player titles are labeled explicitly.
+
+`src/lib/publicPages.ts` supplies route-specific titles, descriptions, canonical URLs, social metadata, and structured data. The build generates readable initial HTML for the homepage and eight sample reports, distinct public information pages, a 12-URL sitemap, and noindex documents for workspace routes. Vite preview and Vercel route to these documents; the pipeline static server supports directory indexes. `public/prepsuite-social.png` is the 1200×630 social image. Landing copy now explicitly describes connecting tournament players to Chess.com/Lichess accounts and combining online and over-the-board games.
+
+Validation: TypeScript, 70 frontend tests, 316 pipeline tests, production build, direct HTML checks, browser mobile/preparation checks, and visual inspection of the four-page report and one-page round sheet. Deployed on October 11, 2026. See [the production release record](docs/releases/2026-10-11.md) for the original scope and verification. The subsequent [ratings repair release](docs/releases/2026-10-11-ratings.md) restores live history using official FIDE first and a dynamic backup, caps FIDE/USCF enrichment at 6.5 seconds, and fixes search focus spacing. Direct FIDE connections from production still fail; current successful live history uses the attributed backup, whose coverage can lag FIDE. Earlier deployment statements above describe the historical state; unrelated backend/migration work remains undeployed.

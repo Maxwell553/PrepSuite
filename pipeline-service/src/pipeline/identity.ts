@@ -1,3 +1,5 @@
+import { boundedLookup } from '../lib/boundedLookup.js';
+import { workContext } from '../lib/workContext.js';
 import { logger } from '../lib/logger.js';
 import { capitalizeName } from '../lib/validation.js';
 import { fetchWithRetry } from '../lib/fetchWithRetry.js';
@@ -12,7 +14,7 @@ import { searchFideByName, pickBestFideMatch } from './fideSearch.js';
 import { getFideProfile } from './fideProfile.js';
 import { getUscfProfile, searchUscfByName } from './uscfProfile.js';
 import { namesMatch, verifyHandle } from './verification.js';
-import { searchIdsViaGemini, searchUsernamesViaGemini } from './geminiFallback.js';
+import { searchUsernamesViaGemini } from './geminiFallback.js';
 
 const CHESS_COM_BASE = 'https://api.chess.com/pub/player';
 const LICHESS_BASE = 'https://lichess.org/api';
@@ -25,7 +27,8 @@ async function getChessComProfile(username: string): Promise<ChessComProfile | n
   try {
     const res = await fetchWithRetry(`${CHESS_COM_BASE}/${encodeURIComponent(username.toLowerCase())}`, {
       headers: { 'User-Agent': USER_AGENT },
-      timeoutMs: 10000,
+      timeoutMs: 5000,
+      retries: 0,
     });
     if (!res.ok) return null;
     return (await res.json()) as ChessComProfile;
@@ -39,7 +42,8 @@ async function getLichessProfile(username: string): Promise<LichessProfile | nul
   try {
     const res = await fetchWithRetry(`${LICHESS_BASE}/user/${username}`, {
       headers: { Accept: 'application/json' },
-      timeoutMs: 10000,
+      timeoutMs: 5000,
+      retries: 0,
     });
     if (!res.ok) return null;
     return (await res.json()) as LichessProfile;
@@ -59,321 +63,87 @@ export interface ResolveIdentityOptions {
 export type PartialIdentityUpdate = Partial<Pick<ResolvedIdentity, 'verifiedName' | 'fideId' | 'uscfId' | 'fideProfile' | 'uscfProfile' | 'chessComUsername' | 'lichessUsername'>>;
 
 export async function resolveIdentity(
-  inputName: string,
-  fideId: string,
-  uscfId: string,
-  providedChessComUsername?: string,
-  providedLichessUsername?: string,
+  inputName: string, fideId: string, uscfId: string,
+  providedChessComUsername?: string, providedLichessUsername?: string,
   onProgress?: (message: string) => void,
   options?: ResolveIdentityOptions & { onPartialIdentity?: (partial: PartialIdentityUpdate) => void },
 ): Promise<ResolvedIdentity> {
-  let officialName = inputName;
-  let fideProfile: FideProfile | null = null;
-  let uscfProfile: UscfProfile | null = null;
-
-  const hasFideId = !!fideId?.trim();
-  const hasUscfId = !!uscfId?.trim();
-  const hasChessCom = !!providedChessComUsername?.trim();
-  const hasLichess = !!providedLichessUsername?.trim();
+  const name = capitalizeName(inputName.trim());
   const skipOnline = options?.skipOnlinePlatforms ?? false;
+  const result: ResolvedIdentity = {
+    verifiedName: name, fideId: '', uscfId: '', fideProfile: null, uscfProfile: null,
+    chessComUsername: skipOnline ? '' : providedChessComUsername?.trim() || '',
+    lichessUsername: skipOnline ? '' : providedLichessUsername?.trim() || '', confidence: 0,
+  };
+  const suppliedHandle = !!(result.chessComUsername || result.lichessUsername);
+  const publish = () => options?.onPartialIdentity?.({...result});
+  onProgress?.('Finding player and linked accounts…');
+  publish();
 
-  const onPartial = options?.onPartialIdentity;
+  const acceptFide = async (id: string) => {
+    const profile = await getFideProfile(id);
+    workContext.getStore()?.throwIfAborted();
+    if (profile && namesMatch(inputName, profile.name)) {
+      result.fideId = id; result.fideProfile = profile; publish();
+    }
+  };
 
-  onProgress?.('Identifying player...');
-
-  if (hasFideId && hasUscfId && hasChessCom && hasLichess && !skipOnline) {
-    onProgress?.('Fetching FIDE & USCF profiles...');
-    logger.info({ name: inputName }, '[Identity] Fast path: all IDs provided, skipping search');
-    const [fideProfileFetched, uscfProfileFetched] = await Promise.all([
-      getFideProfile(fideId.trim()),
-      getUscfProfile(uscfId.trim()),
-    ]);
-    onPartial?.({
-      verifiedName: capitalizeName(inputName.trim()),
-      fideId: fideId.trim(),
-      fideProfile: fideProfileFetched,
-      uscfProfile: uscfProfileFetched,
-      chessComUsername: providedChessComUsername!.trim(),
-      lichessUsername: providedLichessUsername!.trim(),
-    });
-    return {
-      verifiedName: capitalizeName(inputName.trim()),
-      fideId: fideId.trim(),
-      uscfId: uscfProfileFetched?.id ?? uscfId.trim(),
-      fideProfile: fideProfileFetched,
-      uscfProfile: uscfProfileFetched,
-      chessComUsername: providedChessComUsername!.trim(),
-      lichessUsername: providedLichessUsername!.trim(),
-      confidence: 1.0,
-    };
-  }
-
-  try {
-    let finalFideId = fideId;
-    let finalUscfId = uscfId;
-
-    // ── Steps 1+2: FIDE search + USCF search + Gemini ID lookup + Gemini usernames (parallel) ─
-    let geminiExcludeIds: { fideId?: string; uscfId?: string } | undefined;
-    const MAX_GEMINI_ID_RETRIES = 2;
-    let geminiUsernamesEarly: { chessComCandidates: string[]; lichessCandidates: string[] } = {
-      chessComCandidates: [],
-      lichessCandidates: [],
-    };
-
-    const needsChessCom = skipOnline ? false : !hasChessCom;
-    const needsLichess = skipOnline ? false : !hasLichess;
-
-    for (let geminiAttempt = 0; geminiAttempt < MAX_GEMINI_ID_RETRIES; geminiAttempt++) {
-        if (geminiAttempt === 0 && inputName.trim() && (!fideId || !uscfId || needsChessCom || needsLichess)) {
-        onProgress?.('Searching FIDE, USCF & usernames...');
-        logger.info(
-          { name: inputName, needsChessCom, needsLichess, skipOnline },
-          '[Identity] Steps 1+2: FIDE + USCF + Gemini IDs + Gemini usernames (parallel, Vertex + Google Search)',
-        );
-        const [fideSearchResult, uscfSearchResults, geminiIds, geminiUsernames] = await Promise.all([
-          !fideId
-            ? searchFideByName(inputName).then((results) => pickBestFideMatch(inputName, results))
-            : Promise.resolve(null),
-          !uscfId
-            ? searchUscfByName(inputName).catch((err) => {
-              logger.warn({ err }, '[Identity] USCF name search failed, continuing');
-              return [] as Awaited<ReturnType<typeof searchUscfByName>>;
-            })
-            : Promise.resolve([] as Awaited<ReturnType<typeof searchUscfByName>>),
-          !fideId && !uscfId
-            ? searchIdsViaGemini(inputName, geminiExcludeIds).catch((err) => {
-              logger.warn({ err }, '[Identity] Gemini ID fallback failed, continuing');
-              return { fideId: '', uscfId: '' };
-            })
-            : Promise.resolve({ fideId: '', uscfId: '' }),
-          needsChessCom || needsLichess
-            ? searchUsernamesViaGemini(inputName, null, null).catch((err) => {
-              logger.warn({ err }, '[Identity] Gemini username search failed, continuing');
-              return { chessComCandidates: [] as string[], lichessCandidates: [] as string[] };
-            })
-            : Promise.resolve({ chessComCandidates: [] as string[], lichessCandidates: [] as string[] }),
-        ]);
-
-        if (fideSearchResult) {
-          finalFideId = fideSearchResult.fideId;
-          logger.info({ fideId: finalFideId, name: fideSearchResult.name }, '[Identity] Found FIDE ID via direct search');
-        }
-        if (!finalUscfId && uscfSearchResults.length > 0) {
-          const uscfMatch = uscfSearchResults.find((r) => namesMatch(inputName, r.name));
-          if (uscfMatch) {
-            finalUscfId = uscfMatch.uscfId;
-            logger.info({ uscfId: finalUscfId, name: uscfMatch.name }, '[Identity] Found USCF ID via direct search');
+  // One wall-clock budget covers every FIDE/USCF request, including search and body reads.
+  // Online account discovery is independent and never restarts rating enrichment.
+  await Promise.all([
+    boundedLookup('FIDE/USCF enrichment', 6500, async () => {
+      const started = Date.now();
+      await Promise.all([
+        (async () => {
+          let id = fideId.trim();
+          if (!id && inputName.trim()) {
+            const match = pickBestFideMatch(inputName, await searchFideByName(inputName));
+            workContext.getStore()?.throwIfAborted();
+            id = match?.fideId || '';
           }
-        }
-        if (!finalFideId && geminiIds.fideId) {
-          finalFideId = geminiIds.fideId;
-          logger.info({ fideId: finalFideId }, '[Identity] Found FIDE ID via Gemini');
-        }
-        if (!finalUscfId && geminiIds.uscfId) {
-          finalUscfId = geminiIds.uscfId;
-          logger.info({ uscfId: finalUscfId }, '[Identity] Found USCF ID via Gemini');
-        }
-        geminiUsernamesEarly = geminiUsernames;
-      } else if (geminiAttempt > 0 && (geminiExcludeIds?.fideId || geminiExcludeIds?.uscfId)) {
-        logger.info({ attempt: geminiAttempt + 1, excludeIds: geminiExcludeIds }, '[Identity] Retrying Gemini ID search');
-        const geminiIds = await searchIdsViaGemini(inputName, geminiExcludeIds).catch(() => ({ fideId: '', uscfId: '' }));
-        if (!finalFideId && geminiIds.fideId) {
-          finalFideId = geminiIds.fideId;
-          logger.info({ fideId: finalFideId }, '[Identity] Found FIDE ID via Gemini (retry)');
-        }
-        if (!finalUscfId && geminiIds.uscfId) {
-          finalUscfId = geminiIds.uscfId;
-          logger.info({ uscfId: finalUscfId }, '[Identity] Found USCF ID via Gemini (retry)');
-        }
-      }
-
-      onProgress?.('Fetching FIDE & USCF profiles...');
-      logger.info({ fideId: finalFideId, uscfId: finalUscfId }, '[Identity] Step 3: Fetching profiles');
-      const [fideProfileFetched, uscfProfileFetched] = await Promise.all([
-        finalFideId ? getFideProfile(finalFideId) : Promise.resolve(null),
-        finalUscfId ? getUscfProfile(finalUscfId) : Promise.resolve(null),
+          if (id) await acceptFide(id);
+        })(),
+        (async () => {
+          let id = uscfId.trim();
+          if (!id) {
+            const matches = await searchUscfByName(inputName);
+            workContext.getStore()?.throwIfAborted();
+            id = matches.find(m => namesMatch(inputName, m.name))?.uscfId || '';
+          }
+          if (!id) return;
+          const profile = await getUscfProfile(id);
+          workContext.getStore()?.throwIfAborted();
+          if (profile && namesMatch(inputName, profile.name)) {
+            result.uscfId = profile.id || id; result.uscfProfile = profile; publish();
+          }
+        })(),
       ]);
-
-      let needGeminiRetry = false;
-
-      // ALWAYS reject FIDE ID if profile name doesn't match. If fetch failed, we cannot verify — clear ID.
-      if (fideProfileFetched) {
-        if (!namesMatch(inputName, fideProfileFetched.name)) {
-          logger.warn(
-            { search: inputName, profile: fideProfileFetched.name, fideId: finalFideId },
-            '[Identity] FIDE name mismatch, rejecting ID (wrong person)',
-          );
-          geminiExcludeIds = { ...geminiExcludeIds, fideId: finalFideId };
-          finalFideId = '';
-          needGeminiRetry = true;
-        } else {
-          fideProfile = fideProfileFetched;
-        }
-      } else if (finalFideId) {
-        // Profile fetch failed — we cannot verify this ID, do not trust it
-        logger.warn(
-          { fideId: finalFideId, search: inputName },
-          '[Identity] FIDE profile fetch failed, rejecting unverified ID',
-        );
-        geminiExcludeIds = { ...geminiExcludeIds, fideId: finalFideId };
-        finalFideId = '';
-        needGeminiRetry = true;
-      }
-
-      // ALWAYS reject USCF ID if profile name doesn't match. If fetch failed, we cannot verify — clear ID.
-      if (uscfProfileFetched) {
-        if (!namesMatch(inputName, uscfProfileFetched.name)) {
-          logger.warn(
-            { search: inputName, profile: uscfProfileFetched.name, uscfId: finalUscfId },
-            '[Identity] USCF name mismatch, rejecting ID (wrong person)',
-          );
-          geminiExcludeIds = { ...geminiExcludeIds, uscfId: finalUscfId };
-          finalUscfId = '';
-          needGeminiRetry = true;
-        } else {
-          uscfProfile = uscfProfileFetched;
-        }
-      } else if (finalUscfId) {
-        logger.warn(
-          { uscfId: finalUscfId, search: inputName },
-          '[Identity] USCF profile fetch failed, rejecting unverified ID',
-        );
-        geminiExcludeIds = { ...geminiExcludeIds, uscfId: finalUscfId };
-        finalUscfId = '';
-        needGeminiRetry = true;
-      }
-
-      if (!needGeminiRetry || geminiAttempt >= MAX_GEMINI_ID_RETRIES - 1) break;
-    }
-
-    // Stream FIDE/USCF data as soon as we have it (before platform verification)
-    onPartial?.({
-      verifiedName: capitalizeName(officialName),
-      fideId: finalFideId?.trim() || '',
-      uscfId: uscfProfile?.id ?? finalUscfId?.trim() ?? '',
-      fideProfile,
-      uscfProfile,
-    });
-
-    // Cross-populate: USCF profile often contains FIDE ID
-    if (!fideProfile && uscfProfile?.fideId) {
-      logger.info(
-        { fideId: uscfProfile.fideId },
-        '[Identity] Cross-populating FIDE ID from USCF profile',
-      );
-      const crossFide = await getFideProfile(uscfProfile.fideId);
-      if (crossFide && namesMatch(inputName, crossFide.name)) {
-        fideProfile = crossFide;
-        finalFideId = uscfProfile.fideId;
-        logger.info(
-          { fideId: finalFideId, name: crossFide.name },
-          '[Identity] FIDE profile resolved via USCF cross-reference',
-        );
-        onPartial?.({ fideId: finalFideId, fideProfile });
-      }
-    }
-
-    // Always use the name provided by the user in the search box for the report.
-    // Do NOT override with FIDE/USCF profile names — the user's input is authoritative.
-    officialName = inputName.trim();
-
-    // ── Step 4: Platform usernames ──────────────────────────────────
-    let verifiedChessCom = '';
-    let verifiedLichess = '';
-
-    // Trust provided usernames (only when online platforms are requested)
-    if (!skipOnline && providedChessComUsername?.trim()) {
-      verifiedChessCom = providedChessComUsername.trim();
-      logger.info({ username: verifiedChessCom }, '[Identity] Using provided Chess.com username');
-      onPartial?.({ chessComUsername: verifiedChessCom });
-    }
-    if (!skipOnline && providedLichessUsername?.trim()) {
-      verifiedLichess = providedLichessUsername.trim();
-      logger.info({ username: verifiedLichess }, '[Identity] Using provided Lichess username');
-      onPartial?.({ lichessUsername: verifiedLichess });
-    }
-
-    // Discover missing usernames via Vertex AI (already fetched in parallel with FIDE/USCF in Step 1+2)
-    const stillNeedsChessCom = !skipOnline && !verifiedChessCom;
-    const stillNeedsLichess = !skipOnline && !verifiedLichess;
-
-    if (stillNeedsChessCom || stillNeedsLichess) {
-      onProgress?.('Verifying Chess.com & Lichess usernames...');
-      const geminiUsernames = geminiUsernamesEarly;
-      logger.info(
-        {
-          chessComCandidates: geminiUsernames.chessComCandidates,
-          lichessCandidates: geminiUsernames.lichessCandidates,
-          stillNeedsChessCom,
-          stillNeedsLichess,
-        },
-        '[Identity] Verifying platform usernames from Vertex search',
-      );
-
-      // Fetch all profiles in parallel
-      const chessComCandidates = geminiUsernames.chessComCandidates.slice(0, 5);
-      const lichessCandidates = geminiUsernames.lichessCandidates.slice(0, 5);
-      const [chessComProfiles, lichessProfiles] = await Promise.all([
-        Promise.all(chessComCandidates.map((c) => getChessComProfile(c))),
-        Promise.all(lichessCandidates.map((c) => getLichessProfile(c))),
+      if (!result.fideId && result.uscfProfile?.fideId) await acceptFide(result.uscfProfile.fideId);
+      logger.info({durationMs:Date.now()-started, fideId:result.fideId, uscfId:result.uscfId}, '[Identity] FIDE/USCF enrichment complete');
+    }, undefined),
+    !skipOnline && !suppliedHandle ? boundedLookup('online discovery', 24000, async () => {
+      const candidates = await searchUsernamesViaGemini(inputName, result.fideId || null, result.uscfId || null);
+      workContext.getStore()?.throwIfAborted();
+      await Promise.all([
+        Promise.all(candidates.chessComCandidates.slice(0, 5).map(async handle => {
+          const profile = await getChessComProfile(handle);
+          workContext.getStore()?.throwIfAborted();
+          if (!result.chessComUsername && profile) {
+            const verified = verifyHandle(handle, 'chess.com', profile, name, result.fideProfile, result.uscfProfile);
+            if (verified) { result.chessComUsername = verified; publish(); }
+          }
+        })),
+        Promise.all(candidates.lichessCandidates.slice(0, 5).map(async handle => {
+          const profile = await getLichessProfile(handle);
+          workContext.getStore()?.throwIfAborted();
+          if (!result.lichessUsername && profile) {
+            const verified = verifyHandle(handle, 'lichess', profile, name, result.fideProfile, result.uscfProfile);
+            if (verified) { result.lichessUsername = verified; publish(); }
+          }
+        })),
       ]);
-
-      // Verify Gemini Chess.com candidates (with title cross-reference)
-      if (stillNeedsChessCom && chessComCandidates.length > 0) {
-        for (let i = 0; i < chessComCandidates.length; i++) {
-          const profile = chessComProfiles[i];
-          const candidate = chessComCandidates[i];
-          if (profile) {
-            const result = verifyHandle(candidate, 'chess.com', profile, officialName, fideProfile, uscfProfile);
-            if (result) {
-              verifiedChessCom = result;
-              logger.info({ username: result }, '[Identity] Chess.com verified via Vertex AI');
-              onPartial?.({ chessComUsername: result });
-              break;
-            }
-          }
-        }
-      }
-
-      // Verify Gemini Lichess candidates (with title cross-reference)
-      if (stillNeedsLichess && lichessCandidates.length > 0) {
-        for (let i = 0; i < lichessCandidates.length; i++) {
-          const profile = lichessProfiles[i];
-          const candidate = lichessCandidates[i];
-          if (profile) {
-            const result = verifyHandle(candidate, 'lichess', profile, officialName, fideProfile, uscfProfile);
-            if (result) {
-              verifiedLichess = result;
-              logger.info({ username: result }, '[Identity] Lichess verified via Vertex AI');
-              onPartial?.({ lichessUsername: result });
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    return {
-      verifiedName: capitalizeName(officialName),
-      fideId: finalFideId?.trim() || '',
-      uscfId: uscfProfile?.id ?? finalUscfId?.trim() ?? '',
-      fideProfile,
-      uscfProfile,
-      chessComUsername: verifiedChessCom,
-      lichessUsername: verifiedLichess,
-      confidence: verifiedChessCom || verifiedLichess ? 1.0 : 0,
-    };
-  } catch (err) {
-    logger.error({ err, name: inputName }, '[Identity] Fatal discovery failure');
-    return {
-      verifiedName: capitalizeName(officialName),
-      fideId: '',
-      uscfId: '',
-      fideProfile: null,
-      uscfProfile: null,
-      chessComUsername: '',
-      lichessUsername: '',
-      confidence: 0,
-    };
-  }
+    }, undefined) : Promise.resolve(),
+  ]);
+  result.confidence = result.chessComUsername || result.lichessUsername ? .8 : 0;
+  return result;
 }

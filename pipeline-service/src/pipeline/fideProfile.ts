@@ -1,4 +1,4 @@
-import { getFideProfileById } from '../lib/fideLocalDb.js';
+import { fetchOfficialFideText, fetchRatingJson, isFideApiPlayer, fideApiProfile } from '../lib/ratingProvider.js';
 import { logger } from '../lib/logger.js';
 import type { FideProfile } from '../lib/types.js';
 
@@ -89,18 +89,16 @@ export function parseFideProfileHtml(html: string, fideId: string): FideProfile 
   };
 }
 
-/**
- * Get FIDE profile by ID from local rating list.
- */
+/** Fetch the official profile first; fall back to the dynamically maintained FIDE list API. */
 export async function getFideProfile(fideId: string): Promise<FideProfile | null> {
-  if (!fideId?.trim()) return null;
-
-  const cleanId = fideId.trim();
-  logger.info({ fideId: cleanId }, '[FideProfile] Looking up (local DB)');
-
-  const profile = getFideProfileById(cleanId);
-  if (profile) {
-    logger.info({ fideId: cleanId, name: profile.name }, '[FideProfile] Success');
-  }
-  return profile;
+  const id = fideId?.trim();
+  if (!/^\d{1,10}$/.test(id)) return null;
+  try {
+    const profile = parseFideProfileHtml(await fetchOfficialFideText(`/profile/${id}`), id);
+    if (profile) return profile;
+  } catch (err) { logger.warn({err, fideId:id}, '[FideProfile] Official source unavailable'); }
+  try {
+    const player = await fetchRatingJson(`https://lichess.org/api/fide/player/${id}`);
+    return isFideApiPlayer(player) && String(player.id) === id ? fideApiProfile(player) : null;
+  } catch (err) { logger.warn({err, fideId:id}, '[FideProfile] Lookup unavailable'); return null; }
 }

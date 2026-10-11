@@ -1,3 +1,4 @@
+import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, afterEach, afterAll } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import ErrorBoundary from '../ErrorBoundary';

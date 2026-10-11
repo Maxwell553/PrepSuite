@@ -41,9 +41,9 @@ const OPENING_ALIASES: Record<string, string> = {
   Slav: 'Slav Defense',
 };
 
-function getOpeningFamily(name: string): string {
+export function getOpeningFamily(name: string): string {
   if (!name) return 'Unknown';
-  const beforeColon = name.split(':')[0].trim();
+  const beforeColon = name.split(/[:,]/)[0].trim();
   const beforeParen = beforeColon.split('(')[0].trim();
   const base = beforeParen || name;
   const canonical = OPENING_ALIASES[base];
@@ -66,29 +66,9 @@ function normalizeName(s: string): string[] {
 }
 
 function namesMatch(name: string, targets: string[]): boolean {
-  const nameParts = normalizeName(name);
-  if (nameParts.length === 0) return false;
-  return targets.some((t) => {
-    const targetParts = normalizeName(t);
-    if (targetParts.length === 0) return false;
-    const partsMatch = (a: string, b: string) => {
-      if (a.length < 3 || b.length < 3) return a === b;
-      return a.includes(b) || b.includes(a);
-    };
-    const matchingCount = nameParts.filter((np) =>
-      targetParts.some((tp) => partsMatch(np, tp)),
-    ).length;
-    // Match if: 2+ parts match, or single-word match, or first-name + initial (e.g. "Gukesh D" vs "Gukesh Dommaraju")
-    const firstPartMatch = nameParts[0] && targetParts.some((tp) => partsMatch(nameParts[0], tp));
-    const secondPartInitial = nameParts.length === 2 && nameParts[1].length <= 2 && targetParts.some(
-      (tp) => tp.length >= 3 && tp.startsWith(nameParts[1]),
-    );
-    return (
-      matchingCount >= Math.min(2, nameParts.length) ||
-      (nameParts.length === 1 && targetParts.some((tp) => partsMatch(nameParts[0], tp))) ||
-      (firstPartMatch && (matchingCount >= 1 || secondPartInitial))
-    );
-  });
+  const key = (value: string) => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/,/g, ' ').trim().split(/\s+/).sort().join(' ');
+  const normalized = key(name);
+  return !!normalized && targets.some(target => key(target) === normalized);
 }
 
 function aggregateOpenings(

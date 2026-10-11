@@ -175,6 +175,8 @@ export interface AnalyzeRequest {
 
 /** Player metadata for scouting reports */
 export interface PlayerMetadata {
+  discoverySources?: string[];
+  identityNote?: string;
   name: string;
   fideId?: string;
   uscfId?: string;
@@ -192,6 +194,8 @@ export interface PlayerMetadata {
 
 /** Full scouting report returned by the pipeline */
 export interface ScoutingReport {
+  gameCount?: number;
+  requestedGameCount?: number;
   id: string;
   player: PlayerMetadata;
   whiteOpenings: OpeningStat[];

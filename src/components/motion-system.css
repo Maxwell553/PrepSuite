@@ -1,0 +1,51 @@
+/* Shared application surfaces: dark violet glass, precise borders and calm interactions. */
+:root{--prep-canvas:#090812;--prep-panel:#151222;--prep-panel-raised:#1b162b;--prep-border:#b99aed24;--prep-highlight:#b69af5;}
+#root{background:var(--prep-canvas);}
+#root .bg-slate-950{background-color:var(--prep-canvas);}
+#root .bg-slate-900{background-color:var(--prep-panel);}
+#root .border-slate-800,#root .border-slate-700{border-color:var(--prep-border);}
+#root .text-slate-400{color:#a49bb8;}
+#root .text-slate-300{color:#d1c9df;}
+#root .text-indigo-400,#root .text-indigo-300{color:#bda1fa;}
+#root .bg-indigo-600{background-color:#8960d6;color:#fff;}
+#root .hover\:bg-indigo-500:hover{background-color:#9e79e2;}
+.prep-workspace>main{background:radial-gradient(ellipse at 85% 0,#3921592e,transparent 48%),var(--prep-canvas);}
+.prep-workspace header{border-bottom:1px solid var(--prep-border);background:#0d0a19e8;}
+.prep-route-content{padding-top:36px!important;padding-bottom:80px!important;}
+.prep-workspace h2{font-weight:600;letter-spacing:-.045em;}
+.prep-workspace h3{font-weight:550;letter-spacing:-.025em;}
+.prep-motion-surface{isolation:isolate;}
+.prep-motion-surface.border{border-color:var(--prep-border);box-shadow:0 18px 55px #03010928,0 1px 0 #e5d2ff06 inset;}
+.prep-motion-surface.group{background:linear-gradient(115deg,#1b1529,#100e1c);border-radius:16px!important;min-height:90px;position:relative;}
+.prep-motion-surface.group:hover{border-color:#b394f36b;box-shadow:0 12px 32px #05020d66;}
+.prep-motion-surface.group:before{content:'';position:absolute;inset:18px auto 18px 0;width:2px;background:#ba97ff;opacity:0;transition:opacity .2s;}
+.prep-motion-surface.group:hover:before{opacity:1;}
+#report-pdf-root>[data-pdf-section]{border-radius:22px;}
+#report-pdf-root h2{font-size:clamp(30px,3.8vw,48px);line-height:1.12;}
+#report-pdf-root h3{color:#eee7fc;}
+#report-pdf-root [data-pdf-section]>h3{padding-bottom:14px;border-bottom:1px solid var(--prep-border);}
+#root [role=dialog]{background:linear-gradient(145deg,#21182f,#100e1c);border:1px solid #b99aed40;box-shadow:0 40px 100px #030109aa,0 1px 0 #dcc8ff12 inset;}
+#root [role=dialog]>div:first-child{border-bottom-color:var(--prep-border);}
+.prep-chat-panel{background:linear-gradient(145deg,#21182f,#100e1c)!important;border-color:#b99aed40!important;box-shadow:0 25px 80px #030109aa;transform-origin:bottom right;}
+#root input:not([type=range]):not([type=checkbox]),#root textarea,#root select{border-color:#ae90df30;background-color:#0c0a16;color:#f0eaf9;transition:border-color .2s,box-shadow .2s;}
+#root input:focus-visible,#root textarea:focus-visible,#root select:focus-visible{outline:2px solid #b99aed;outline-offset:3px;box-shadow:0 0 0 5px #aa7ce810;}
+#root button:focus-visible,#root a:focus-visible,#root summary:focus-visible{outline:2px solid #c6a9ff;outline-offset:4px;}
+#root button{transition:background-color .18s,border-color .18s,color .18s,box-shadow .18s;}
+#root button:disabled{cursor:not-allowed;}
+#root button:not(:disabled):active{filter:brightness(1.08);}
+.prep-sidebar{background:linear-gradient(180deg,#141020,#0d0a16);}
+.prep-sidebar-tip{background:radial-gradient(ellipse at 0 0,#9a62f21a,transparent 85%);border-color:#a87be530;}
+.prep-sidebar-caption{font-family:'Geist Mono',monospace;letter-spacing:1.5px;}
+.prep-nav-item{padding:15px 12px;border-radius:10px;}
+.prep-nav-active{background:linear-gradient(100deg,#aa7aee1c,#aa7aee08);border-color:#b394f344;border-radius:10px;}
+.prep-nav-item[aria-current] svg{color:#c2a4ff;filter:drop-shadow(0 0 7px #ac7afa40);}
+.prep-search-screen form{box-shadow:0 25px 80px #03010944,0 1px 0 #dcc8ff0a inset;}
+.prep-workspace [role=alert]{line-height:1.6;}
+@media(max-width:640px){.prep-route-content{padding:20px 16px 90px!important;}#root [role=dialog]{border-radius:18px;}.prep-motion-surface.group{gap:10px;padding:14px;}.prep-workspace header>span{font-size:10px;letter-spacing:1.2px;}}
+@media(prefers-reduced-motion:reduce){#root *,#root *:before,#root *:after{scroll-behavior:auto!important;}#root button,#root input,#root textarea,#root select{transition:none;}.prep-motion-surface.group:before{transition:none;}}
+@media print{.prep-motion-surface{transform:none!important;opacity:1!important;box-shadow:none!important;}}
+/* Export captures the settled state, even for cards not yet scrolled into view. */
+.pdf-export-active .prep-motion-surface{transform:none!important;opacity:1!important;transition:none!important;}
+#root [role=dialog] h2{font-size:clamp(18px,2.2vw,24px);line-height:1.25;letter-spacing:-.025em;min-width:0;}
+#root [role=dialog] h3{font-size:20px;}
+#root [role=dialog]>div:first-child{gap:12px;}

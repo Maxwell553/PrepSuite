@@ -1,13 +1,20 @@
-import { useState, useEffect } from 'react';
-import { parseGameHistories, parseGameHistoriesAsync, type ParsedGame } from '../lib/repertoireUtils';
-import type { GameData } from '../types';
+import { useState, useEffect } from "react";
+import {
+  parseGameHistories,
+  parseGameHistoriesAsync,
+  type ParsedGame,
+} from "../lib/repertoireUtils";
+import type { GameData } from "../types";
 
 function allGamesHaveHistory(games: GameData[]): boolean {
   return games.every((g) => g?.history && Array.isArray(g.history));
 }
 
 /** Returns parsed games. Sync when all have pre-computed history; async via worker otherwise. */
-export function useParsedGames(games: GameData[]): { parsed: ParsedGame[]; loading: boolean } {
+export function useParsedGames(games: GameData[]): {
+  parsed: ParsedGame[];
+  loading: boolean;
+} {
   const hasHistory = games?.length && allGamesHaveHistory(games);
   const [parsed, setParsed] = useState<ParsedGame[]>(() =>
     hasHistory ? parseGameHistories(games) : [],
@@ -27,11 +34,23 @@ export function useParsedGames(games: GameData[]): { parsed: ParsedGame[]; loadi
       return;
     }
 
+    let active = true;
     setLoading(true);
-    parseGameHistoriesAsync(games).then((result) => {
-      setParsed(result);
-      setLoading(false);
-    });
+    parseGameHistoriesAsync(games)
+      .then((result) => {
+        if (!active) return;
+        setParsed(result);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (active) {
+          setParsed([]);
+          setLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, [games]);
 
   return { parsed, loading };

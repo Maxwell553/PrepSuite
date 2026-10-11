@@ -1,13 +1,15 @@
+import { workSignal } from '../lib/workContext.js';
+import { models } from '../lib/models.js';
 /**
  * Generate 1-2 sentence advice on whether to complicate positions based on opponent's time usage.
- * Uses Gemini 3.1 Pro for accurate, data-consistent analysis.
+ * Uses the configured analysis model to explain observed clock data.
  */
 
 import { logger } from '../lib/logger.js';
 import { getAccessToken, getVertexUrl } from '../lib/vertexAuth.js';
 import type { TimeManagementStats } from '../lib/types.js';
 
-const MODEL = 'gemini-3.1-pro-preview';
+const MODEL = models.analysis;
 const TIMEOUT_MS = 10_000;
 
 function formatSpeedForPrompt(speed: string): string {
@@ -68,7 +70,7 @@ Reply with only the advice, no preamble.`;
           temperature: 0.4,
         },
       }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: workSignal(TIMEOUT_MS),
     });
 
     if (!res.ok) {

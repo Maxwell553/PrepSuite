@@ -1,3 +1,6 @@
+import { checkModelResponse, ModelResponseError } from '../lib/modelResponse.js';
+import { workSignal } from '../lib/workContext.js';
+import { models, modelChain, fastThinkingConfig } from '../lib/models.js';
 /**
  * POST /api/support-chat — General support chatbot for bug reports, feature requests,
  * and questions about PrepSuite. Uses Gemini with no report context.
@@ -10,10 +13,7 @@ import { chatRateLimitMiddleware } from '../middleware/rateLimit.js';
 import { getAccessToken, getVertexUrl, invalidateAccessTokenCache } from '../lib/vertexAuth.js';
 import { z } from 'zod';
 
-const GEMINI_MODELS = [
-  'gemini-3.1-flash-lite-preview',
-  'gemini-2.5-flash',
-] as const;
+const GEMINI_MODELS = modelChain(models.support);
 const GEMINI_TIMEOUT_MS = 60_000;
 
 const supportChatRequestSchema = z.object({
@@ -113,7 +113,6 @@ supportChatRoute.post('/support-chat', chatRateLimitMiddleware, async (c) => {
     ],
     generationConfig: {
       maxOutputTokens: 2048,
-      temperature: 0.7,
     },
   };
 
@@ -136,8 +135,8 @@ supportChatRoute.post('/support-chat', chatRateLimitMiddleware, async (c) => {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${accessToken}`,
             },
-            body: JSON.stringify(requestBody),
-            signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+            body: JSON.stringify({ ...requestBody, generationConfig: { ...(requestBody.generationConfig as Record<string, unknown>), ...fastThinkingConfig(model) } }),
+            signal: workSignal(GEMINI_TIMEOUT_MS),
           });
 
           if (res.status === 401) {
@@ -154,31 +153,15 @@ supportChatRoute.post('/support-chat', chatRateLimitMiddleware, async (c) => {
             return;
           }
 
-          const data = (await res.json()) as {
-            candidates?: Array<{
-              content?: { parts?: Array<{ text?: string }> };
-              finishReason?: string;
-            }>;
-          };
-          const candidate = data.candidates?.[0];
-          const text = candidate?.content?.parts?.[0]?.text ?? '';
-
-          // If blocked by safety filter, return a friendly message instead of error
-          if (!text && candidate?.finishReason === 'SAFETY') {
-            sse.sendEvent('chat_text', {
-              text: "I couldn't generate a response for that. Please rephrase your message or try a different question.",
-            });
-            return;
-          }
-
-          if (!text) {
-            sse.sendError({ error: 'AI returned empty response' });
-            return;
-          }
+          const { text } = checkModelResponse(await res.json(), { requestId, model, channel: 'support' });
 
           sse.sendEvent('chat_text', { text: text.replace(/\*\*/g, '') });
           return;
         } catch (err) {
+          if (err instanceof ModelResponseError && err.blocked) {
+            sse.sendError({ error: 'The response was blocked. Please rephrase your question.' });
+            return;
+          }
           const errObj = err as { name?: string; message?: string };
           lastError = errObj.message ?? String(err);
           if (errObj.name === 'AbortError' || errObj.name === 'TimeoutError') {

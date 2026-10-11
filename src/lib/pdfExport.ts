@@ -1,172 +1,91 @@
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
+import { PDF_PAGE, placePdfSections } from './pdfLayout';
 
-/**
- * Capture the report DOM and export as a multi-page A4 PDF.
- * Uses html-to-image (foreignObject-based) which handles inline SVGs
- * (Recharts, etc.) far more reliably than html2canvas.
- *
- * Section-aware page breaks avoid cutting cards/charts in half.
- */
-export async function exportReportAsPdf(
-  element: HTMLElement,
-  playerName: string,
-): Promise<void> {
-  const PDF_CLASS = 'pdf-export-active';
-  element.classList.add(PDF_CLASS);
+const frame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
-  const inlineFixups: { el: HTMLElement; orig: string }[] = [];
-
-  element.querySelectorAll<HTMLElement>('*').forEach((el) => {
-    const needsFix =
-      el.style.maxHeight ||
-      el.style.overflow ||
-      el.classList.contains('overflow-hidden') ||
-      el.classList.contains('overflow-y-auto') ||
-      el.classList.contains('overflow-auto') ||
-      el.classList.contains('overflow-x-auto');
-    if (needsFix) {
-      inlineFixups.push({ el, orig: el.style.cssText });
-      el.style.overflow = 'visible';
-      el.style.maxHeight = 'none';
-    }
-  });
-
-  await new Promise((r) => setTimeout(r, 300));
-
-  try {
-    const rootRect = element.getBoundingClientRect();
-    const sections = Array.from(
-      element.querySelectorAll<HTMLElement>('[data-pdf-section]'),
-    );
-    const sectionTops = sections
-      .map((s) => s.getBoundingClientRect().top - rootRect.top)
-      .filter((t) => t > 0)
-      .sort((a, b) => a - b);
-
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-
-    const dataUrl = await toPng(element, {
-      pixelRatio,
-      backgroundColor: '#0f172a',
-      cacheBust: true,
-      filter: (node: HTMLElement) => {
-        if (!(node instanceof HTMLElement)) return true;
-        if (node.classList?.contains('print:hidden')) return false;
-        if (node.id === 'chat-section') return false;
-        if (node.hasAttribute('data-practice-opponent')) return false;
-        return true;
-      },
-    });
-
-    const img = new Image();
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error('Failed to load captured image'));
-      img.src = dataUrl;
-    });
-
-    const imgWidth = img.naturalWidth;
-    const imgHeight = img.naturalHeight;
-
-    const pdfWidth = 210; // A4 mm
-    const pdfHeight = 297;
-    const margin = 14;
-    const headerH = 8;
-    const footerH = 8;
-    const contentWidth = pdfWidth - margin * 2;
-    const contentHeight = pdfHeight - margin * 2 - headerH - footerH;
-
-    const scale = contentWidth / (imgWidth / pixelRatio);
-    const cssPageHeight = contentHeight / scale;
-    const totalCssHeight = imgHeight / pixelRatio;
-
-    const pageStartsCss: number[] = [0];
-    let cursor = 0;
-
-    while (cursor + cssPageHeight < totalCssHeight) {
-      const idealEnd = cursor + cssPageHeight;
-
-      let bestBreak = idealEnd;
-      for (const top of sectionTops) {
-        if (top > cursor + 40 && top <= idealEnd) {
-          bestBreak = top;
-        }
-      }
-      pageStartsCss.push(bestBreak);
-      cursor = bestBreak;
-    }
-
-    const totalPages = pageStartsCss.length;
-    const pdf = new jsPDF('p', 'mm', 'a4');
-
-    for (let p = 0; p < totalPages; p++) {
-      if (p > 0) pdf.addPage();
-
-      pdf.setFontSize(8);
-      pdf.setTextColor(120, 120, 140);
-      pdf.text('PrepSuite.ai Scouting Report', margin, margin);
-      pdf.text(playerName, pdfWidth - margin, margin, { align: 'right' });
-
-      const startCss = pageStartsCss[p];
-      const endCss =
-        p + 1 < totalPages ? pageStartsCss[p + 1] : totalCssHeight;
-      const sliceCss = endCss - startCss;
-
-      const srcYPx = startCss * pixelRatio;
-      const srcHPx = Math.min(sliceCss * pixelRatio, imgHeight - srcYPx);
-      const destH = sliceCss * scale;
-
-      const pageCanvas = document.createElement('canvas');
-      pageCanvas.width = imgWidth;
-      pageCanvas.height = Math.ceil(srcHPx);
-      const ctx = pageCanvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(
-          img,
-          0,
-          srcYPx,
-          imgWidth,
-          srcHPx,
-          0,
-          0,
-          imgWidth,
-          srcHPx,
-        );
-        const pageData = pageCanvas.toDataURL('image/jpeg', 0.92);
-        pdf.addImage(
-          pageData,
-          'JPEG',
-          margin,
-          margin + headerH,
-          contentWidth,
-          destH,
-        );
-      }
-
-      pdf.setFontSize(7);
-      pdf.setTextColor(100, 100, 120);
-      pdf.text(
-        `Generated ${new Date().toLocaleDateString()} | AI analysis — verify independently`,
-        margin,
-        pdfHeight - 5,
-      );
-      pdf.text(
-        `Page ${p + 1} of ${totalPages}`,
-        pdfWidth - margin,
-        pdfHeight - 5,
-        { align: 'right' },
-      );
-    }
-
-    const safeName = playerName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
-    pdf.save(
-      `PrepSuite_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf`,
-    );
-  } finally {
-    inlineFixups.forEach(({ el, orig }) => {
-      el.style.cssText = orig;
-    });
-    element.classList.remove(PDF_CLASS);
+async function waitForReport(element: HTMLElement) {
+  await frame();
+  const deadline = Date.now() + 25000;
+  while (element.querySelector('[data-pdf-loading="true"]')) {
+    if (Date.now() > deadline) throw new Error('Rating history is still loading. Please try again.');
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
+  await document.fonts.ready;
+  // Allow ResizeObserver and React's chart layout to settle after export width changes.
+  await frame(); await frame(); await frame();
+}
+
+const capture = (element: HTMLElement, backgroundColor: string) => toPng(element, {
+  pixelRatio: 2,
+  backgroundColor,
+  // Export uses system fonts explicitly. Do not inspect cross-origin Google CSS rules.
+  skipFonts: true,
+  style: {position: 'static', left: 'auto', top: 'auto', zIndex: 'auto', margin: '0'},
+  filter: node => !(node instanceof HTMLElement) ||
+    (!node.classList.contains('print:hidden') && !node.hasAttribute('data-pdf-exclude')),
+});
+
+/** Export complete cards, not slices of one tall bitmap. Independent of viewport width. */
+export async function exportReportAsPdf(element: HTMLElement, playerName: string): Promise<void> {
+  const originalStyle = element.style.cssText;
+  const fixes: {el: HTMLElement; style: string}[] = [];
+  const details = Array.from(element.querySelectorAll<HTMLDetailsElement>('details[data-pdf-section]'));
+  const detailStates = details.map(el => el.open);
+  try {
+    element.classList.add('pdf-export-active');
+    Object.assign(element.style, {width: '1000px', minWidth: '1000px', maxWidth: 'none'});
+    details.forEach(el => {el.open = true;});
+    element.querySelectorAll<HTMLElement>('[data-pdf-section], [data-pdf-section] *').forEach(el => {
+      if (el.style.maxHeight || /overflow-(hidden|auto|[xy]-auto)/.test(el.className)) {
+        fixes.push({el, style: el.style.cssText});
+        el.style.maxHeight = 'none'; el.style.overflow = 'visible';
+      }
+    });
+    await waitForReport(element);
+    const sections = Array.from(element.querySelectorAll<HTMLElement>('[data-pdf-section]'))
+      .filter(el => !el.parentElement?.closest('[data-pdf-section]') && el.getBoundingClientRect().height > 0);
+    // Keep the actionable plan with the overview, before the detailed charts.
+    const order = ['report-panel-overview','report-panel-preparation','report-panel-openings','report-panel-games','report-panel-activity'];
+    sections.sort((a,b) => order.indexOf(a.closest('[role=tabpanel]')?.id || '') - order.indexOf(b.closest('[role=tabpanel]')?.id || ''));
+    if (!sections.length) throw new Error('No report content to export');
+    const images: {data: string; width: number; height: number}[] = [];
+    for (const section of sections) {
+      const {width, height} = section.getBoundingClientRect();
+      images.push({data: await capture(section, '#101525'), width, height});
+    }
+    const positions = placePdfSections(images);
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    let page = 0;
+    images.forEach((image, i) => {
+      const p = positions[i];
+      while (page < p.page) {pdf.addPage(); page++;}
+      pdf.addImage(image.data, 'PNG', p.x, p.y, p.width, p.height, undefined, 'FAST');
+    });
+    for (let i = 1; i <= pdf.getNumberOfPages(); i++) {
+      pdf.setPage(i); pdf.setFontSize(9); pdf.setTextColor(70, 70, 85);
+      pdf.text('PrepSuite.ai | Opponent scouting', PDF_PAGE.margin, 15);
+      pdf.setFontSize(7);
+      pdf.text(`Generated ${new Date().toISOString().slice(0, 10)} | Historical results; verify independently.`, PDF_PAGE.margin, 289);
+      pdf.text(`${i} / ${pdf.getNumberOfPages()}`, 196, 289, {align: 'right'});
+    }
+    pdf.save(`PrepSuite_${playerName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40)}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  } finally {
+    fixes.forEach(({el, style}) => {el.style.cssText = style;});
+    details.forEach((el, i) => {el.open = detailStates[i];});
+    element.style.cssText = originalStyle;
+    element.classList.remove('pdf-export-active');
+  }
+}
+
+/** Compact, one-page sheet rendered from the currently selected preparation filters. */
+export async function exportRoundSheetAsPdf(element: HTMLElement): Promise<void> {
+  await document.fonts.ready;
+  await frame();
+  const image = await capture(element, '#ffffff');
+  const {width, height} = element.getBoundingClientRect();
+  const scale = Math.min(182 / width, 265 / height);
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  pdf.addImage(image, 'PNG', (210 - width * scale) / 2, 14, width * scale, height * scale, undefined, 'FAST');
+  pdf.save('round-preparation.pdf');
 }

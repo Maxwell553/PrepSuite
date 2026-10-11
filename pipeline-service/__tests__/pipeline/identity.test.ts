@@ -94,26 +94,12 @@ describe('resolveIdentity', () => {
     expect(result.fideProfile?.rating).toBe(2830);
   });
 
-  it('falls back to Gemini when FIDE search finds nothing', async () => {
-    process.env.GEMINI_API_KEY = 'test-key';
-    mockedSearchFide.mockResolvedValue([]);
-    mockedPickBest.mockReturnValue(null);
+  it('does not start AI retries when rating sources have no matching person', async () => {
+    mockedSearchFide.mockResolvedValue([]); mockedPickBest.mockReturnValue(null);
     mockedSearchUscf.mockResolvedValue([]);
-    mockedSearchIds.mockResolvedValue({ fideId: '1503014', uscfId: null });
-    mockedSearchUsernames.mockResolvedValue({ chessComCandidates: [], lichessCandidates: [] });
-    mockedGetFide.mockResolvedValue({
-      name: 'Carlsen, Magnus',
-      federation: 'NOR',
-      birthYear: '1990',
-      rating: 2830,
-      title: 'GM',
-    });
-    mockedGetUscf.mockResolvedValue(null);
-    mockedFetch.mockResolvedValue({ ok: false } as Response);
-
-    const result = await resolveIdentity('Magnus Carlsen', '', '', '', '');
-    expect(mockedSearchIds).toHaveBeenCalled();
-    expect(result.fideProfile?.rating).toBe(2830);
+    mockedSearchUsernames.mockResolvedValue({chessComCandidates:[],lichessCandidates:[]});
+    const result = await resolveIdentity('Unknown Player', '', '', '', '');
+    expect(result.fideProfile).toBeNull();expect(mockedSearchIds).not.toHaveBeenCalled();
   });
 
   it('trusts provided platform usernames', async () => {
@@ -155,4 +141,25 @@ describe('resolveIdentity', () => {
     expect(result.verifiedName).toBe('Test Player');
     expect(result.confidence).toBe(0);
   });
+});
+
+describe('bounded identity discovery',()=>{
+ it('publishes retrieved ratings immediately and does not run AI discovery for an explicit handle',async()=>{
+  vi.useFakeTimers();
+  try {
+   mockedSearchFide.mockResolvedValue([]);
+   mockedPickBest.mockReturnValue(null);
+   mockedGetFide.mockResolvedValue({name:'Carlsen, Magnus',federation:'NOR',birthYear:'1990',rating:2830,title:'GM'});
+   mockedSearchUscf.mockImplementation(()=>new Promise(()=>{}));
+   const partial=vi.fn();
+   const pending=resolveIdentity('Magnus Carlsen','1503014','','MagnusCarlsen','',undefined,{onPartialIdentity:partial});
+   await vi.advanceTimersByTimeAsync(1);
+   expect(partial).toHaveBeenCalledWith(expect.objectContaining({fideProfile:expect.objectContaining({rating:2830})}));
+   await vi.advanceTimersByTimeAsync(6500);
+   const identity=await pending;
+   expect(identity.chessComUsername).toBe('MagnusCarlsen');
+   expect(identity.fideProfile?.rating).toBe(2830);
+   expect(mockedSearchIds).not.toHaveBeenCalled();expect(mockedSearchUsernames).not.toHaveBeenCalled();
+  } finally {vi.useRealTimers();}
+ });
 });

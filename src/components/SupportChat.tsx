@@ -1,3 +1,5 @@
+import MotionSurface from './MotionSurface';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Loader2, HelpCircle, Bug, Lightbulb } from 'lucide-react';
 import { supportChatWithPipeline } from '../services/pipelineClient';
@@ -184,12 +186,14 @@ const SupportChat: React.FC<SupportChatProps> = ({ isLoggedIn }) => {
     setSelectedCategory(null);
   };
 
+  const reducedMotion = useReducedMotion();
   if (!isLoggedIn) return null;
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
+      <AnimatePresence>
       {isOpen && (
-        <div className="w-[380px] max-w-[calc(100vw-3rem)] h-[520px] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <motion.div initial={{opacity:0,y:reducedMotion?0:16}} animate={{opacity:1,y:0}} exit={{opacity:0,y:reducedMotion?0:8}} transition={{duration:reducedMotion?0:.2}} className="prep-chat-panel w-[380px] max-w-[calc(100vw-3rem)] h-[520px] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700 bg-slate-800/80">
             <div className="flex items-center gap-2">
               <MessageCircle className="w-5 h-5 text-indigo-400" />
@@ -212,7 +216,7 @@ const SupportChat: React.FC<SupportChatProps> = ({ isLoggedIn }) => {
             ) : (
               <>
                 {messages.map((msg, i) => (
-                  <div
+                  <MotionSurface
                     key={i}
                     className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
@@ -230,7 +234,7 @@ const SupportChat: React.FC<SupportChatProps> = ({ isLoggedIn }) => {
                       )}
                       <div className="whitespace-pre-wrap">{msg.content}</div>
                     </div>
-                  </div>
+                  </MotionSurface>
                 ))}
                 {isLoading && (
                   <div className="flex justify-start">
@@ -277,6 +281,7 @@ const SupportChat: React.FC<SupportChatProps> = ({ isLoggedIn }) => {
                         disabled={isLoading}
                       />
                       <button
+                        aria-label="Send support question"
                         type="submit"
                         disabled={!input.trim() || isLoading}
                         className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
@@ -311,8 +316,9 @@ const SupportChat: React.FC<SupportChatProps> = ({ isLoggedIn }) => {
               </>
             )}
           </div>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       <button
         onClick={() => setIsOpen(!isOpen)}

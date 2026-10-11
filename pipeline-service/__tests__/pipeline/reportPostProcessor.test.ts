@@ -209,14 +209,14 @@ describe('postProcessReport', () => {
     const opts = makeOpts();
     const result = postProcessReport(report, opts);
 
-    expect(result.strategicSummary).toBe('Analysis pending...');
-    expect(result.blackStrategicSummary).toBe('Detailed analysis of black repertoire pending...');
-    expect(result.tacticalProfile).toBe('Analysis pending...');
-    expect(result.endgameReliability).toBe('Analysis pending...');
-    expect(result.timeControlInsights).toBe('Analysis pending...');
-    expect(result.specificVulnerability).toBe('Analysis pending...');
-    expect(result.tacticalRecommendation).toBe('Analysis pending...');
-    expect(result.preparationSummary).toBe('Detailed analysis of white repertoire pending...');
+    expect(result.strategicSummary).toBe('Not evaluated in this report.');
+    expect(result.blackStrategicSummary).toBe('Explore the opening results and supporting games below.');
+    expect(result.tacticalProfile).toBe('Not evaluated in this report.');
+    expect(result.endgameReliability).toBe('Not evaluated in this report.');
+    expect(result.timeControlInsights).toBe('Not evaluated in this report.');
+    expect(result.specificVulnerability).toBe('Not evaluated in this report.');
+    expect(result.tacticalRecommendation).toBe('Not evaluated in this report.');
+    expect(result.preparationSummary).toBe('Explore the opening results and supporting games below.');
   });
 
   it('sets lastUpdated timestamp', () => {

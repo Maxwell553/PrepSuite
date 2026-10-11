@@ -1,3 +1,4 @@
+import { workSignal } from '../lib/workContext.js';
 /**
  * Fetch OTB games from Supabase by FIDE ID.
  * Used when identity has a FIDE ID and otbLimit > 0.
@@ -77,7 +78,7 @@ export async function fetchOtbGames(fideId: string, limit: number): Promise<Game
   const games: GameData[] = [];
 
   const addGame = (row: OtbRow) => {
-    const key = `${row.white}|${row.black}|${row.game_date || ''}`;
+    const key = row.id || createHash('sha256').update(`${row.white}|${row.black}|${row.game_date || ''}|${row.pgn || ''}`).digest('hex');
     if (seen.has(key)) return;
     seen.add(key);
 
@@ -87,7 +88,7 @@ export async function fetchOtbGames(fideId: string, limit: number): Promise<Game
       : new Date(0).toISOString(); // 1970-01-01 if unknown, not "now"
 
     const pgn = row.pgn ? standardizePgnForBoard(row.pgn) : undefined;
-    const gameId = row.id || createHash('sha256').update(`${row.white}|${row.black}|${playedAt}`).digest('hex').slice(0, 12);
+    const gameId = row.id || createHash('sha256').update(`${row.white}|${row.black}|${playedAt}|${row.pgn || ''}`).digest('hex').slice(0, 12);
 
     games.push({
       id: `otb-${gameId}`,
@@ -117,7 +118,9 @@ export async function fetchOtbGames(fideId: string, limit: number): Promise<Game
       .select('id, white, black, result, eco, event, game_date, white_elo, black_elo, pgn')
       .eq(column, fideId.trim())
       .order('game_date', { ascending: false })
-      .range(offset, offset + BATCH_SIZE - 1);
+      .order('id', { ascending: false })
+      .range(offset, offset + BATCH_SIZE - 1)
+      .abortSignal(workSignal(8000));
 
     if (error) {
       logger.warn({ error, column }, '[OtbGames] Supabase query failed');
