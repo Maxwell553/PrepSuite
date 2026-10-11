@@ -1,11 +1,11 @@
-PrepSuite product walkthrough — 50 seconds
-Actual signed-in desktop footage; edited pacing and subtle push-ins. No voiceover. Original 126 BPM instrumental. Account address concealed.
+PrepSuite product walkthrough — 46.6 seconds
+Actual signed-in desktop footage; fixed framing with no camera motion. No voiceover. Original 135.5 BPM instrumental. Account address concealed.
 
-0s — Your next opponent. Meet your preparation advantage.
-2s — Start with a name. Your signed-in workspace keeps scouting, reports and AI together.
-5s — Connect the dots. Add known Chess.com or Lichess accounts to guide the search.
-8s — Let the research begin. Resolve the player, discover accounts and collect available games.
-11s — The games become a report. See the available sources. Coverage varies by player.
+0s — A real name. An online repertoire. Connect tournament identities to online chess accounts.
+2s — Start with the player you know. Use a real-world tournament identity to begin your research.
+5s — Find the accounts behind the name. Link the player to Chess.com and Lichess; add known usernames.
+8s — From identity to playing history. PrepSuite looks for linked accounts and gathers available games.
+11s — One player. A wider view. Bring available online and over-the-board games into one report.
 14s — Spot the patterns. Compare opening frequency and results by color and game source.
 17s — Build your game plan. Choose your color and filters. Start with the most frequent replies.
 20s — Ask a better question. Ask the AI about this opponent’s openings, lines or positions.
@@ -17,4 +17,6 @@ Actual signed-in desktop footage; edited pacing and subtle push-ins. No voiceove
 39s — Take the plan with you. Download a round sheet or export the full report as a PDF.
 42s — Your research stays ready. Reopen saved reports from History before your next round.
 45s — Prepare for the whole field. Set up reports for up to five players and organize them in a folder.
-48s — One move ahead. PrepSuite.ai  /  Before move one.
+48s — Know the player. Prepare the game. PrepSuite.ai  /  Real-world identity. Online repertoire.
+
+Scene timestamps above refer to the 50-second editing timeline; final playback is 7.5% faster.
