@@ -37,7 +37,7 @@ const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
           {/* Main Content */}
           <div className="space-y-6 text-slate-200 dark:text-slate-200 text-gray-700 leading-relaxed">
             <p>
-              These Terms of Service ("Terms") govern your access to and use of PrepSuite ("Service", "we", "us", or "our"), operated by SoundSideDesign LLC ("Company", "we", "us", or "our"). By accessing or using our Service, you agree to be bound by these Terms. If you disagree with any part of these Terms, then you may not access the Service.
+              These Terms of Service ("Terms") govern your access to and use of PrepSuite ("Service", "we", "us", or "our"), operated by Soundside Design LLC ("Company", "we", "us", or "our"). By accessing or using our Service, you agree to be bound by these Terms. If you disagree with any part of these Terms, then you may not access the Service.
             </p>
 
             <h2 className="text-2xl font-bold mt-8 mb-4 text-white dark:text-white text-gray-900">1. ACCEPTANCE OF TERMS</h2>
@@ -104,7 +104,7 @@ const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
             <h2 className="text-2xl font-bold mt-8 mb-4 text-white dark:text-white text-gray-900">5. INTELLECTUAL PROPERTY</h2>
             <h3 className="text-xl font-semibold mb-3 mt-6 text-white dark:text-white text-gray-900">5.1 Service Ownership</h3>
             <p>
-              The Service and its original content, features, and functionality are owned by SoundSideDesign LLC and are protected by international copyright, trademark, patent, trade secret, and other intellectual property laws.
+              The Service and its original content, features, and functionality are owned by Soundside Design LLC and are protected by international copyright, trademark, patent, trade secret, and other intellectual property laws.
             </p>
 
             <h3 className="text-xl font-semibold mb-3 mt-6 text-white dark:text-white text-gray-900">5.2 User Content</h3>
@@ -146,7 +146,7 @@ const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
 
             <h2 className="text-2xl font-bold mt-8 mb-4 text-white dark:text-white text-gray-900">8. LIMITATION OF LIABILITY</h2>
             <p>
-              TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL SOUNDSIDEDESIGN LLC, ITS AFFILIATES, AGENTS, DIRECTORS, EMPLOYEES, SUPPLIERS, OR LICENSORS BE LIABLE FOR ANY INDIRECT, PUNITIVE, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR EXEMPLARY DAMAGES, INCLUDING WITHOUT LIMITATION DAMAGES FOR LOSS OF PROFITS, GOODWILL, USE, DATA, OR OTHER INTANGIBLE LOSSES, ARISING OUT OF OR RELATING TO THE USE OF, OR INABILITY TO USE, THE SERVICE.
+              TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL SOUNDSIDE DESIGN LLC, ITS AFFILIATES, AGENTS, DIRECTORS, EMPLOYEES, SUPPLIERS, OR LICENSORS BE LIABLE FOR ANY INDIRECT, PUNITIVE, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR EXEMPLARY DAMAGES, INCLUDING WITHOUT LIMITATION DAMAGES FOR LOSS OF PROFITS, GOODWILL, USE, DATA, OR OTHER INTANGIBLE LOSSES, ARISING OUT OF OR RELATING TO THE USE OF, OR INABILITY TO USE, THE SERVICE.
             </p>
             <p className="mt-4">
               TO THE MAXIMUM EXTENT PERMITTED BY LAW, OUR TOTAL LIABILITY TO YOU FOR ALL CLAIMS ARISING OUT OF OR RELATING TO THE USE OF OR ANY INABILITY TO USE ANY PORTION OF THE SERVICE SHALL NOT EXCEED THE AMOUNT YOU PAID US IN THE TWELVE (12) MONTHS PRIOR TO THE EVENT GIVING RISE TO THE LIABILITY, OR ONE HUNDRED DOLLARS ($100), WHICHEVER IS GREATER.
@@ -154,7 +154,7 @@ const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
 
             <h2 className="text-2xl font-bold mt-8 mb-4 text-white dark:text-white text-gray-900">9. INDEMNIFICATION</h2>
             <p>
-              You agree to defend, indemnify, and hold harmless SoundSideDesign LLC and its officers, directors, employees, and agents from and against any claims, liabilities, damages, losses, and expenses, including without limitation reasonable attorney's fees and costs, arising out of or in any way connected with:
+              You agree to defend, indemnify, and hold harmless Soundside Design LLC and its officers, directors, employees, and agents from and against any claims, liabilities, damages, losses, and expenses, including without limitation reasonable attorney's fees and costs, arising out of or in any way connected with:
             </p>
             <ul className="list-disc list-inside space-y-2 ml-4 mb-4">
               <li>Your access to or use of the Service</li>
@@ -207,7 +207,7 @@ const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
 
             <h2 className="text-2xl font-bold mt-8 mb-4 text-white dark:text-white text-gray-900">15. ENTIRE AGREEMENT</h2>
             <p>
-              These Terms, together with our Privacy Policy, constitute the entire agreement between you and SoundSideDesign LLC regarding your use of the Service and supersede all prior agreements and understandings.
+              These Terms, together with our Privacy Policy, constitute the entire agreement between you and Soundside Design LLC regarding your use of the Service and supersede all prior agreements and understandings.
             </p>
 
             <h2 className="text-2xl font-bold mt-8 mb-4 text-white dark:text-white text-gray-900">16. WAIVER</h2>
@@ -220,10 +220,8 @@ const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
               If you have any questions about these Terms, please contact us at:
             </p>
             <p className="mb-4">
-              SoundSideDesign LLC<br />
-              180 Brookbend Rd<br />
-              Fairfield, CT 06824<br />
-              United States<br />
+              Soundside Design LLC<br />
+              Connecticut, United States<br />
               Email: <a href="mailto:max@soundside.ai" className="text-indigo-400 dark:text-indigo-400 text-indigo-600 hover:underline">max@soundside.ai</a>
             </p>
 

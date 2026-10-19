@@ -8,7 +8,7 @@ export const publicPages: PublicPage[] = [
   {path:'/', title:'PrepSuite — Chess Opponent Scouting & Preparation', description:HOME_DESCRIPTION, heading:'One move ahead. Before move one.', indexable:true},
   ...samples.map(sample => ({path:`/featured/${sample.slug}`, slug:sample.slug, title:`${sample.name} Scouting Report | PrepSuite`, heading:`${sample.name} scouting report`, description:`Explore ${sample.name}'s sample scouting report: opening repertoires, game results and preparation tools. No sign-in required. Ratings and games reflect the report snapshot.`, indexable:true})),
   {path:'/about', title:'Why PrepSuite | Chess Opponent Preparation', heading:'Why I Made PrepSuite', description:'Learn why chess player Max Ingargiola built PrepSuite to connect tournament identities, online accounts and opponent game histories.', indexable:true},
-  {path:'/privacy-policy', title:'Privacy Policy | PrepSuite', heading:'Privacy Policy', description:'Read how SoundSideDesign LLC handles personal information when you use PrepSuite.', indexable:true},
+  {path:'/privacy-policy', title:'Privacy Policy | PrepSuite', heading:'Privacy Policy', description:'Read how Soundside Design LLC handles personal information when you use PrepSuite.', indexable:true},
   {path:'/terms-of-service', title:'Terms of Service | PrepSuite', heading:'Terms of Service', description:'Read the terms governing your use of PrepSuite and its chess preparation tools.', indexable:true},
 ];
 export function pageForPath(path:string): PublicPage {
