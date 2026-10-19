@@ -43,7 +43,7 @@ const PrivacyPolicy: React.FC<PrivacyPolicyProps> = ({ onBack }) => {
           {/* Main Content */}
           <div className="space-y-6 text-slate-200 dark:text-slate-200 text-gray-700 leading-relaxed">
             <p>
-              This Privacy Notice for <strong>SoundSideDesign LLC</strong> (<strong>"we,"</strong> <strong>"us,"</strong> or <strong>"our"</strong>), describes how and why we might access, collect, store, use, and/or share (<strong>"process"</strong>) your personal information when you use our services (<strong>"Services"</strong>), including when you:
+              This Privacy Notice for <strong>Soundside Design LLC</strong> (<strong>"we,"</strong> <strong>"us,"</strong> or <strong>"our"</strong>), describes how and why we might access, collect, store, use, and/or share (<strong>"process"</strong>) your personal information when you use our services (<strong>"Services"</strong>), including when you:
             </p>
 
             <ul className="list-disc list-inside space-y-2 ml-4">
@@ -474,13 +474,11 @@ const PrivacyPolicy: React.FC<PrivacyPolicyProps> = ({ onBack }) => {
             <section id="contact" className="mt-12">
               <h2 className="text-2xl font-bold mb-4 text-white dark:text-white text-gray-900">14. HOW CAN YOU CONTACT US ABOUT THIS NOTICE?</h2>
               <p className="mb-4">
-                If you have questions or comments about this notice, you may email us at <a href="mailto:max@soundside.ai" className="text-indigo-400 dark:text-indigo-400 text-indigo-600 hover:underline">max@soundside.ai</a> or contact us by post at:
+                If you have questions or comments about this notice, you may email us at <a href="mailto:max@soundside.ai" className="text-indigo-400 dark:text-indigo-400 text-indigo-600 hover:underline">max@soundside.ai</a>. Company details:
               </p>
               <p className="mb-4">
-                SoundSideDesign LLC<br />
-                180 Brookbend Rd<br />
-                Fairfield, CT 06824<br />
-                United States
+                Soundside Design LLC<br />
+                Connecticut, United States
               </p>
             </section>
 
